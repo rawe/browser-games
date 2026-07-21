@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#171a21" />
+  <title>Super Cars</title>
+  <link rel="stylesheet" href="./style.css" />
+  <script type="module" src="./main.js"></script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene"></canvas>
+
+    <div id="hud">
+      <div class="hud-chip"><span class="label">Pos</span><span class="value" id="hud-pos">8.</span></div>
+      <div class="hud-chip"><span class="label">Runde</span><span class="value" id="hud-lap">1/4</span></div>
+      <div class="hud-chip"><span class="label">km/h</span><span class="value" id="hud-speed">0</span></div>
+      <div id="hud-health-bar"><div id="hud-health-fill"></div></div>
+      <div class="hud-chip"><span class="value" id="hud-weapon-label">▲ VORNE</span><span class="value" id="hud-ammo">2</span></div>
+    </div>
+
+    <canvas id="minimap" width="100" height="130"></canvas>
+    <div id="countdown"></div>
+
+    <div id="touch-controls">
+      <div class="tc-group">
+        <button class="tc-btn" id="btn-left" aria-label="Links lenken">◀</button>
+        <button class="tc-btn" id="btn-right" aria-label="Rechts lenken">▶</button>
+      </div>
+      <div class="tc-group">
+        <div class="tc-col">
+          <button class="tc-btn small" id="btn-weapon" aria-label="Waffe wechseln">▲▼</button>
+          <button class="tc-btn" id="btn-brake" aria-label="Bremsen">■</button>
+        </div>
+        <div class="tc-col">
+          <button class="tc-btn" id="btn-fire" aria-label="Rakete abfeuern">🚀</button>
+          <button class="tc-btn" id="btn-gas" aria-label="Gas geben">▲</button>
+        </div>
+      </div>
+    </div>
+
+    <p id="keyboard-hint">Pfeile/WASD fahren · Leertaste Rakete · Q Waffe wechseln</p>
+
+    <div id="overlay" class="visible"><div class="panel" id="panel"></div></div>
+  </div>
+</body>
+</html>
