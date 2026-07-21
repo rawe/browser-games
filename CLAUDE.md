@@ -19,7 +19,8 @@ Sammlung kleiner Browser-Games für GitHub Pages. Nur clientseitiger Code – ke
 ## Konventionen
 
 - Moderne Web-Standards: ES-Module, `<canvas>`/DOM-APIs, CSS Custom Properties, `light-dark()`, kein jQuery/Legacy.
-- Keine Frameworks als Standard; falls ein Spiel eines braucht, als Dev-Dependency und über den Vite-Build.
+- 3D ist ausdrücklich erlaubt: WebGL/WebGL2, gerne auch WebGPU (dann mit WebGL-Fallback oder Browser-Hinweis). Ebenso Web Audio, Gamepad API, Pointer Lock, Web Worker etc.
+- Keine Frameworks als Standard; falls ein Spiel eines braucht (z. B. Three.js/Babylon.js für 3D), als npm-Dependency installieren und über den Vite-Build bündeln – keine CDN-Einbindung zur Laufzeit.
 - Asset-Pfade relativ bzw. root-relativ halten, damit der Pages-Build (`base: './'`) funktioniert.
 - Deutsch für UI-Texte und Doku.
 
