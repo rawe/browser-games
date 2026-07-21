@@ -1,0 +1,24 @@
+.game-stage {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.game-stage canvas {
+  background: var(--surface);
+  border-radius: 0.5rem;
+  max-width: min(90vw, 480px);
+  height: auto;
+}
+
+.hud {
+  font-variant-numeric: tabular-nums;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
