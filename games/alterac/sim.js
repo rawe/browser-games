@@ -21,6 +21,18 @@
 // Verteidigungsbonus. Die Sieger setzen danach ihre unterbrochene Bewegung
 // samt Befehlskette unverändert fort. Regeln und Deadlock-Betrachtung: siehe
 // README.md in diesem Verzeichnis.
+//
+// Friedhofssystem: Der Besitzstand aller Friedhöfe (Startwerte aus der
+// zentralen Kartenkonfiguration) lebt hier. Erreicht eine Einheit einen
+// fremden Friedhof, wartet sie dort und die Einnahme beginnt automatisch,
+// sobald ihre Fraktion allein vor Ort ist und die Schutzregel es erlaubt.
+// Die Einnahme dauert `graveyardCaptureTime` Sekunden ununterbrochener
+// Präsenz; mehrere eigene Einheiten verkürzen nichts, jeder Kampf setzt den
+// Fortschritt vollständig auf 0 zurück. Nach der Einnahme gehört der Friedhof
+// sofort der neuen Fraktion und ist unmittelbar Respawnpunkt. Besiegte
+// Einheiten respawnen am nächstgelegenen aktuell kontrollierten eigenen
+// Friedhof – bestimmt erst im Moment des Respawns; ohne eigenen Friedhof ist
+// kein Respawn mehr möglich (Zustand 'gone').
 
 import { FACTIONS, enemyOf, shortestPath, nearestGraveyard } from './map.js';
 import { UNIT_TYPE_BY_KEY } from './config.js';
@@ -37,6 +49,7 @@ export function createSim({ map, config, plans }) {
   const {
     edgeTime,
     respawnTime,
+    graveyardCaptureTime,
     entrenchedFactor,
     bossHp,
     bossDamage,
@@ -60,6 +73,12 @@ export function createSim({ map, config, plans }) {
   // Aktive Begegnungskämpfe auf Wegstücken: { a, b, frac } mit a/b als
   // kanonisch sortiertem Knotenpaar und frac als Treffpunkt-Position von a aus.
   const edgeCombats = [];
+  // Aktueller Friedhofsbesitz (Startwerte aus der Kartenkonfiguration) und
+  // laufende Einnahmen: gyOwner[id] = 'blue' | 'red' | null,
+  // captures[id] = { faction, startedAt } solange eine Einnahme läuft.
+  const gyOwner = {};
+  for (const id of map.graveyardIds) gyOwner[id] = map.graveyards[id].owner;
+  const captures = {};
   let time = 0;
   let result = null;
 
@@ -88,7 +107,9 @@ export function createSim({ map, config, plans }) {
         edgeTime: edgeTime / (def.speed ?? 1), // Reisezeit pro Wegstück
         orders,
         orderIndex: 0,
-        state: 'atNode', // 'atNode' | 'moving' | 'edgeFight' | 'defending' | 'dead'
+        // 'atNode' | 'moving' | 'edgeFight' | 'defending' | 'capturing' |
+        // 'dead' | 'gone' (endgültig gefallen – kein Friedhof für den Respawn)
+        state: 'atNode',
         node: map.start[faction],
         fighting: false,
         entrenched: false,
@@ -114,8 +135,68 @@ export function createSim({ map, config, plans }) {
 
   function combatants(nodeId) {
     return groups.filter(
-      (g) => g.node === nodeId && (g.state === 'atNode' || g.state === 'defending')
+      (g) =>
+        g.node === nodeId &&
+        (g.state === 'atNode' || g.state === 'defending' || g.state === 'capturing')
     );
+  }
+
+  // --- Friedhöfe: Besitz, Schutzregel und Einnahme ---------------------------
+
+  const ownedGraveyards = (faction) => map.graveyardIds.filter((id) => gyOwner[id] === faction);
+
+  // Schutzregel: Der Heimatfriedhof einer Fraktion ist nicht einnehmbar,
+  // solange sie ihn selbst hält UND noch mindestens einen anderen Friedhof
+  // kontrolliert. Hält ihn bereits der Gegner, ist die Rückeroberung durch
+  // die Heimatfraktion jederzeit erlaubt.
+  function captureAllowed(gyId) {
+    const owner = gyOwner[gyId];
+    if (owner == null) return true;
+    if (map.graveyards[gyId].home !== owner) return true;
+    return ownedGraveyards(owner).every((id) => id === gyId);
+  }
+
+  // Fällige Einnahmen abschließen: Der Friedhof wechselt sofort den Besitzer
+  // und ist unmittelbar als Respawnpunkt aktiv; wartende Einheiten setzen
+  // danach ihre Befehle fort.
+  function completeCaptures(t) {
+    for (const gyId of map.graveyardIds) {
+      const cap = captures[gyId];
+      if (!cap || cap.startedAt + graveyardCaptureTime > t + EPS) continue;
+      delete captures[gyId];
+      gyOwner[gyId] = cap.faction;
+      addLog(`${FACTIONS[cap.faction].name} nimmt ${nodeName(gyId)} ein!`);
+      addEvent({ type: 'graveyardCaptured', faction: cap.faction, where: { node: gyId } });
+      for (const g of groups) {
+        if (g.state === 'capturing' && g.node === gyId) g.state = 'atNode';
+      }
+    }
+  }
+
+  // Einnahme-Zustand aller Friedhöfe aktualisieren: Eine Einnahme läuft nur,
+  // solange genau eine Fraktion (nicht der Besitzer) allein vor Ort ist und
+  // die Schutzregel es erlaubt. Jede Unterbrechung – Kampf, Verlust der
+  // Präsenz oder wieder greifender Schutz – setzt den Fortschritt auf 0;
+  // mehrere eigene Einheiten verkürzen die Dauer nicht.
+  function updateGraveyards(t) {
+    for (const gyId of map.graveyardIds) {
+      const present = { blue: false, red: false };
+      for (const g of combatants(gyId)) present[g.faction] = true;
+      const fac = present.blue !== present.red ? (present.blue ? 'blue' : 'red') : null;
+      const cap = captures[gyId] ?? null;
+      if (!fac || fac === gyOwner[gyId] || !captureAllowed(gyId)) {
+        if (cap) {
+          delete captures[gyId];
+          addLog(`Die Einnahme von ${nodeName(gyId)} wird unterbrochen – der Fortschritt verfällt.`);
+        }
+        continue;
+      }
+      if (!cap || cap.faction !== fac) {
+        captures[gyId] = { faction: fac, startedAt: t };
+        addLog(`${FACTIONS[fac].name} beginnt die Einnahme von ${nodeName(gyId)}.`);
+        addEvent({ type: 'captureStart', faction: fac, where: { node: gyId } });
+      }
+    }
   }
 
   function enemiesPresent(nodeId, faction) {
@@ -272,6 +353,13 @@ export function createSim({ map, config, plans }) {
 
   // Setzt die Befehle einer frei stehenden Gruppe fort (weiterziehen oder Stellung halten).
   function continueOrders(g, t) {
+    // An einem fremden Friedhof bleibt die Einheit stehen, bis ihre Fraktion
+    // ihn eingenommen hat (die Einnahme selbst verwaltet updateGraveyards –
+    // inklusive Wartezeit, falls die Schutzregel sie noch blockiert).
+    if (map.nodes[g.node].type === 'graveyard' && gyOwner[g.node] !== g.faction) {
+      g.state = 'capturing';
+      return;
+    }
     for (;;) {
       const obj = currentObjective(g);
       if (g.node === obj.node) {
@@ -312,7 +400,9 @@ export function createSim({ map, config, plans }) {
     g.edgeFrom = null;
     g.edgeTo = null;
     g.edgeCombat = null;
-    g.graveyardNode = nearestGraveyard(map, g.faction, g.deathNode);
+    // Nur Anzeige/Effekt – der verbindliche Respawnpunkt wird erst im Moment
+    // des Respawns aus dem dann aktuellen Besitzstand bestimmt.
+    g.graveyardNode = nearestGraveyard(map, ownedGraveyards(g.faction), g.deathNode);
     g.respawnAt = t + respawnTime;
     addEvent({
       type: 'death',
@@ -394,7 +484,7 @@ export function createSim({ map, config, plans }) {
     }
 
     for (const g of groups) {
-      if (g.hp <= EPS && g.state !== 'dead') {
+      if (g.hp <= EPS && g.state !== 'dead' && g.state !== 'gone') {
         if (g.state === 'edgeFight') {
           addLog(
             `${groupLabel(g)} fällt zwischen ${nodeName(g.edgeCombat.a)} und ` +
@@ -480,15 +570,31 @@ export function createSim({ map, config, plans }) {
         g.edgeFrom = null;
         g.edgeTo = null;
       } else if (g.state === 'dead' && g.respawnAt <= t + EPS) {
-        g.node = g.graveyardNode;
-        g.state = 'atNode';
-        g.respawnAt = Infinity;
-        g.hp = g.maxHp; // Respawn stellt die vollen Hitpoints wieder her.
-        addLog(`${groupLabel(g)} kehrt am ${nodeName(g.node)} zurück.`);
-        addEvent({ type: 'respawn', faction: g.faction, where: { node: g.node } });
+        // Respawnpunkt erst jetzt bestimmen: nächstgelegener aktuell
+        // kontrollierter eigener Friedhof. Ohne Friedhof kein Respawn mehr.
+        const gy = nearestGraveyard(map, ownedGraveyards(g.faction), g.deathNode);
+        if (gy == null) {
+          g.state = 'gone';
+          g.respawnAt = Infinity;
+          g.graveyardNode = null;
+          addLog(`${groupLabel(g)} kann nicht zurückkehren – kein Friedhof unter eigener Kontrolle.`);
+        } else {
+          g.node = gy;
+          g.graveyardNode = gy;
+          g.state = 'atNode';
+          g.respawnAt = Infinity;
+          g.hp = g.maxHp; // Respawn stellt die vollen Hitpoints wieder her.
+          addLog(`${groupLabel(g)} kehrt am ${nodeName(g.node)} zurück.`);
+          addEvent({ type: 'respawn', faction: g.faction, where: { node: g.node } });
+        }
+      } else if (g.state === 'dead') {
+        // Anzeige aktuell halten: Der Geist wartet am derzeit nächstgelegenen
+        // eigenen Friedhof (verbindlich wird die Wahl erst beim Respawn).
+        g.graveyardNode = nearestGraveyard(map, ownedGraveyards(g.faction), g.deathNode);
       }
     }
     processEncounters(t);
+    completeCaptures(t);
     const defeated = [];
     processAttacks(t, defeated);
     if (defeated.length) {
@@ -505,6 +611,7 @@ export function createSim({ map, config, plans }) {
     for (const g of groups) {
       if (g.state === 'atNode' && !g.fighting) continueOrders(g, t);
     }
+    updateGraveyards(t);
   }
 
   function nextEventTime() {
@@ -515,6 +622,10 @@ export function createSim({ map, config, plans }) {
       t = Math.min(t, g.nextAttackAt);
     }
     for (const fac of ['blue', 'red']) t = Math.min(t, bossAttackAt[fac]);
+    for (const gyId of map.graveyardIds) {
+      const cap = captures[gyId];
+      if (cap) t = Math.min(t, cap.startedAt + graveyardCaptureTime);
+    }
     t = Math.min(t, earliestEncounterTime());
     return t;
   }
@@ -548,6 +659,7 @@ export function createSim({ map, config, plans }) {
   // Startaufstellung: alle Gruppen setzen ihre Befehle ab Sekunde 0 um.
   for (const g of groups) continueOrders(g, 0);
   updateCombatState(0);
+  updateGraveyards(0);
 
   return {
     groups,
@@ -555,6 +667,8 @@ export function createSim({ map, config, plans }) {
     events,
     bossAlive,
     boss,
+    // Aktueller Friedhofszustand für Renderer/UI (Besitz + laufende Einnahmen).
+    graveyards: { owner: gyOwner, captures },
     config,
     advance,
     get time() {

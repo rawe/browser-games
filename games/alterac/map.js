@@ -1,6 +1,7 @@
 // Kartendefinition: konfigurierbares Wegpunkt-Netzwerk des Alteractals.
-// NODES, EDGES, ROUTES und GUARD_POSTS sind die zentralen Konfigurationsdaten –
-// neue Wegpunkte, Verbindungen oder Routenvorschläge werden nur hier ergänzt.
+// NODES, EDGES, GRAVEYARDS, ROUTES und GUARD_POSTS sind die zentralen
+// Konfigurationsdaten – neue Wegpunkte, Verbindungen, Friedhöfe oder
+// Routenvorschläge werden nur hier ergänzt.
 // Die Karte ist vertikal aufgebaut (Norden oben, Süden unten), damit sie
 // auf Mobilgeräten per Scrollen gut nutzbar ist.
 
@@ -16,19 +17,25 @@ export function enemyOf(faction) {
 // Knotentypen: 'combat' (Kampfpunkt), 'graveyard' (Friedhof), 'boss' (Endboss).
 // Jeder Boss ist über mindestens zwei getrennte Zugänge erreichbar:
 // Nordtor + Eisiger Grat (rot), Südtor + Schmugglerpfad (blau).
+// Friedhöfe sind immer Sackgassen mit genau einer Verbindung und liegen nie
+// auf einem Hauptweg zur gegnerischen Basis – wer sie will, muss den Abstecher
+// (Hin- und Rückweg) explizit in den Pfad einer Einheit einplanen.
 const NODES = [
   { id: 'rboss', type: 'boss', faction: 'red', x: 240, y: 78, name: 'Kriegsherr Eiszahn', labelDy: 46 },
-  { id: 'rgy', type: 'graveyard', faction: 'red', x: 96, y: 150, name: 'Nordfriedhof', labelDy: 30 },
+  { id: 'rgy', type: 'graveyard', x: 96, y: 150, name: 'Nordfriedhof', labelDy: 30 },
   { id: 'reast', type: 'combat', x: 404, y: 178, name: 'Eisiger Grat', labelDx: 12, labelDy: 26 },
   { id: 'rgate', type: 'combat', x: 240, y: 214, name: 'Nordtor', labelDx: 52, labelDy: 4 },
   { id: 'wn', type: 'combat', x: 112, y: 356, name: 'Eisfelsklamm', labelDy: 32 },
   { id: 'en', type: 'combat', x: 368, y: 356, name: 'Steinbruch', labelDy: 32 },
+  { id: 'gyw', type: 'graveyard', x: 48, y: 452, name: 'Klammfriedhof', labelDy: 32 },
   { id: 'mid', type: 'combat', x: 240, y: 488, name: 'Feldmitte', labelDx: 56, labelDy: 4 },
+  { id: 'gye', type: 'graveyard', x: 432, y: 524, name: 'Hangfriedhof', labelDy: 32 },
+  { id: 'gym', type: 'graveyard', x: 240, y: 554, name: 'Talfriedhof', labelDy: 32 },
   { id: 'ws', type: 'combat', x: 112, y: 620, name: 'Wolfsschlucht', labelDy: 32 },
   { id: 'es', type: 'combat', x: 368, y: 620, name: 'Kiefernhang', labelDy: 32 },
   { id: 'swest', type: 'combat', x: 84, y: 788, name: 'Schmugglerpfad', labelDy: 30 },
   { id: 'sgate', type: 'combat', x: 240, y: 760, name: 'Südtor', labelDx: 48, labelDy: 4 },
-  { id: 'bgy', type: 'graveyard', faction: 'blue', x: 384, y: 830, name: 'Südfriedhof', labelDy: 30 },
+  { id: 'bgy', type: 'graveyard', x: 384, y: 830, name: 'Südfriedhof', labelDy: 30 },
   { id: 'bboss', type: 'boss', faction: 'blue', x: 240, y: 896, name: 'General Steinbrecher', labelDy: 46 },
 ];
 
@@ -54,7 +61,24 @@ const EDGES = [
   { a: 'es', b: 'sgate', bend: -16 },
   { a: 'sgate', b: 'bgy', bend: -10 },
   { a: 'sgate', b: 'bboss', bend: 0 },
+  { a: 'wn', b: 'gyw', bend: -10 }, // Sackgasse zum Klammfriedhof
+  { a: 'mid', b: 'gym', bend: 0 }, // Sackgasse zum Talfriedhof
+  { a: 'es', b: 'gye', bend: 12 }, // Sackgasse zum Hangfriedhof
 ];
+
+// Zentrale Friedhofskonfiguration: `owner` ist der Startbesitzer (null =
+// neutral), `home` markiert den basisnahen Heimatfriedhof einer Fraktion.
+// Schutzregel (ausgewertet in sim.js): Der Heimatfriedhof ist nur einnehmbar,
+// solange seine Fraktion keinen anderen Friedhof mehr kontrolliert – sobald
+// sie wieder mindestens einen anderen hält, ist er erneut geschützt.
+// Die Einnahmedauer steht zentral in config.js (graveyardCaptureTime).
+export const GRAVEYARDS = {
+  rgy: { owner: 'red', home: 'red' },
+  bgy: { owner: 'blue', home: 'blue' },
+  gyw: { owner: null, home: null },
+  gym: { owner: null, home: null },
+  gye: { owner: null, home: null },
+};
 
 // Vorgeschlagene Routen (vollständige Pfade aus benachbarten Wegpunkten vom
 // eigenen Start bis zum gegnerischen Boss). Werden vom Computergegner genutzt
@@ -95,6 +119,9 @@ export function createMap() {
   // Deterministische Reihenfolge für die Wegsuche.
   for (const id of Object.keys(adjacency)) adjacency[id].sort();
 
+  const graveyards = {};
+  for (const [id, meta] of Object.entries(GRAVEYARDS)) graveyards[id] = { ...meta };
+
   return {
     width: 480,
     height: 960,
@@ -105,7 +132,10 @@ export function createMap() {
     bosses: { blue: 'bboss', red: 'rboss' },
     // Alle Einheiten einer Fraktion starten am eigenen Boss-Punkt.
     start: { blue: 'bboss', red: 'rboss' },
-    graveyards: { blue: ['bgy'], red: ['rgy'] },
+    // Statische Friedhofskonfiguration (Startbesitz, Heimatfriedhöfe);
+    // der aktuelle Besitzstand während einer Schlacht lebt in sim.js.
+    graveyards,
+    graveyardIds: Object.keys(graveyards).sort(),
     edgeBetween(a, b) {
       return edges.find((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a)) ?? null;
     },
@@ -162,12 +192,13 @@ export function shortestPath(map, from, to) {
   return best.get(to) ?? null;
 }
 
-// Nächstgelegener eigener Friedhof (nach Wegstrecke vom Ort der Niederlage).
-export function nearestGraveyard(map, faction, from) {
-  const own = map.graveyards[faction];
-  let bestId = own[0];
+// Nächstgelegener Friedhof aus einer Menge (nach Wegstrecke vom Ort der
+// Niederlage). `ownedIds` sind die aktuell kontrollierten Friedhöfe der
+// Fraktion – ist die Menge leer, gibt es keinen Respawnpunkt (null).
+export function nearestGraveyard(map, ownedIds, from) {
+  let bestId = null;
   let bestDist = Infinity;
-  for (const gy of [...own].sort()) {
+  for (const gy of [...ownedIds].sort()) {
     const path = shortestPath(map, from, gy);
     const dist = path ? path.length : Infinity;
     if (dist < bestDist) {

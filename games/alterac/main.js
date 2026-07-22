@@ -9,6 +9,7 @@ import {
   TEMPO_OPTIONS,
   RESPAWN_OPTIONS,
   BOSS_OPTIONS,
+  GRAVEYARD_CAPTURE_OPTIONS,
 } from './config.js';
 import { createSim } from './sim.js';
 import { createRenderer } from './render.js';
@@ -52,6 +53,11 @@ function fillSelect(el, options, selectedValue) {
 fillSelect(document.getElementById('opt-resources'), RESOURCE_OPTIONS, DEFAULT_CONFIG.resources);
 fillSelect(document.getElementById('opt-tempo'), TEMPO_OPTIONS, DEFAULT_CONFIG.edgeTime);
 fillSelect(document.getElementById('opt-respawn'), RESPAWN_OPTIONS, DEFAULT_CONFIG.respawnTime);
+fillSelect(
+  document.getElementById('opt-capture'),
+  GRAVEYARD_CAPTURE_OPTIONS,
+  DEFAULT_CONFIG.graveyardCaptureTime
+);
 fillSelect(document.getElementById('opt-boss'), BOSS_OPTIONS, DEFAULT_CONFIG.bossHp);
 
 // Einheitentypen-Übersicht in den Spielregeln aus den zentralen Definitionen füllen.
@@ -74,6 +80,7 @@ document.getElementById('setup-form').addEventListener('submit', (ev) => {
     resources: Number(document.getElementById('opt-resources').value),
     edgeTime: Number(document.getElementById('opt-tempo').value),
     respawnTime: Number(document.getElementById('opt-respawn').value),
+    graveyardCaptureTime: Number(document.getElementById('opt-capture').value),
     bossHp: Number(document.getElementById('opt-boss').value),
   };
   view.config = config;

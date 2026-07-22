@@ -62,7 +62,8 @@ export function createPlanner({ map, faction, budget, panel, canvas, renderer, o
 
   const DEFAULT_HINT =
     'Einheiten anwerben, dann den Pfad der gewählten Einheit Wegpunkt für Wegpunkt antippen ' +
-    '(nur benachbarte Punkte). „Halten" bewacht das Pfadende, „Angriff" zieht danach zum Boss.';
+    '(nur benachbarte Punkte). Friedhöfe sind Sackgassen: Hin- und Rückweg einplanen – dort ' +
+    'beginnt die Einnahme automatisch. „Halten" bewacht das Pfadende, „Angriff" zieht danach zum Boss.';
 
   let hintTimer = 0;
   function flashHint(text) {
@@ -150,10 +151,6 @@ export function createPlanner({ map, faction, budget, panel, canvas, renderer, o
       // Erneutes Antippen des Pfadendes nimmt den letzten Schritt zurück.
       sel.path.pop();
       refresh();
-      return;
-    }
-    if (map.nodes[nodeId].type === 'graveyard') {
-      flashHint('Friedhöfe sind keine begehbaren Wegpunkte.');
       return;
     }
     if (!map.adjacency[end].includes(nodeId)) {
