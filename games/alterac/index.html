@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#12161f" />
+  <title>Alterac Combat Simulator</title>
+  <link rel="stylesheet" href="/shared/base.css" />
+  <link rel="stylesheet" href="./style.css" />
+  <script type="module" src="./main.js"></script>
+</head>
+<body>
+  <a class="back-link" href="../../index.html">← Übersicht</a>
+
+  <section id="screen-setup" class="setup">
+    <h1>⚔️ Alterac Combat Simulator</h1>
+    <p class="tagline">Befehle planen, bestätigen – dann entscheidet die Schlacht sich selbst.</p>
+
+    <form id="setup-form" class="setup-card">
+      <label>Modus
+        <select id="opt-mode">
+          <option value="cpu">Gegen den Computer</option>
+          <option value="hotseat">2 Spieler an einem Gerät</option>
+        </select>
+      </label>
+      <label>Einheiten pro Seite
+        <span class="units-row">
+          <input type="range" id="opt-units" min="1" max="10" value="5" />
+          <output id="opt-units-out">5</output>
+        </span>
+      </label>
+      <label>Tempo
+        <select id="opt-tempo"></select>
+      </label>
+      <label>Respawnzeit
+        <select id="opt-respawn"></select>
+      </label>
+      <label>Bossstärke
+        <select id="opt-boss"></select>
+      </label>
+      <button type="submit" class="btn primary">Schlacht planen</button>
+    </form>
+
+    <details class="rules">
+      <summary>Spielregeln (Kurzfassung)</summary>
+      <ul>
+        <li>Jede Einheit hat Stärke 1. Einheiten am selben Punkt addieren ihre Stärke.</li>
+        <li><strong>Angriff:</strong> Kampfpunkte als Route wählen – danach geht es automatisch zum gegnerischen Boss.</li>
+        <li><strong>Verteidigen:</strong> Die Einheit hält einen Punkt. Ist sie vor dem Angreifer da, zählt sie ×1,5.</li>
+        <li><strong>Folgen:</strong> Dauerhafte Fusion mit einer anderen Einheit – stark, aber unflexibel.</li>
+        <li>Am Kampfpunkt gewinnt die stärkere Seite, die Verliererseite fällt komplett. Gleichstand bindet beide Seiten, bis Verstärkung eintrifft.</li>
+        <li>Gefallene kehren nach der Respawnzeit am nächstgelegenen eigenen Friedhof zurück und setzen ihren Befehl fort.</li>
+        <li>Der Boss zählt als Verteidiger mit fester Stärke. Fällt er, ist die Schlacht sofort vorbei.</li>
+      </ul>
+    </details>
+  </section>
+
+  <section id="screen-game" hidden>
+    <div id="map-wrap"><canvas id="map" width="480" height="960"></canvas></div>
+    <div id="panel"></div>
+  </section>
+
+  <div id="overlay" hidden>
+    <div id="overlay-card" class="setup-card"></div>
+  </div>
+</body>
+</html>

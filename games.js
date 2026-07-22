@@ -7,6 +7,12 @@ export const games = [
     emoji: '🐍',
   },
   {
+    slug: 'alterac',
+    title: 'Alterac Combat Simulator',
+    description: 'Taktik-Autobattler: Routen planen, Truppen fusionieren, Punkte halten – dann läuft die Schlacht von allein.',
+    emoji: '⚔️',
+  },
+  {
     slug: 'super-cars',
     title: 'Super Cars',
     description: 'Arcade-Rennen mit Raketen, Tuning-Shop und Meisterschaft – 3D von schräg hinten.',
