@@ -10,6 +10,13 @@
 // wird in festen Intervallen (`tickInterval`) gleichzeitig ausgetauscht;
 // erreicht eine Gruppe oder der Boss 0 Hitpoints, fällt sie. Überlebende
 // behalten ihre aktuellen Hitpoints, Respawns kehren mit vollen zurück.
+//
+// Begegnungskämpfe: Treffen sich verfeindete Gruppen auf demselben Wegstück
+// (entgegenkommend, oder eine Gruppe läuft in einen dort laufenden Kampf
+// hinein), stoppen sie am exakten Treffpunkt und kämpfen dort im offenen
+// Feld – ohne Boss und ohne Verteidigungsbonus. Die Sieger setzen danach
+// ihre unterbrochene Bewegung samt Befehlskette unverändert fort. Regeln und
+// Deadlock-Betrachtung: siehe README.md in diesem Verzeichnis.
 
 import { FACTIONS, enemyOf, shortestPath, nearestGraveyard } from './map.js';
 
@@ -41,6 +48,9 @@ export function createSim({ map, config, plans }) {
   };
   // Kampfpunkt → Zeitpunkt des nächsten Schadensintervalls.
   const combatTicks = new Map();
+  // Aktive Begegnungskämpfe auf Wegstücken: { a, b, frac, tickAt } mit a/b als
+  // kanonisch sortiertem Knotenpaar und frac als Treffpunkt-Position von a aus.
+  const edgeCombats = [];
   let time = 0;
   let result = null;
 
@@ -81,13 +91,15 @@ export function createSim({ map, config, plans }) {
         hp: members.length * unitHp,
         orders: seq,
         orderIndex: 0,
-        state: 'atNode', // 'atNode' | 'moving' | 'defending' | 'dead'
+        state: 'atNode', // 'atNode' | 'moving' | 'edgeFight' | 'defending' | 'dead'
         node: map.start[faction],
         arrivedAt: 0,
         fighting: false,
         entrenched: false,
         edgeFrom: null,
         edgeTo: null,
+        edgeFrac: 0, // im Begegnungskampf: zurückgelegter Anteil des Wegstücks
+        edgeCombat: null, // Referenz auf den aktiven Wegstück-Kampf
         departT: 0,
         arriveT: 0,
         respawnAt: Infinity,
@@ -123,6 +135,128 @@ export function createSim({ map, config, plans }) {
     return present.blue && present.red;
   }
 
+  // --- Begegnungskämpfe auf Wegstücken --------------------------------------
+
+  // Bewegung einer Gruppe in kanonischer Kantensicht: Position als lineare
+  // Funktion der Zeit, gemessen vom lexikografisch kleineren Endknoten `a`.
+  function edgeMotion(g) {
+    const [a, b] = [g.edgeFrom, g.edgeTo].sort();
+    const dir = g.edgeFrom === a ? 1 : -1;
+    return { a, b, dir, pos0: dir === 1 ? 0 : 1, depart: g.departT, arrive: g.arriveT };
+  }
+
+  // Zeitpunkt und Ort, an dem sich zwei entgegenkommende Gruppen auf derselben
+  // Kante treffen – oder null (andere Kante, gleiche Richtung, oder das Treffen
+  // fiele auf einen Endknoten: dann übernimmt der normale Knotenkampf).
+  function meetTime(g1, g2) {
+    const m1 = edgeMotion(g1);
+    const m2 = edgeMotion(g2);
+    if (m1.a !== m2.a || m1.b !== m2.b || m1.dir === m2.dir) return null;
+    const t = (m1.depart + m2.depart + m1.dir * (m2.pos0 - m1.pos0) * edgeTime) / 2;
+    if (t < Math.max(m1.depart, m2.depart) - EPS) return null;
+    if (t > Math.min(m1.arrive, m2.arrive) - EPS) return null;
+    const frac = m1.pos0 + (m1.dir * (t - m1.depart)) / edgeTime;
+    if (frac < EPS || frac > 1 - EPS) return null;
+    return { t, frac };
+  }
+
+  // Zeitpunkt, zu dem eine bewegte Gruppe einen aktiven Kampf auf ihrer Kante
+  // erreicht – oder null. Ein Zeitpunkt in der Vergangenheit bedeutet: schon
+  // vorbeigezogen, bevor der Kampf entstand (Aufrufer filtern das aus).
+  function reachTime(g, c) {
+    const m = edgeMotion(g);
+    if (m.a !== c.a || m.b !== c.b) return null;
+    const t = m.depart + ((c.frac - m.pos0) / m.dir) * edgeTime;
+    if (t < m.depart - EPS || t > m.arrive - EPS) return null;
+    return t;
+  }
+
+  function joinEdgeCombat(g, c) {
+    const m = edgeMotion(g);
+    g.state = 'edgeFight';
+    g.fighting = true;
+    g.edgeFrac = (c.frac - m.pos0) * m.dir;
+    g.edgeCombat = c;
+  }
+
+  function startEdgeCombat(g1, g2, frac, t) {
+    const m = edgeMotion(g1);
+    const c = { a: m.a, b: m.b, frac, tickAt: t + tickInterval };
+    edgeCombats.push(c);
+    joinEdgeCombat(g1, c);
+    joinEdgeCombat(g2, c);
+    addLog(
+      `${FACTIONS.blue.name} und ${FACTIONS.red.name} treffen zwischen ` +
+        `${nodeName(c.a)} und ${nodeName(c.b)} aufeinander!`
+    );
+  }
+
+  // Begegnungen zum Zeitpunkt t auflösen: erst laufen bewegte Gruppen in
+  // bestehende Kämpfe hinein, dann treffen entgegenkommende Gegner aufeinander.
+  // Wiederholt bis zum Fixpunkt, weil ein neuer Kampf weitere gleichzeitige
+  // Beitritte auslösen kann (z. B. mehrere Paare am selben Treffpunkt).
+  function processEncounters(t) {
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const c of edgeCombats) {
+        for (const g of groups) {
+          if (g.state !== 'moving') continue;
+          const r = reachTime(g, c);
+          if (r != null && Math.abs(r - t) <= EPS) {
+            joinEdgeCombat(g, c);
+            addLog(
+              `${FACTIONS[g.faction].name}-Trupp (${g.size}) greift in den Kampf zwischen ` +
+                `${nodeName(c.a)} und ${nodeName(c.b)} ein.`
+            );
+            changed = true;
+          }
+        }
+      }
+      const moving = groups.filter((g) => g.state === 'moving');
+      for (let i = 0; i < moving.length; i++) {
+        for (let j = i + 1; j < moving.length; j++) {
+          const g1 = moving[i];
+          const g2 = moving[j];
+          if (g1.faction === g2.faction) continue;
+          if (g1.state !== 'moving' || g2.state !== 'moving') continue;
+          const m = meetTime(g1, g2);
+          if (!m || Math.abs(m.t - t) > EPS) continue;
+          const key = edgeMotion(g1);
+          const existing = edgeCombats.find(
+            (c) => c.a === key.a && c.b === key.b && Math.abs(c.frac - m.frac) < 1e-4
+          );
+          if (existing) {
+            joinEdgeCombat(g1, existing);
+            joinEdgeCombat(g2, existing);
+          } else {
+            startEdgeCombat(g1, g2, m.frac, t);
+          }
+          changed = true;
+        }
+      }
+    }
+  }
+
+  // Frühestes zukünftiges Begegnungsereignis (für die Ereignisplanung).
+  function earliestEncounterTime() {
+    let t = Infinity;
+    const moving = groups.filter((g) => g.state === 'moving');
+    for (const c of edgeCombats) {
+      for (const g of moving) {
+        const r = reachTime(g, c);
+        if (r != null && r >= time - EPS) t = Math.min(t, Math.max(r, time));
+      }
+    }
+    for (let i = 0; i < moving.length; i++) {
+      for (let j = i + 1; j < moving.length; j++) {
+        if (moving[i].faction === moving[j].faction) continue;
+        const m = meetTime(moving[i], moving[j]);
+        if (m && m.t >= time - EPS) t = Math.min(t, Math.max(m.t, time));
+      }
+    }
+    return t;
+  }
+
   // Setzt die Befehle einer frei stehenden Gruppe fort (weiterziehen oder Stellung halten).
   function continueOrders(g, t) {
     for (;;) {
@@ -156,8 +290,12 @@ export function createSim({ map, config, plans }) {
     g.state = 'dead';
     g.fighting = false;
     g.entrenched = false;
-    g.deathNode = g.node;
+    // Auf einem Wegstück Gefallene zählen zum näher gelegenen Endknoten.
+    g.deathNode = g.node ?? (g.edgeFrac <= 0.5 ? g.edgeFrom : g.edgeTo);
     g.node = null;
+    g.edgeFrom = null;
+    g.edgeTo = null;
+    g.edgeCombat = null;
     g.graveyardNode = nearestGraveyard(map, g.faction, g.deathNode);
     g.respawnAt = t + respawnTime;
   }
@@ -242,6 +380,53 @@ export function createSim({ map, config, plans }) {
     }
   }
 
+  // Schadensintervall eines Wegstück-Kampfs: offenes Feld – kein Boss, kein
+  // Verteidigungsbonus, ansonsten identisch zum Knotenkampf (gleichzeitiger
+  // Schlagabtausch gegen den Hitpoint-Stand zu Intervallbeginn).
+  function edgeDamageTick(c, t) {
+    const here = groups.filter((g) => g.edgeCombat === c && g.state === 'edgeFight');
+    const hits = [];
+    for (const fac of ['blue', 'red']) {
+      const targets = here
+        .filter((g) => g.faction !== fac)
+        .sort((a, b) => a.hp - b.hp || (a.id < b.id ? -1 : 1))
+        .map((g) => ({ kind: 'group', g, hp: g.hp, defending: false }));
+      const units = here.filter((g) => g.faction === fac).reduce((s, g) => s + g.size, 0);
+      hits.push(...allocateDamage(units, 0, targets));
+    }
+    for (const { target, damage } of hits) target.g.hp = Math.max(0, target.g.hp - damage);
+    for (const g of here) {
+      if (g.hp <= EPS) {
+        addLog(
+          `${FACTIONS[g.faction].name}-Trupp (${g.size}) fällt zwischen ` +
+            `${nodeName(c.a)} und ${nodeName(c.b)}.`
+        );
+        die(g, t);
+      }
+    }
+  }
+
+  // Wegstück-Kämpfe prüfen: Ist eine Seite vollständig gefallen, endet der
+  // Kampf und die Überlebenden setzen ihre unterbrochene Bewegung fort –
+  // ab dem Treffpunkt, mit unveränderter Richtung und Befehlskette.
+  function updateEdgeCombats(t) {
+    for (let i = edgeCombats.length - 1; i >= 0; i--) {
+      const c = edgeCombats[i];
+      const here = groups.filter((g) => g.edgeCombat === c && g.state === 'edgeFight');
+      const present = { blue: false, red: false };
+      for (const g of here) present[g.faction] = true;
+      if (present.blue && present.red) continue;
+      edgeCombats.splice(i, 1);
+      for (const g of here) {
+        g.state = 'moving';
+        g.fighting = false;
+        g.edgeCombat = null;
+        g.departT = t - g.edgeFrac * edgeTime;
+        g.arriveT = t + (1 - g.edgeFrac) * edgeTime;
+      }
+    }
+  }
+
   // Kampfzustand aller Punkte aktualisieren: neue Kämpfe beginnen, beendete
   // Kämpfe geben die Überlebenden (mit ihren restlichen Hitpoints) wieder frei.
   function updateCombatState(t) {
@@ -277,11 +462,18 @@ export function createSim({ map, config, plans }) {
         addLog(`${FACTIONS[g.faction].name}-Trupp (${g.size}) kehrt am ${nodeName(g.node)} zurück.`);
       }
     }
+    processEncounters(t);
     const defeated = [];
     for (const [nodeId, tickAt] of [...combatTicks.entries()].sort()) {
       if (tickAt <= t + EPS) {
         damageTick(nodeId, t, defeated);
         combatTicks.set(nodeId, t + tickInterval);
+      }
+    }
+    for (const c of edgeCombats) {
+      if (c.tickAt <= t + EPS) {
+        edgeDamageTick(c, t);
+        c.tickAt = t + tickInterval;
       }
     }
     if (defeated.length) {
@@ -294,6 +486,7 @@ export function createSim({ map, config, plans }) {
       return;
     }
     updateCombatState(t);
+    updateEdgeCombats(t);
     for (const g of groups) {
       if (g.state === 'atNode' && !g.fighting) continueOrders(g, t);
     }
@@ -306,6 +499,8 @@ export function createSim({ map, config, plans }) {
       else if (g.state === 'dead') t = Math.min(t, g.respawnAt);
     }
     for (const tickAt of combatTicks.values()) t = Math.min(t, tickAt);
+    for (const c of edgeCombats) t = Math.min(t, c.tickAt);
+    t = Math.min(t, earliestEncounterTime());
     return t;
   }
 

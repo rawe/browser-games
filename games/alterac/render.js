@@ -522,12 +522,16 @@ export function createRenderer(canvas, map) {
   function drawSim(sim) {
     const byNode = new Map();
     const byEdge = new Map();
+    const byEdgeCombat = new Map();
     const dead = [];
     for (const g of sim.groups) {
       if (g.state === 'moving') {
         const key = [g.edgeFrom, g.edgeTo].sort().join('>');
         if (!byEdge.has(key)) byEdge.set(key, []);
         byEdge.get(key).push(g);
+      } else if (g.state === 'edgeFight') {
+        if (!byEdgeCombat.has(g.edgeCombat)) byEdgeCombat.set(g.edgeCombat, []);
+        byEdgeCombat.get(g.edgeCombat).push(g);
       } else if (g.state === 'dead') {
         dead.push(g);
       } else {
@@ -551,6 +555,24 @@ export function createRenderer(canvas, map) {
         const off = side * 7 + (i - (list.length - 1) / 2) * 15;
         drawToken(p.x + (-dy / len) * off, p.y + (dx / len) * off, g);
       });
+    }
+
+    // Begegnungskämpfe auf Wegstücken: Trupps stehen am Treffpunkt (rot in
+    // Richtung Norden, blau in Richtung Süden), Schwerter markieren die Stelle.
+    for (const [, list] of byEdgeCombat) {
+      const first = list[0];
+      const p = edgePoint(map, first.edgeFrom, first.edgeTo, first.edgeFrac);
+      drawSwords(p.x, p.y, anim);
+      const byFaction = { blue: [], red: [] };
+      for (const g of list.sort((a, b) => (a.id < b.id ? -1 : 1))) byFaction[g.faction].push(g);
+      for (const fac of ['red', 'blue']) {
+        const fl = byFaction[fac];
+        const base = fac === 'red' ? -Math.PI / 2 : Math.PI / 2;
+        fl.forEach((g, i) => {
+          const ang = base + (i - (fl.length - 1) / 2) * 1.05;
+          drawToken(p.x + Math.cos(ang) * 30, p.y + Math.sin(ang) * 30, g);
+        });
+      }
     }
 
     for (const [nodeId, list] of byNode) {
