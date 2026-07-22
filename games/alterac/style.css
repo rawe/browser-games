@@ -1,0 +1,382 @@
+/* Alterac Combat Simulator – dunkles Winter-Theme, mobil zuerst. */
+
+body {
+  background: #12161f;
+  color: #e6ebf4;
+  color-scheme: dark;
+}
+
+.back-link {
+  color: #aeb8cc;
+  z-index: 20;
+  background: rgba(14, 18, 28, 0.75);
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ------------------------------------------------------------------ Setup */
+.setup {
+  max-width: 26rem;
+  margin: 0 auto;
+  padding: 4.5rem 1rem 3rem;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.setup h1 {
+  margin: 0;
+  text-align: center;
+  font-size: 1.6rem;
+  letter-spacing: 0.02em;
+}
+
+.tagline {
+  margin: -0.75rem 0 0;
+  text-align: center;
+  color: #8a94a8;
+}
+
+.setup-card {
+  background: #1a2030;
+  border: 1px solid #2a3348;
+  border-radius: 1rem;
+  padding: 1.25rem;
+  display: grid;
+  gap: 1rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.setup-card label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  color: #aeb8cc;
+}
+
+.setup-card select,
+.setup-card input[type='range'] {
+  width: 100%;
+  accent-color: #5b9cff;
+}
+
+.setup-card select {
+  padding: 0.55rem 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid #2a3348;
+  background: #12161f;
+  color: #e6ebf4;
+  font: inherit;
+}
+
+.units-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.units-row output {
+  min-width: 1.6rem;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #5b9cff;
+}
+
+.rules {
+  background: #1a2030;
+  border: 1px solid #2a3348;
+  border-radius: 1rem;
+  padding: 0.9rem 1.25rem;
+  color: #aeb8cc;
+  font-size: 0.9rem;
+}
+
+.rules summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #e6ebf4;
+}
+
+.rules ul {
+  padding-left: 1.1rem;
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ Buttons */
+.btn {
+  font: inherit;
+  font-weight: 600;
+  border: 1px solid #2a3348;
+  border-radius: 0.6rem;
+  background: #232b3d;
+  color: #e6ebf4;
+  padding: 0.6rem 1rem;
+  min-height: 2.75rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, translate 0.1s;
+}
+
+.btn:active {
+  translate: 0 1px;
+}
+
+.btn.primary {
+  --fac: #5b9cff;
+  --fac-dark: #2c5aa8;
+  background: linear-gradient(180deg, var(--fac), var(--fac-dark));
+  border-color: transparent;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.btn.ghost {
+  background: transparent;
+}
+
+.btn.mode.active {
+  border-color: #5b9cff;
+  background: #223050;
+}
+
+/* ------------------------------------------------------------------ Spielfeld */
+#screen-game {
+  padding-bottom: 2rem;
+}
+
+#map-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+#map {
+  display: block;
+  width: min(100%, 540px);
+  height: auto;
+  touch-action: pan-y;
+}
+
+body.phase-plan #map-wrap {
+  padding-bottom: 290px;
+}
+
+body.phase-sim #map-wrap {
+  padding-bottom: 170px;
+}
+
+/* ------------------------------------------------------------------ Panel */
+#panel {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  translate: -50% 0;
+  width: min(100%, 560px);
+  background: rgba(14, 18, 28, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid #2a3348;
+  border-bottom: none;
+  border-radius: 1rem 1rem 0 0;
+  padding: 0.75rem 0.9rem calc(0.75rem + env(safe-area-inset-bottom));
+  display: grid;
+  gap: 0.6rem;
+  z-index: 10;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.plan-title {
+  font-weight: 700;
+  color: var(--fac, #e6ebf4);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  max-height: 7.5rem;
+  overflow-y: auto;
+}
+
+.chip {
+  font: inherit;
+  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  border: 1.5px solid #2a3348;
+  background: #1c2334;
+  color: #cfd7e6;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.chip span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 11rem;
+  color: #8a94a8;
+}
+
+.chip.selected {
+  border-color: var(--fac, #5b9cff);
+  background: #223050;
+  color: #fff;
+}
+
+.chip.selected span {
+  color: #cfd7e6;
+}
+
+.chip.pickable {
+  border-style: dashed;
+}
+
+.mode-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.mode-row .btn {
+  flex: 1;
+  padding: 0.5rem 0.25rem;
+  font-size: 0.85rem;
+}
+
+.mode-row .btn.ghost {
+  flex: 0 0 2.75rem;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: #8a94a8;
+  min-height: 2.1em;
+}
+
+.hint.warn {
+  color: #ffb27a;
+}
+
+/* ------------------------------------------------------------------ Simulation */
+.sim-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.speed-group {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.speed-group .speed {
+  min-height: 2.25rem;
+  padding: 0.3rem 0.7rem;
+}
+
+.speed-group .speed.active {
+  border-color: #5b9cff;
+  background: #223050;
+}
+
+#btn-pause {
+  min-width: 2.75rem;
+}
+
+.sim-clock {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #aeb8cc;
+}
+
+.ticker {
+  display: grid;
+  gap: 0.15rem;
+  min-height: 3.6rem;
+  align-content: start;
+}
+
+.ticker p {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: #cfd7e6;
+}
+
+.ticker p:not(:last-child) {
+  opacity: 0.55;
+}
+
+.ticker .t {
+  color: #8a94a8;
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.3rem;
+}
+
+.ticker .muted {
+  color: #8a94a8;
+}
+
+/* ------------------------------------------------------------------ Overlay */
+#overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 8, 14, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 30;
+}
+
+#overlay-card {
+  max-width: 21rem;
+  width: 100%;
+  text-align: center;
+  animation: pop 0.25s ease-out;
+}
+
+.overlay-emoji {
+  font-size: 3rem;
+}
+
+#overlay-card h2 {
+  margin: 0.5rem 0;
+}
+
+#overlay-card p {
+  color: #aeb8cc;
+  line-height: 1.45;
+}
+
+.overlay-buttons {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+@keyframes pop {
+  from {
+    scale: 0.92;
+    opacity: 0;
+  }
+}
