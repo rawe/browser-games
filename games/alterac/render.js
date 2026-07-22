@@ -447,13 +447,25 @@ export function createRenderer(canvas, map) {
     }
   }
 
-  // Wachturm auf einem Kampfknoten: schlanker Steinturm mit Zinnen,
-  // Fraktionsbanner, Schießscharte und Lebensanzeige. Zerstört: dunkel,
-  // rissig, ohne Banner und rauchend. `info` = { faction, hp, maxHp, alive,
-  // engaged }; `ring` markiert einen laufenden Kampf am Knoten.
+  // Zwei Hex-Farben mischen (t = 0 → a, t = 1 → b).
+  function mixHex(a, b, t) {
+    const ch = (h, i) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
+    const m = (i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t);
+    return `rgb(${m(0)}, ${m(1)}, ${m(2)})`;
+  }
+
+  // Wachturm auf einem Kampfknoten: schlanker Steinturm in der Fraktionsfarbe
+  // mit Zinnen, Fraktionsbanner, Schießscharte und Lebensanzeige. Zerstört:
+  // dunkel, rissig, ohne Banner und rauchend. `info` = { faction, hp, maxHp,
+  // alive, engaged }; `ring` markiert einen laufenden Kampf am Knoten.
   function drawTower(n, info, ring) {
     const alive = info.alive;
     const c = FACTIONS[info.faction];
+    // Fraktionsgetönter Stein: klar erkennbare Fraktionsfarbe, aber steinern
+    // gedämpft, damit der Turm in die winterliche Szene passt.
+    const bodyTop = alive ? mixHex(c.color, '#6b7488', 0.5) : '#3a4150';
+    const bodyBot = alive ? mixHex(c.dark, '#2a3140', 0.42) : '#242a36';
+    const crenel = alive ? mixHex(c.color, '#586377', 0.42) : '#333a49';
     const w = 22;
     const h = alive ? 34 : 22;
     const x0 = n.x - w / 2;
@@ -471,10 +483,10 @@ export function createRenderer(canvas, map) {
     ctx.globalAlpha = alive ? 0.75 : 0.5;
     ctx.stroke();
     ctx.globalAlpha = 1;
-    // Turmkörper mit Steinfugen
+    // Turmkörper mit Steinfugen – in der Fraktionsfarbe getönt.
     const stone = ctx.createLinearGradient(x0, y0, x0, y0 + h);
-    stone.addColorStop(0, alive ? '#69758f' : '#3a4150');
-    stone.addColorStop(1, alive ? '#333d52' : '#242a36');
+    stone.addColorStop(0, bodyTop);
+    stone.addColorStop(1, bodyBot);
     ctx.fillStyle = stone;
     ctx.fillRect(x0, y0, w, h);
     ctx.strokeStyle = 'rgba(10,15,24,0.28)';
@@ -489,17 +501,17 @@ export function createRenderer(canvas, map) {
     ctx.lineWidth = 2.2;
     ctx.strokeStyle = '#0a0f18';
     ctx.strokeRect(x0, y0, w, h);
-    // Auskragung mit Zinnen (und Schneeauflage)
+    // Auskragung mit Zinnen (und Schneeauflage) – ebenfalls fraktionsgetönt.
     const cw = w + 8;
     const cx0 = n.x - cw / 2;
-    ctx.fillStyle = alive ? '#5a6683' : '#333a49';
+    ctx.fillStyle = crenel;
     ctx.fillRect(cx0, y0 - 8, cw, 8);
     ctx.lineWidth = 2;
     ctx.strokeStyle = '#0a0f18';
     ctx.strokeRect(cx0, y0 - 8, cw, 8);
     for (let i = 0; i < 4; i++) {
       const zx = cx0 + i * (cw / 3.5);
-      ctx.fillStyle = alive ? '#5a6683' : '#333a49';
+      ctx.fillStyle = crenel;
       ctx.fillRect(zx, y0 - 13, cw / 6.5, 6);
       ctx.fillStyle = 'rgba(226,238,252,0.45)';
       ctx.fillRect(zx, y0 - 13, cw / 6.5, 1.6);

@@ -99,8 +99,9 @@ export const DEFAULT_CONFIG = {
   maxTime: 300, // Sicherheitslimit der Simulation in Sekunden
 
   // ------------------------------------------------------------------ Türme
-  // Türme sind ortsfeste Kampfeinheiten an markierten Wegpunkten (siehe TOWERS
-  // in map.js). Sie bewegen sich nicht, regenerieren nicht und respawnen nicht.
+  // Türme sind ortsfeste Kampfeinheiten an markierten Wegpunkten (die `tower`-
+  // Markierung der Knoten in map.js legt Standort und Fraktion fest). Sie
+  // bewegen sich nicht, regenerieren nicht und respawnen nicht.
   // Ein Turmkampf beginnt nur, wenn eine Einheit den gegnerischen Turm
   // ausdrücklich als Angriffsziel plant (Pfadende + Haltung „Angriff").
   towersPerFaction: 2, // Anzahl aktiver Türme je Fraktion (aus den markierten Kandidaten der Karte)

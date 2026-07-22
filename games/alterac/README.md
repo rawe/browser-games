@@ -92,9 +92,10 @@ Schlacht lebt im Simulationszustand (`sim.graveyards`).
 ## Türme
 
 Beide Fraktionen besitzen gleich viele Wachtürme (MVP-Standard: 2 pro Fraktion)
-an markierten **bestehenden** Wegpunkten – den je zwei Boss-Zugängen (`TOWERS`
-in `map.js`); das Wegesystem selbst wird dafür nicht erweitert. Türme platziert
-die Karte, nicht der Spieler. Ein Turm ist eine ortsfeste Kampfeinheit mit
+an markierten **bestehenden** Wegpunkten – den je zwei Boss-Zugängen. Der
+Standort steht unmittelbar in der Knotenkonfiguration: Der jeweilige Wegpunkt in
+`NODES` (`map.js`) trägt eine `tower: 'red' | 'blue'`-Markierung; das Wegesystem
+selbst wird dafür nicht erweitert. Türme platziert die Karte, nicht der Spieler. Ein Turm ist eine ortsfeste Kampfeinheit mit
 eigenen Werten (maximale Hitpoints, Angriffsschaden, Angriffsintervall,
 Fraktion); er bewegt sich nicht, regeneriert nicht und respawnt nicht.
 
@@ -118,7 +119,8 @@ Fraktion); er bewegt sich nicht, regeneriert nicht und respawnt nicht.
 Alle Turmwerte, die Turmanzahl (`towersPerFaction`), die Schadensreduktion je
 Turm (`towerDamageReduction`) und die Mindestschadensgrenze des Fürsten
 (`bossDamageFloor`) stehen zentral in `config.js`. Der Renderer visualisiert
-Fraktion (Banner + Basisring), aktuelle Hitpoints (Balken), laufenden Turmkampf
+die Fraktion eindeutig (in der Fraktionsfarbe getönter Turmkörper samt Banner
+und Basisring), die aktuellen Hitpoints (Balken), den laufenden Turmkampf
 (Kampfring) und den zerstörten Zustand (dunkle, rissige, rauchende Ruine).
 
 ## Begegnungskämpfe auf Wegstücken
