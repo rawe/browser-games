@@ -37,3 +37,24 @@ games/<name>/       Ein Verzeichnis pro Spiel
 Jeder Push auf `main` baut das Projekt mit Vite und deployt `dist/` automatisch
 auf GitHub Pages (`.github/workflows/deploy.yml`). Es gibt keine Serverlogik –
 alles läuft im Browser.
+
+### Branch-/PR-Vorschau zur Abnahme
+
+Ein Branch oder PR kann manuell auf derselben Pages-Seite unter `/preview/`
+deployt werden (`.github/workflows/preview.yml`):
+
+1. Auf GitHub: **Actions → „Preview-Deployment (Branch/PR)" → Run workflow**.
+2. Branch auf `main` lassen und als Eingabe den Branch-Namen **oder** die
+   PR-Nummer angeben (z. B. `7`).
+3. Nach dem Lauf:
+   - `https://rawe.github.io/browser-games/` → unverändert der `main`-Stand
+   - `https://rawe.github.io/browser-games/preview/` → der gewählte Stand
+   - `…/preview/PREVIEW.txt` zeigt, welcher Branch/Commit deployt ist.
+
+Hinweise:
+
+- Es gibt immer nur **eine** Vorschau gleichzeitig; ein neuer Lauf ersetzt sie.
+- Ein Push auf `main` (z. B. der Merge des PRs) deployt wieder nur `main` und
+  entfernt die Vorschau automatisch.
+- Vorschau vorzeitig entfernen: den normalen Workflow „Deploy to GitHub Pages"
+  manuell starten (Run workflow auf `main`).
