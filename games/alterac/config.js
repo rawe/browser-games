@@ -94,9 +94,25 @@ export const DEFAULT_CONFIG = {
   graveyardCaptureTime: 10, // Sekunden ununterbrochener Präsenz bis zur Einnahme eines Friedhofs
   entrenchedFactor: 0.6, // Anteil des Schadens, den eingegrabene Verteidiger erleiden
   bossHp: 100, // maximale Hitpoints des Endbosses
-  bossDamage: 12, // Schaden des Endbosses pro Angriff
+  bossDamage: 12, // Basis-Schaden des Endbosses pro Angriff (Grundwert für die Turm-Reduktion)
   bossAttackInterval: 1, // Sekunden zwischen zwei Boss-Angriffen
   maxTime: 300, // Sicherheitslimit der Simulation in Sekunden
+
+  // ------------------------------------------------------------------ Türme
+  // Türme sind ortsfeste Kampfeinheiten an markierten Wegpunkten (die `tower`-
+  // Markierung der Knoten in map.js legt Standort und Fraktion fest). Sie
+  // bewegen sich nicht, regenerieren nicht und respawnen nicht.
+  // Ein Turmkampf beginnt nur, wenn eine Einheit den gegnerischen Turm
+  // ausdrücklich als Angriffsziel plant (Pfadende + Haltung „Angriff").
+  towersPerFaction: 2, // Anzahl aktiver Türme je Fraktion (aus den markierten Kandidaten der Karte)
+  towerHp: 40, // maximale Hitpoints eines Turms
+  towerDamage: 10, // Schaden pro Turm-Angriff
+  towerAttackInterval: 1.2, // Sekunden zwischen zwei Turm-Angriffen
+  // Jeder zerstörte Turm senkt den Angriffsschaden des zugehörigen Fürsten
+  // dauerhaft – stets berechnet auf den Basis-Schaden (bossDamage), nicht auf
+  // den bereits reduzierten Wert.
+  towerDamageReduction: 0.25, // Anteil des Basis-Schadens, um den der Fürst je zerstörtem Turm sinkt
+  bossDamageFloor: 0.5, // Mindestanteil des Basis-Schadens, den der Fürst niemals unterschreitet
 };
 
 // Maximale Länge eines geplanten Pfads (Anzahl Wegpunkte).

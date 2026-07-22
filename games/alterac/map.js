@@ -20,11 +20,15 @@ export function enemyOf(faction) {
 // Friedhöfe sind immer Sackgassen mit genau einer Verbindung und liegen nie
 // auf einem Hauptweg zur gegnerischen Basis – wer sie will, muss den Abstecher
 // (Hin- und Rückweg) explizit in den Pfad einer Einheit einplanen.
+// Türme werden direkt am Wegpunkt markiert: `tower: 'red' | 'blue'` legt fest,
+// dass an diesem bestehenden Knoten ein Turm der genannten Fraktion steht. Wie
+// viele der markierten Kandidaten je Fraktion aktiv sind, steuert
+// `towersPerFaction` in config.js (Reihenfolge = Reihenfolge dieser Liste).
 const NODES = [
   { id: 'rboss', type: 'boss', faction: 'red', x: 240, y: 78, name: 'Kriegsherr Eiszahn', labelDy: 46 },
   { id: 'rgy', type: 'graveyard', x: 96, y: 150, name: 'Nordfriedhof', labelDy: 30 },
-  { id: 'reast', type: 'combat', x: 404, y: 178, name: 'Eisiger Grat', labelDx: 12, labelDy: 26 },
-  { id: 'rgate', type: 'combat', x: 240, y: 214, name: 'Nordtor', labelDx: 52, labelDy: 4 },
+  { id: 'rgate', type: 'combat', tower: 'red', x: 240, y: 214, name: 'Nordtor', labelDx: 52, labelDy: 4 },
+  { id: 'reast', type: 'combat', tower: 'red', x: 404, y: 178, name: 'Eisiger Grat', labelDx: 12, labelDy: 26 },
   { id: 'wn', type: 'combat', x: 112, y: 356, name: 'Eisfelsklamm', labelDy: 32 },
   { id: 'en', type: 'combat', x: 368, y: 356, name: 'Steinbruch', labelDy: 32 },
   { id: 'gyw', type: 'graveyard', x: 48, y: 452, name: 'Klammfriedhof', labelDy: 32 },
@@ -33,8 +37,8 @@ const NODES = [
   { id: 'gym', type: 'graveyard', x: 240, y: 554, name: 'Talfriedhof', labelDy: 32 },
   { id: 'ws', type: 'combat', x: 112, y: 620, name: 'Wolfsschlucht', labelDy: 32 },
   { id: 'es', type: 'combat', x: 368, y: 620, name: 'Kiefernhang', labelDy: 32 },
-  { id: 'swest', type: 'combat', x: 84, y: 788, name: 'Schmugglerpfad', labelDy: 30 },
-  { id: 'sgate', type: 'combat', x: 240, y: 760, name: 'Südtor', labelDx: 48, labelDy: 4 },
+  { id: 'sgate', type: 'combat', tower: 'blue', x: 240, y: 760, name: 'Südtor', labelDx: 48, labelDy: 4 },
+  { id: 'swest', type: 'combat', tower: 'blue', x: 84, y: 788, name: 'Schmugglerpfad', labelDy: 30 },
   { id: 'bgy', type: 'graveyard', x: 384, y: 830, name: 'Südfriedhof', labelDy: 30 },
   { id: 'bboss', type: 'boss', faction: 'blue', x: 240, y: 896, name: 'General Steinbrecher', labelDy: 46 },
 ];
@@ -105,6 +109,22 @@ export const GUARD_POSTS = {
   blue: ['sgate', 'swest'],
 };
 
+// Aktive Turm-Wegpunkte als { nodeId: faction }: die ersten `towersPerFaction`
+// je Fraktion aus den in `NODES` markierten Turm-Kandidaten (map.towerSites).
+// Beide Fraktionen erhalten dieselbe (verfügbarkeitsbegrenzte) Anzahl.
+export function towerNodes(map, towersPerFaction) {
+  const count = Math.min(
+    towersPerFaction,
+    map.towerSites.red.length,
+    map.towerSites.blue.length
+  );
+  const out = {};
+  for (const faction of ['blue', 'red']) {
+    for (const id of map.towerSites[faction].slice(0, count)) out[id] = faction;
+  }
+  return out;
+}
+
 export function createMap() {
   const nodes = {};
   for (const n of NODES) nodes[n.id] = { ...n };
@@ -122,6 +142,14 @@ export function createMap() {
   const graveyards = {};
   for (const [id, meta] of Object.entries(GRAVEYARDS)) graveyards[id] = { ...meta };
 
+  // Turm-Kandidaten je Fraktion direkt aus den `tower`-Markierungen der
+  // Wegpunkte ableiten (Reihenfolge = NODES-Reihenfolge). So steht der
+  // Standort eines Turms unmittelbar in der Knotenkonfiguration.
+  const towerSites = { blue: [], red: [] };
+  for (const n of NODES) {
+    if (n.tower) towerSites[n.tower].push(n.id);
+  }
+
   return {
     width: 480,
     height: 960,
@@ -136,6 +164,9 @@ export function createMap() {
     // der aktuelle Besitzstand während einer Schlacht lebt in sim.js.
     graveyards,
     graveyardIds: Object.keys(graveyards).sort(),
+    // Markierte Turm-Standorte je Fraktion (aus den `tower`-Markierungen der
+    // Wegpunkte); wie viele davon aktiv sind, entscheidet config.towersPerFaction.
+    towerSites,
     edgeBetween(a, b) {
       return edges.find((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a)) ?? null;
     },

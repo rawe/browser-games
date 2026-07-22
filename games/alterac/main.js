@@ -107,6 +107,7 @@ function startPlanning(faction) {
     map,
     faction,
     budget: config.resources,
+    config,
     panel: panelEl,
     canvas,
     renderer,
