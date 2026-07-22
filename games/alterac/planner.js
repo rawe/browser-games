@@ -58,7 +58,7 @@ export function createPlanner({ map, faction, unitCount, panel, canvas, renderer
   const HINTS = {
     attack:
       'Kampfpunkte antippen, um die Angriffsroute festzulegen. Danach zieht die Einheit automatisch zum gegnerischen Boss.',
-    defend: 'Einen Kampfpunkt oder den eigenen Boss antippen – die Einheit hält dort Stellung (×1,5, wenn sie zuerst da ist).',
+    defend: 'Einen Kampfpunkt oder den eigenen Boss antippen – die Einheit hält dort Stellung und erleidet weniger Schaden, wenn sie zuerst da ist.',
     follow: 'Eine andere Einheit in der Leiste antippen – beide fusionieren dauerhaft zu einer Gruppe.',
   };
 

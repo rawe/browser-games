@@ -52,7 +52,7 @@ const unitsOut = document.getElementById('opt-units-out');
 unitsInput.addEventListener('input', () => (unitsOut.textContent = unitsInput.value));
 fillSelect(document.getElementById('opt-tempo'), TEMPO_OPTIONS, DEFAULT_CONFIG.edgeTime);
 fillSelect(document.getElementById('opt-respawn'), RESPAWN_OPTIONS, DEFAULT_CONFIG.respawnTime);
-fillSelect(document.getElementById('opt-boss'), BOSS_OPTIONS, DEFAULT_CONFIG.bossStrength);
+fillSelect(document.getElementById('opt-boss'), BOSS_OPTIONS, DEFAULT_CONFIG.bossHp);
 
 document.getElementById('setup-form').addEventListener('submit', (ev) => {
   ev.preventDefault();
@@ -61,7 +61,7 @@ document.getElementById('setup-form').addEventListener('submit', (ev) => {
     units: Number(unitsInput.value),
     edgeTime: Number(document.getElementById('opt-tempo').value),
     respawnTime: Number(document.getElementById('opt-respawn').value),
-    bossStrength: Number(document.getElementById('opt-boss').value),
+    bossHp: Number(document.getElementById('opt-boss').value),
   };
   view.config = config;
   mode = document.getElementById('opt-mode').value;

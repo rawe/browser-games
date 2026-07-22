@@ -35,7 +35,7 @@
       <label>Respawnzeit
         <select id="opt-respawn"></select>
       </label>
-      <label>Bossstärke
+      <label>Boss-Lebenspunkte
         <select id="opt-boss"></select>
       </label>
       <button type="submit" class="btn primary">Schlacht planen</button>
@@ -44,13 +44,13 @@
     <details class="rules">
       <summary>Spielregeln (Kurzfassung)</summary>
       <ul>
-        <li>Jede Einheit hat Stärke 1. Einheiten am selben Punkt addieren ihre Stärke.</li>
+        <li>Jede Einheit hat 10 Lebenspunkte und verursacht 3 Schaden pro Sekunde. Fusionierte Gruppen addieren Lebenspunkte und Schaden.</li>
         <li><strong>Angriff:</strong> Kampfpunkte als Route wählen – danach geht es automatisch zum gegnerischen Boss.</li>
-        <li><strong>Verteidigen:</strong> Die Einheit hält einen Punkt. Ist sie vor dem Angreifer da, zählt sie ×1,5.</li>
+        <li><strong>Verteidigen:</strong> Die Einheit hält einen Punkt. Ist sie vor dem Angreifer da, erleidet sie nur 2 statt 3 Schaden pro angreifender Einheit.</li>
         <li><strong>Folgen:</strong> Dauerhafte Fusion mit einer anderen Einheit – stark, aber unflexibel.</li>
-        <li>Am Kampfpunkt gewinnt die stärkere Seite, die Verliererseite fällt komplett. Gleichstand bindet beide Seiten, bis Verstärkung eintrifft.</li>
-        <li>Gefallene kehren nach der Respawnzeit am nächstgelegenen eigenen Friedhof zurück und setzen ihren Befehl fort.</li>
-        <li>Der Boss zählt als Verteidiger mit fester Stärke. Fällt er, ist die Schlacht sofort vorbei.</li>
+        <li>Kämpfe laufen in Sekundenschritten: Beide Seiten teilen gleichzeitig Schaden aus, bis eine Seite keine Einheit mehr am Punkt hat. Überlebende behalten ihre restlichen Lebenspunkte – regeneriert wird nur per Respawn.</li>
+        <li>Wer 0 Lebenspunkte erreicht, fällt und kehrt nach der Respawnzeit mit vollen Lebenspunkten am nächstgelegenen eigenen Friedhof zurück – fusionierte Gruppen als Ganzes.</li>
+        <li>Der Boss hat eigene Lebenspunkte, kämpft mit und regeneriert sich nicht. Fällt er, ist die Schlacht sofort vorbei.</li>
       </ul>
     </details>
   </section>

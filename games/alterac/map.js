@@ -23,7 +23,7 @@ const NODES = [
   { id: 'es', type: 'combat', x: 368, y: 620, name: 'Kiefernhang', labelDy: 32 },
   { id: 'sgate', type: 'combat', x: 240, y: 760, name: 'Südtor', labelDx: 48, labelDy: 4 },
   { id: 'bgy', type: 'graveyard', faction: 'blue', x: 384, y: 830, name: 'Südfriedhof', labelDy: 30 },
-  { id: 'bboss', type: 'boss', faction: 'blue', x: 240, y: 896, name: 'General Steinbrecher', labelDy: -40 },
+  { id: 'bboss', type: 'boss', faction: 'blue', x: 240, y: 896, name: 'General Steinbrecher', labelDy: 46 },
 ];
 
 // Verbindungen. `bend` krümmt den Weg optisch (und die Einheiten folgen der Kurve).
