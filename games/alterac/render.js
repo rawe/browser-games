@@ -447,6 +447,146 @@ export function createRenderer(canvas, map) {
     }
   }
 
+  // Wachturm auf einem Kampfknoten: schlanker Steinturm mit Zinnen,
+  // Fraktionsbanner, Schießscharte und Lebensanzeige. Zerstört: dunkel,
+  // rissig, ohne Banner und rauchend. `info` = { faction, hp, maxHp, alive,
+  // engaged }; `ring` markiert einen laufenden Kampf am Knoten.
+  function drawTower(n, info, ring) {
+    const alive = info.alive;
+    const c = FACTIONS[info.faction];
+    const w = 22;
+    const h = alive ? 34 : 22;
+    const x0 = n.x - w / 2;
+    const y0 = n.y - h / 2 - 4;
+    // Schatten
+    ctx.beginPath();
+    ctx.ellipse(n.x, n.y + 15, 19, 6.5, 0, 0, TAU);
+    ctx.fillStyle = 'rgba(10,15,24,0.55)';
+    ctx.fill();
+    // Fraktions-Basisring (immer sichtbar – klare Zuordnung der Fraktion)
+    ctx.beginPath();
+    ctx.arc(n.x, n.y + 11, 15, 0, TAU);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = alive ? c.color : 'rgba(120,132,152,0.55)';
+    ctx.globalAlpha = alive ? 0.75 : 0.5;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    // Turmkörper mit Steinfugen
+    const stone = ctx.createLinearGradient(x0, y0, x0, y0 + h);
+    stone.addColorStop(0, alive ? '#69758f' : '#3a4150');
+    stone.addColorStop(1, alive ? '#333d52' : '#242a36');
+    ctx.fillStyle = stone;
+    ctx.fillRect(x0, y0, w, h);
+    ctx.strokeStyle = 'rgba(10,15,24,0.28)';
+    ctx.lineWidth = 1;
+    for (let row = 1; row * 8 < h - 2; row++) {
+      const yy = y0 + row * 8;
+      ctx.beginPath();
+      ctx.moveTo(x0 + 1, yy);
+      ctx.lineTo(x0 + w - 1, yy);
+      ctx.stroke();
+    }
+    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = '#0a0f18';
+    ctx.strokeRect(x0, y0, w, h);
+    // Auskragung mit Zinnen (und Schneeauflage)
+    const cw = w + 8;
+    const cx0 = n.x - cw / 2;
+    ctx.fillStyle = alive ? '#5a6683' : '#333a49';
+    ctx.fillRect(cx0, y0 - 8, cw, 8);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#0a0f18';
+    ctx.strokeRect(cx0, y0 - 8, cw, 8);
+    for (let i = 0; i < 4; i++) {
+      const zx = cx0 + i * (cw / 3.5);
+      ctx.fillStyle = alive ? '#5a6683' : '#333a49';
+      ctx.fillRect(zx, y0 - 13, cw / 6.5, 6);
+      ctx.fillStyle = 'rgba(226,238,252,0.45)';
+      ctx.fillRect(zx, y0 - 13, cw / 6.5, 1.6);
+    }
+    // Schießscharte
+    if (alive) {
+      const flick = 0.7 + 0.3 * Math.sin(anim * 9 + n.x);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(n.x, y0 + 15, 0, n.x, y0 + 15, 7);
+      g.addColorStop(0, `rgba(255,190,100,${0.25 * flick})`);
+      g.addColorStop(1, 'rgba(255,190,100,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(n.x, y0 + 15, 7, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = `rgba(255,208,120,${flick})`;
+    } else {
+      ctx.fillStyle = '#1a212e';
+    }
+    ctx.fillRect(n.x - 1.5, y0 + 11, 3, 9);
+    if (alive) {
+      // Fraktionsbanner an kurzem Mast
+      ctx.strokeStyle = '#0a0f18';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(n.x, y0 - 12);
+      ctx.lineTo(n.x, y0 - 30);
+      ctx.stroke();
+      ctx.strokeStyle = '#9a7a4e';
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(n.x, y0 - 12);
+      ctx.lineTo(n.x, y0 - 30);
+      ctx.stroke();
+      traceFlag(n.x + 1, y0 - 29, 16, 9, anim + n.x * 0.02);
+      const bg2 = ctx.createLinearGradient(n.x, 0, n.x + 17, 0);
+      bg2.addColorStop(0, c.color);
+      bg2.addColorStop(1, c.dark);
+      ctx.fillStyle = bg2;
+      ctx.fill();
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = 'rgba(8,12,20,0.85)';
+      ctx.stroke();
+      drawHpBar(n.x, y0 - 44, 34, info.hp, info.maxHp);
+    } else {
+      // Risse und aufsteigender Rauch
+      ctx.strokeStyle = 'rgba(8,12,18,0.7)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(n.x - 3, y0 + 1);
+      ctx.lineTo(n.x - 6, y0 + 10);
+      ctx.lineTo(n.x - 2, y0 + h - 2);
+      ctx.moveTo(n.x + 5, y0 + 3);
+      ctx.lineTo(n.x + 2, y0 + 12);
+      ctx.stroke();
+      if (Math.random() < frameDt * 2.5) {
+        effects.smoke(n.x + (Math.random() - 0.5) * 14, y0 + 2);
+      }
+    }
+    if (ring) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y + 4, 20, 0, TAU);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = ring;
+      ctx.stroke();
+    }
+  }
+
+  // Turminfo eines Knotens: im Gefecht aus der Simulation, sonst aus der
+  // Kartenmarkierung + Konfiguration (Anzahl aktiver Türme je Fraktion).
+  function towerInfoAt(nodeId, view) {
+    if (view.sim) {
+      const tw = view.sim.towers[nodeId];
+      return tw ? { faction: tw.faction, hp: tw.hp, maxHp: tw.maxHp, alive: tw.alive, engaged: tw.engaged } : null;
+    }
+    const per = view.config?.towersPerFaction ?? 0;
+    for (const faction of ['blue', 'red']) {
+      if ((map.towerSites?.[faction] ?? []).slice(0, per).includes(nodeId)) {
+        const hp = view.config?.towerHp ?? 0;
+        return { faction, hp, maxHp: hp, alive: true, engaged: false };
+      }
+    }
+    return null;
+  }
+
   function drawShieldIcon(x, y, s, color) {
     ctx.beginPath();
     ctx.moveTo(x, y - s);
@@ -620,7 +760,9 @@ export function createRenderer(canvas, map) {
           owner = [...fac][0];
         }
       }
-      if (n.type === 'combat') drawFlagNode(n, owner, ring);
+      const towerInfo = n.type === 'combat' ? towerInfoAt(n.id, view) : null;
+      if (towerInfo) drawTower(n, towerInfo, ring);
+      else if (n.type === 'combat') drawFlagNode(n, owner, ring);
       else if (n.type === 'graveyard') {
         // Besitz kommt im Gefecht aus der Simulation, sonst aus der
         // Kartenkonfiguration (Startbesitz).
@@ -766,11 +908,19 @@ export function createRenderer(canvas, map) {
   }
 
   // ---------------------------------------------------------------- Planung
-  function drawPlanning(pl) {
+  function drawPlanning(view) {
+    const pl = view.planning;
     const faction = pl.faction;
     const c = FACTIONS[faction];
     const start = map.start[faction];
     const enemyBoss = map.bosses[enemyOf(faction)];
+    const enemy = enemyOf(faction);
+    // Endet ein Angriffspfad auf einem gegnerischen Turm, ist der Turm das Ziel
+    // (kein automatischer Weitermarsch zum Boss in der Vorschau).
+    const isEnemyTower = (id) => {
+      const ti = id ? towerInfoAt(id, view) : null;
+      return !!(ti && ti.faction === enemy);
+    };
 
     // Halte-Marker aller Einheiten (Pfadende von Einheiten mit „Halten").
     const holdCount = new Map();
@@ -783,8 +933,11 @@ export function createRenderer(canvas, map) {
     // Pfad der ausgewählten Einheit hervorheben.
     const sel = pl.units[pl.selected] ?? null;
     if (sel) {
+      const endTowerTarget = sel.stance === 'attack' && isEnemyTower(sel.path[sel.path.length - 1]);
       const seq = [start, ...sel.path];
-      if (sel.stance === 'attack' && seq[seq.length - 1] !== enemyBoss) seq.push(enemyBoss);
+      if (sel.stance === 'attack' && !endTowerTarget && seq[seq.length - 1] !== enemyBoss) {
+        seq.push(enemyBoss);
+      }
       strokeRoute(routePoints(seq), c.color);
       sel.path.forEach((t, i) => {
         const n = map.nodes[t];
@@ -801,6 +954,9 @@ export function createRenderer(canvas, map) {
       if (sel.stance === 'defend') {
         const n = map.nodes[endId];
         drawShieldIcon(n.x + 16, n.y - 14, 8, c.color);
+      } else if (endTowerTarget) {
+        // Turmangriff-Marker: gekreuzte Schwerter am Ziel-Turm.
+        drawSwords(map.nodes[endId].x, map.nodes[endId].y, anim);
       }
       // Mögliche nächste Wegpunkte (Nachbarn des Pfadendes) pulsierend markieren.
       const pulse = 0.5 + 0.5 * Math.sin(anim * 5);
@@ -856,7 +1012,7 @@ export function createRenderer(canvas, map) {
     ctx.drawImage(bg, 0, 0, W, H);
 
     effects.consume(view.sim ?? null);
-    if (view.phase === 'plan' && view.planning) drawPlanning(view.planning);
+    if (view.phase === 'plan' && view.planning) drawPlanning(view);
     drawNodes(view);
     if (view.phase === 'sim' && view.sim) drawSim(view.sim);
     effects.draw(ctx, dt);

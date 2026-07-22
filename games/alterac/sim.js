@@ -34,7 +34,7 @@
 // Friedhof – bestimmt erst im Moment des Respawns; ohne eigenen Friedhof ist
 // kein Respawn mehr möglich (Zustand 'gone').
 
-import { FACTIONS, enemyOf, shortestPath, nearestGraveyard } from './map.js';
+import { FACTIONS, enemyOf, shortestPath, nearestGraveyard, towerNodes } from './map.js';
 import { UNIT_TYPE_BY_KEY } from './config.js';
 
 const EPS = 1e-6;
@@ -55,6 +55,12 @@ export function createSim({ map, config, plans }) {
     bossDamage,
     bossAttackInterval,
     maxTime,
+    towersPerFaction,
+    towerHp,
+    towerDamage,
+    towerAttackInterval,
+    towerDamageReduction,
+    bossDamageFloor,
   } = config;
   const groups = [];
   const log = [];
@@ -68,6 +74,28 @@ export function createSim({ map, config, plans }) {
   };
   // Angriffstimer der Bosse (Infinity = kein Kampf am Boss-Knoten).
   const bossAttackAt = { blue: Infinity, red: Infinity };
+  // Türme: ortsfeste Kampfeinheiten an markierten Wegpunkten. Sie bewegen sich
+  // nicht, regenerieren nicht und respawnen nicht. `engaged` ist true, solange
+  // ein Turmkampf läuft (eine gegnerische Einheit greift den Turm ausdrücklich
+  // an); `attackAt` ist der nächste Angriffszeitpunkt (Infinity = ruhend).
+  const towers = {};
+  for (const [nodeId, faction] of Object.entries(towerNodes(map, towersPerFaction ?? 0))) {
+    towers[nodeId] = {
+      node: nodeId,
+      faction,
+      maxHp: towerHp,
+      hp: towerHp,
+      damage: towerDamage,
+      attackInterval: towerAttackInterval,
+      alive: true,
+      engaged: false,
+      attackAt: Infinity,
+    };
+  }
+  const towerIds = Object.keys(towers);
+  // Anzahl je Fraktion bereits zerstörter Türme – reduziert dauerhaft den
+  // Angriffsschaden des zugehörigen Fürsten (Berechnung stets aus dem Basiswert).
+  const destroyedTowers = { blue: 0, red: 0 };
   // Knoten mit aktuell laufendem Kampf (für Log und Effekte).
   const nodeCombats = new Set();
   // Aktive Begegnungskämpfe auf Wegstücken: { a, b, frac } mit a/b als
@@ -96,6 +124,15 @@ export function createSim({ map, config, plans }) {
         if (orders.length) orders[orders.length - 1] = { type: 'defend', node: u.path[u.path.length - 1] };
         else orders = [{ type: 'defend', node: map.start[faction] }];
       }
+      // Ausdrückliches Turm-Angriffsziel: endet der Pfad einer Angriffs-Einheit
+      // auf einem gegnerischen Turm, greift sie diesen Turm an (statt automatisch
+      // zum Boss weiterzumarschieren). Ein bloßes Durchqueren eines Turmknotens
+      // als Zwischenwegpunkt aktiviert den Turm nicht.
+      const lastNode = u.path.length ? u.path[u.path.length - 1] : null;
+      const towerTarget =
+        u.stance === 'attack' && lastNode && towers[lastNode] && towers[lastNode].faction !== faction
+          ? lastNode
+          : null;
       groups.push({
         id: `${faction === 'blue' ? 'S' : 'F'}${i + 1}`,
         faction,
@@ -111,6 +148,7 @@ export function createSim({ map, config, plans }) {
         // 'dead' | 'gone' (endgültig gefallen – kein Friedhof für den Respawn)
         state: 'atNode',
         node: map.start[faction],
+        towerTarget, // Knoten des gegnerischen Ziel-Turms (oder null)
         fighting: false,
         entrenched: false,
         nextAttackAt: Infinity,
@@ -129,8 +167,28 @@ export function createSim({ map, config, plans }) {
 
   function currentObjective(g) {
     if (g.orderIndex < g.orders.length) return g.orders[g.orderIndex];
-    // Pfad abgearbeitet → automatisch weiter zum gegnerischen Endboss.
+    // Pfad abgearbeitet: steht ein lebender Ziel-Turm am Pfadende, wird dieser
+    // angegriffen; sonst automatisch weiter zum gegnerischen Endboss.
+    if (g.towerTarget && towers[g.towerTarget]?.alive) {
+      return { type: 'tower', node: g.towerTarget };
+    }
     return { type: 'attack', node: map.bosses[enemyOf(g.faction)] };
+  }
+
+  // Turmknoten, den eine Einheit gerade ausdrücklich angreift: Sie steht an
+  // ihrem geplanten Ziel-Turm (Pfadende), der noch lebt. Zwischenwegpunkte auf
+  // demselben Turm zählen nicht (der Pfad muss dort enden).
+  function objectiveTower(g) {
+    if (!g.towerTarget || g.node !== g.towerTarget) return null;
+    if (g.orderIndex < g.orders.length - 1) return null;
+    return towers[g.towerTarget]?.alive ? g.towerTarget : null;
+  }
+
+  // Aktueller Angriffsschaden eines Fürsten: je zerstörtem eigenen Turm um
+  // `towerDamageReduction` des Basis-Schadens gesenkt, nie unter `bossDamageFloor`.
+  function bossDamageOf(faction) {
+    const factor = Math.max(bossDamageFloor, 1 - towerDamageReduction * destroyedTowers[faction]);
+    return bossDamage * factor;
   }
 
   function combatants(nodeId) {
@@ -369,6 +427,13 @@ export function createSim({ map, config, plans }) {
           g.entrenched = !enemiesPresent(g.node, g.faction);
           return;
         }
+        if (obj.type === 'tower') {
+          // Am gegnerischen Ziel-Turm angekommen: Stellung halten und ihn
+          // angreifen. Kampfbeginn und Angriffstimer verwaltet
+          // updateCombatState/processAttacks (erst Verteidiger, dann der Turm).
+          g.state = 'atNode';
+          return;
+        }
         if (g.orderIndex < g.orders.length) {
           g.orderIndex += 1;
           continue; // Wegpunkt war frei → passieren, Pfad fortsetzen
@@ -425,11 +490,22 @@ export function createSim({ map, config, plans }) {
     for (const g of groups) {
       if (g.fighting && g.nextAttackAt <= t + EPS) attacks.push({ kind: 'group', g });
     }
+    for (const nodeId of towerIds) {
+      const tw = towers[nodeId];
+      if (tw.alive && tw.engaged && tw.attackAt <= t + EPS) attacks.push({ kind: 'tower', tw });
+    }
     if (!attacks.length) return;
-    // Feste, reproduzierbare Reihenfolge: Bosse zuerst, dann Gruppen nach Kennung.
+    // Feste, reproduzierbare Reihenfolge: Bosse zuerst, dann Gruppen nach
+    // Kennung, dann Türme nach Knoten.
+    const attackKey = (a) =>
+      a.kind === 'boss'
+        ? `0${a.faction}`
+        : a.kind === 'tower'
+          ? `2${a.tw.node}`
+          : `1${a.g.id.padStart(4, '0')}`;
     attacks.sort((x, y) => {
-      const kx = x.kind === 'boss' ? `0${x.faction}` : `1${x.g.id.padStart(4, '0')}`;
-      const ky = y.kind === 'boss' ? `0${y.faction}` : `1${y.g.id.padStart(4, '0')}`;
+      const kx = attackKey(x);
+      const ky = attackKey(y);
       return kx < ky ? -1 : kx > ky ? 1 : 0;
     });
 
@@ -439,13 +515,24 @@ export function createSim({ map, config, plans }) {
       let where;
       let targetGroups;
       let bossTargetFaction = null;
+      let towerTargetNode = null;
       if (atk.kind === 'boss') {
         faction = atk.faction;
-        damage = bossDamage;
+        damage = bossDamageOf(faction); // je zerstörtem eigenen Turm dauerhaft geschwächt
         bossAttackAt[faction] = t + bossAttackInterval;
         const nodeId = map.bosses[faction];
         targetGroups = combatants(nodeId).filter((g) => g.faction !== faction);
         where = { node: nodeId };
+      } else if (atk.kind === 'tower') {
+        // Der Turm greift während des gesamten Kampfes mit seinen normalen Werten
+        // das schwächste gegnerische Ziel an seinem Knoten an.
+        const tw = atk.tw;
+        faction = tw.faction;
+        damage = tw.damage;
+        tw.attackAt = t + tw.attackInterval;
+        const enemy = enemyOf(faction);
+        targetGroups = combatants(tw.node).filter((o) => o.faction === enemy);
+        where = { node: tw.node };
       } else {
         const g = atk.g;
         faction = g.faction;
@@ -464,6 +551,13 @@ export function createSim({ map, config, plans }) {
           if (n.type === 'boss' && n.faction === enemy && bossAlive[enemy]) {
             bossTargetFaction = enemy;
           }
+          // Der eigene Ziel-Turm wird erst getroffen, wenn keine gegnerische
+          // Einheit mehr am Knoten steht (siehe Priorität unten) – so bleibt der
+          // Turm unverwundbar, solange Verteidiger leben.
+          const towerHere = towers[g.node];
+          if (towerHere && towerHere.alive && towerHere.faction === enemy && objectiveTower(g) === g.node) {
+            towerTargetNode = g.node;
+          }
           where = { node: g.node };
         }
       }
@@ -480,6 +574,12 @@ export function createSim({ map, config, plans }) {
       } else if (bossTargetFaction) {
         boss[bossTargetFaction].hp = Math.max(0, boss[bossTargetFaction].hp - damage);
         addEvent({ type: 'damage', amount: damage, boss: true, faction: bossTargetFaction, where });
+      } else if (towerTargetNode) {
+        // Alle Verteidiger gefallen → der Turm erleidet vollen Schaden (kein
+        // Verteidigungsbonus, keine zusätzliche Reduktion).
+        const tw = towers[towerTargetNode];
+        tw.hp = Math.max(0, tw.hp - damage);
+        addEvent({ type: 'damage', amount: damage, boss: false, tower: true, faction: tw.faction, where });
       }
     }
 
@@ -502,6 +602,19 @@ export function createSim({ map, config, plans }) {
         defeated.push(fac);
         addLog(`${nodeName(map.bosses[fac])} ist gefallen!`);
         addEvent({ type: 'bossDown', faction: fac, where: { node: map.bosses[fac] } });
+      }
+    }
+    // Zerstörte Türme: dauerhaft aus dem Spiel; der zugehörige Fürst verliert
+    // dauerhaft Angriffsschaden (in bossDamageOf über destroyedTowers verrechnet).
+    for (const nodeId of towerIds) {
+      const tw = towers[nodeId];
+      if (tw.alive && tw.hp <= EPS) {
+        tw.alive = false;
+        tw.engaged = false;
+        tw.attackAt = Infinity;
+        destroyedTowers[tw.faction] += 1;
+        addLog(`Turm ${nodeName(nodeId)} (${FACTIONS[tw.faction].name}) ist zerstört!`);
+        addEvent({ type: 'towerDown', faction: tw.faction, where: { node: nodeId } });
       }
     }
   }
@@ -534,20 +647,45 @@ export function createSim({ map, config, plans }) {
   function updateCombatState(t) {
     for (const n of map.nodeList) {
       const here = combatants(n.id);
-      if (contested(n.id)) {
+      const tw = towers[n.id];
+      // Ein Turm erwacht nur bei ausdrücklichem Angriff: gegnerische Einheiten
+      // am Turmknoten, deren geplantes Pfadende dieser Turm ist. Reines
+      // Durchqueren aktiviert ihn nicht.
+      const towerAttackers =
+        tw && tw.alive ? here.filter((g) => g.faction !== tw.faction && objectiveTower(g) === n.id) : [];
+      const towerEngaged = towerAttackers.length > 0;
+      const isContested = contested(n.id);
+      if (isContested || towerEngaged) {
         if (!nodeCombats.has(n.id)) {
           nodeCombats.add(n.id);
-          addLog(`Kampf um ${n.name} entbrennt.`);
+          if (isContested) addLog(`Kampf um ${n.name} entbrennt.`);
           addEvent({ type: 'combatStart', where: { node: n.id } });
         }
+        // Bei einem Kampf um den Knoten schlagen alle Anwesenden zu; bei einem
+        // reinen Turmangriff nur die ausdrücklichen Turm-Angreifer.
         for (const g of here) {
-          if (!g.fighting) {
+          const involved = isContested || towerAttackers.includes(g);
+          if (involved && !g.fighting) {
             g.fighting = true;
             g.nextAttackAt = t + g.attackInterval;
+          } else if (!involved && g.fighting) {
+            g.fighting = false;
+            g.nextAttackAt = Infinity;
           }
         }
         if (n.type === 'boss' && bossAlive[n.faction] && bossAttackAt[n.faction] === Infinity) {
           bossAttackAt[n.faction] = t + bossAttackInterval;
+        }
+        if (tw && tw.alive) {
+          if (towerEngaged && !tw.engaged) {
+            tw.engaged = true;
+            tw.attackAt = t + tw.attackInterval;
+            addLog(`Der Turm ${n.name} (${FACTIONS[tw.faction].name}) wird angegriffen.`);
+            addEvent({ type: 'towerFight', faction: tw.faction, where: { node: n.id } });
+          } else if (!towerEngaged && tw.engaged) {
+            tw.engaged = false;
+            tw.attackAt = Infinity;
+          }
         }
       } else {
         nodeCombats.delete(n.id);
@@ -558,6 +696,10 @@ export function createSim({ map, config, plans }) {
           }
         }
         if (n.type === 'boss') bossAttackAt[n.faction] = Infinity;
+        if (tw && tw.alive && tw.engaged) {
+          tw.engaged = false;
+          tw.attackAt = Infinity;
+        }
       }
     }
   }
@@ -622,6 +764,10 @@ export function createSim({ map, config, plans }) {
       t = Math.min(t, g.nextAttackAt);
     }
     for (const fac of ['blue', 'red']) t = Math.min(t, bossAttackAt[fac]);
+    for (const nodeId of towerIds) {
+      const tw = towers[nodeId];
+      if (tw.alive && tw.engaged) t = Math.min(t, tw.attackAt);
+    }
     for (const gyId of map.graveyardIds) {
       const cap = captures[gyId];
       if (cap) t = Math.min(t, cap.startedAt + graveyardCaptureTime);
@@ -667,6 +813,10 @@ export function createSim({ map, config, plans }) {
     events,
     bossAlive,
     boss,
+    // Aktueller Turmzustand für Renderer/UI (Fraktion, Hitpoints, Kampf, Zerstörung)
+    // sowie die Zahl bereits zerstörter Türme je Fraktion (für den Fürsten-Debuff).
+    towers,
+    destroyedTowers,
     // Aktueller Friedhofszustand für Renderer/UI (Besitz + laufende Einnahmen).
     graveyards: { owner: gyOwner, captures },
     config,

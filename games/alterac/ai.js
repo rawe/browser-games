@@ -5,7 +5,7 @@
 // GUARD_POSTS – keine typ- oder kartenspezifischen Sonderfälle.
 
 import { UNIT_TYPES, UNIT_TYPE_BY_KEY } from './config.js';
-import { ROUTES, GUARD_POSTS } from './map.js';
+import { ROUTES, GUARD_POSTS, enemyOf } from './map.js';
 
 export function aiPlan(config, map, faction, rng = Math.random) {
   const units = [];
@@ -48,6 +48,27 @@ export function aiPlan(config, map, faction, rng = Math.random) {
   const neutral = map.graveyardIds.filter((id) => map.graveyards[id].owner == null);
   if (neutral.length && attackers.length >= 2) {
     attackers[attackers.length - 1].path = [neutral[Math.floor(rng() * neutral.length)]];
+  }
+
+  // Türme: ein Teil der bossgebundenen Angreifer nimmt gegnerische Türme ins
+  // Visier – der Pfad endet am Turm, wodurch der Turm angegriffen wird; nach
+  // seiner Zerstörung schwächt das den gegnerischen Fürsten. Es bleibt stets
+  // mindestens ein Angreifer direkt bossgebunden. Datengetrieben über die
+  // Turmkonfiguration der Karte (map.towerSites) und config.towersPerFaction.
+  const enemy = enemyOf(faction);
+  const enemyBoss = map.bosses[enemy];
+  const enemyTowers = (map.towerSites?.[enemy] ?? []).slice(0, config.towersPerFaction ?? 0);
+  const bossBound = attackers.filter((u) => u.path[u.path.length - 1] === enemyBoss);
+  const towerBudget = Math.min(
+    enemyTowers.length,
+    Math.max(0, bossBound.length - 1),
+    attackers.length >= 4 ? 2 : 1
+  );
+  for (let k = 0; k < towerBudget; k++) {
+    const tower = enemyTowers[k];
+    const route = routes.find((r) => r.path.includes(tower));
+    if (!route) continue;
+    bossBound[k].path = route.path.slice(0, route.path.indexOf(tower) + 1);
   }
 
   return units;

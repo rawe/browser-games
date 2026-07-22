@@ -3,21 +3,31 @@
 // Wegpunkte plus Haltung (Angriff oder Halten). Baut das Bedienpanel auf und
 // verarbeitet Karten-Taps.
 
-import { FACTIONS } from './map.js';
+import { FACTIONS, towerNodes } from './map.js';
 import { UNIT_TYPES, UNIT_TYPE_BY_KEY, MAX_PATH_LENGTH } from './config.js';
 
-// Kurzbeschreibung des Plans einer Einheit für die Einheitenleiste.
-export function planSummary(unit, nodes) {
+// Kurzbeschreibung des Plans einer Einheit für die Einheitenleiste. `towers`
+// ist die aktive Turmzuordnung { nodeId: faction }; endet der Pfad auf einem
+// Turm, wird das ausdrückliche Turm-Ziel benannt.
+export function planSummary(unit, nodes, towers = {}, faction = null) {
   const names = unit.path.map((id) => nodes[id].name);
+  const endId = unit.path.length ? unit.path[unit.path.length - 1] : null;
+  const endTowerFaction = endId ? towers[endId] : undefined;
   if (unit.stance === 'defend') {
+    if (endTowerFaction && faction && endTowerFaction === faction) {
+      return `🛡 verteidigt Turm ${names[names.length - 1]}`;
+    }
     return `🛡 hält ${names.length ? names[names.length - 1] : 'die Basis'}`;
+  }
+  if (endTowerFaction && faction && endTowerFaction !== faction) {
+    return `⚔ ${names.join(' → ')} · greift Turm an`;
   }
   return names.length ? `⚔ ${names.join(' → ')}` : '⚔ direkt zum Boss';
 }
 
 const fmt = (n) => String(n).replace('.', ',');
 
-export function createPlanner({ map, faction, budget, panel, canvas, renderer, onConfirm }) {
+export function createPlanner({ map, faction, budget, config, panel, canvas, renderer, onConfirm }) {
   const state = {
     faction,
     budget,
@@ -26,6 +36,8 @@ export function createPlanner({ map, faction, budget, panel, canvas, renderer, o
   };
   const fac = FACTIONS[faction];
   const start = map.start[faction];
+  // Aktive Turmzuordnung { nodeId: faction } für die Plan-Zusammenfassungen.
+  const towers = towerNodes(map, config?.towersPerFaction ?? 0);
 
   const spent = () => state.units.reduce((s, u) => s + UNIT_TYPE_BY_KEY[u.type].cost, 0);
 
@@ -63,7 +75,9 @@ export function createPlanner({ map, faction, budget, panel, canvas, renderer, o
   const DEFAULT_HINT =
     'Einheiten anwerben, dann den Pfad der gewählten Einheit Wegpunkt für Wegpunkt antippen ' +
     '(nur benachbarte Punkte). Friedhöfe sind Sackgassen: Hin- und Rückweg einplanen – dort ' +
-    'beginnt die Einnahme automatisch. „Halten" bewacht das Pfadende, „Angriff" zieht danach zum Boss.';
+    'beginnt die Einnahme automatisch. „Halten" bewacht das Pfadende, „Angriff" zieht danach zum Boss. ' +
+    'Türme (an den Toren) werden nur angegriffen, wenn der Pfad ausdrücklich auf einem gegnerischen ' +
+    'Turm endet; ein eigener Turm lässt sich mit „Halten" verteidigen.';
 
   let hintTimer = 0;
   function flashHint(text) {
@@ -94,7 +108,7 @@ export function createPlanner({ map, faction, budget, panel, canvas, renderer, o
       chip.className = 'chip';
       if (i === state.selected) chip.classList.add('selected');
       chip.style.setProperty('--fac', fac.color);
-      chip.innerHTML = `<strong>${def.icon} ${def.name}</strong><span>${planSummary(u, map.nodes)}</span>`;
+      chip.innerHTML = `<strong>${def.icon} ${def.name}</strong><span>${planSummary(u, map.nodes, towers, faction)}</span>`;
       chip.addEventListener('click', () => {
         state.selected = i;
         refresh();

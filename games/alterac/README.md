@@ -10,10 +10,10 @@ Eingriffe ab. Wer den gegnerischen Endboss fällt, gewinnt.
 
 | Datei        | Aufgabe |
 | ------------ | ------- |
-| `sim.js`     | Simulationskern (DOM-frei, deterministisch, ereignisbasiert; liefert typisierte Ereignisse für Effekte); verwaltet auch Friedhofsbesitz und Einnahmen |
-| `map.js`     | Zentrale Kartenkonfiguration (Wegpunkte, Verbindungen, Friedhöfe samt Startbesitz und Heimat-Markierung, Routen, Wachposten), Wegsuche, Friedhofswahl |
+| `sim.js`     | Simulationskern (DOM-frei, deterministisch, ereignisbasiert; liefert typisierte Ereignisse für Effekte); verwaltet auch Friedhofsbesitz, Einnahmen und Türme |
+| `map.js`     | Zentrale Kartenkonfiguration (Wegpunkte, Verbindungen, Friedhöfe samt Startbesitz und Heimat-Markierung, Routen, Wachposten, Turm-Standorte), Wegsuche, Friedhofswahl |
 | `planner.js` | Planungsphase (Rekrutierung aus dem Budget, Pfad- und Haltungswahl pro Einheit) |
-| `ai.js`      | Computergegner (datengetrieben über Einheitentypen und Routen-Konfiguration) |
+| `ai.js`      | Computergegner (datengetrieben über Einheitentypen, Routen- und Turm-Konfiguration; greift gegnerische Türme an und verteidigt eigene) |
 | `render.js`  | Canvas-Rendering: Knoten, Token, Overlays, Wetter (keine Spiellogik) |
 | `terrain.js` | Vorgerenderter Landschafts-Hintergrund (Schneetal, Felswände, Wälder, Wege, Lager) |
 | `effects.js` | Partikeleffekte (Schadenszahlen, Funken, Geister, Respawn-Säulen, Boss-Sturz) |
@@ -88,6 +88,38 @@ Schlacht lebt im Simulationszustand (`sim.graveyards`).
   kürzestmöglichen Weg dorthin; die ursprünglich geplante Route wird nicht
   strikt weiterverwendet. Kontrolliert die Fraktion keinen Friedhof mehr, ist
   kein Respawn mehr möglich – die Einheit ist endgültig gefallen.
+
+## Türme
+
+Beide Fraktionen besitzen gleich viele Wachtürme (MVP-Standard: 2 pro Fraktion)
+an markierten **bestehenden** Wegpunkten – den je zwei Boss-Zugängen (`TOWERS`
+in `map.js`); das Wegesystem selbst wird dafür nicht erweitert. Türme platziert
+die Karte, nicht der Spieler. Ein Turm ist eine ortsfeste Kampfeinheit mit
+eigenen Werten (maximale Hitpoints, Angriffsschaden, Angriffsintervall,
+Fraktion); er bewegt sich nicht, regeneriert nicht und respawnt nicht.
+
+- **Ausdrücklicher Angriff:** Ein Turmkampf beginnt nur, wenn der Pfad einer
+  Angriffs-Einheit ausdrücklich auf dem gegnerischen Turm endet. Bloßes Betreten
+  oder Durchqueren des Wegpunkts aktiviert den Turm nicht – eine Einheit
+  passiert einen Turm-Wegpunkt also normal.
+- **Verteidigung:** Eigene Einheiten können den eigenen Turm mit „Halten"
+  ausdrücklich verteidigen (normaler Verteidigungsmodus samt bestehender
+  Schadensreduktion). Solange mindestens ein Verteidiger lebt, erleidet der Turm
+  keinen Schaden; der Turm greift die Angreifer währenddessen durchgehend mit
+  seinen normalen Werten an. Erst nach dem Fall aller Verteidiger trifft der
+  Angriff den Turm direkt – ohne zusätzlichen Verteidigungsbonus, ohne weitere
+  Schadensreduktion und ohne Verstärkung durch Verteidiger.
+- **Zerstörung & Fürsten-Debuff:** Auf 0 Hitpoints reduziert, ist ein Turm für
+  den Rest der Partie dauerhaft zerstört. Jeder zerstörte Turm senkt dauerhaft
+  den Angriffsschaden des zugehörigen Fürsten – stets berechnet auf dessen
+  **Basiswert**, nie auf den bereits reduzierten Wert (bei zwei Türmen empfohlen:
+  −25 % pro Turm, Untergrenze 50 % des Basiswerts).
+
+Alle Turmwerte, die Turmanzahl (`towersPerFaction`), die Schadensreduktion je
+Turm (`towerDamageReduction`) und die Mindestschadensgrenze des Fürsten
+(`bossDamageFloor`) stehen zentral in `config.js`. Der Renderer visualisiert
+Fraktion (Banner + Basisring), aktuelle Hitpoints (Balken), laufenden Turmkampf
+(Kampfring) und den zerstörten Zustand (dunkle, rissige, rauchende Ruine).
 
 ## Begegnungskämpfe auf Wegstücken
 

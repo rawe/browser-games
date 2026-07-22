@@ -105,6 +105,32 @@ export const GUARD_POSTS = {
   blue: ['sgate', 'swest'],
 };
 
+// Turm-Standorte je Fraktion: bestehende Wegpunkte (Boss-Zugänge), die als
+// Türme markiert sind. Es werden keine neuen Wegpunkte angelegt – die Türme
+// nutzen ausschließlich vorhandene Knoten. Wie viele dieser Kandidaten
+// tatsächlich aktiv sind, steuert `towersPerFaction` in config.js (beide
+// Fraktionen erhalten dieselbe Anzahl). Die Liste ist geordnet; aktiv sind
+// jeweils die ersten `towersPerFaction` Einträge.
+export const TOWERS = {
+  red: ['rgate', 'reast'],
+  blue: ['sgate', 'swest'],
+};
+
+// Aktive Turm-Wegpunkte als { nodeId: faction } für die gewünschte Anzahl je
+// Fraktion. Beide Fraktionen erhalten dieselbe (verfügbarkeitsbegrenzte) Anzahl.
+export function towerNodes(map, towersPerFaction) {
+  const count = Math.min(
+    towersPerFaction,
+    map.towerSites.red.length,
+    map.towerSites.blue.length
+  );
+  const out = {};
+  for (const faction of ['blue', 'red']) {
+    for (const id of map.towerSites[faction].slice(0, count)) out[id] = faction;
+  }
+  return out;
+}
+
 export function createMap() {
   const nodes = {};
   for (const n of NODES) nodes[n.id] = { ...n };
@@ -136,6 +162,9 @@ export function createMap() {
     // der aktuelle Besitzstand während einer Schlacht lebt in sim.js.
     graveyards,
     graveyardIds: Object.keys(graveyards).sort(),
+    // Markierte Turm-Standorte je Fraktion (geordnete Kandidatenliste); wie
+    // viele davon aktiv sind, entscheidet config.towersPerFaction.
+    towerSites: { blue: [...TOWERS.blue], red: [...TOWERS.red] },
     edgeBetween(a, b) {
       return edges.find((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a)) ?? null;
     },

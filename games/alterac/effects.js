@@ -108,6 +108,16 @@ export function createEffects(map) {
     for (let i = 0; i < 8; i++) smoke(x + rand(-18, 18), y + rand(-14, 6));
   }
 
+  // Turmsturz: kleiner als der Boss-Fall, aber deutlich – Einsturzstaub inklusive.
+  function towerFall(x, y) {
+    shake = Math.max(shake, 0.55);
+    push({ kind: 'flash', x, y, life: 0.4, size: 80 });
+    ring(x, y, 'rgba(255,200,120,0.9)', 58, 0.6, 4);
+    ring(x, y, 'rgba(255,240,200,0.75)', 88, 0.8, 2.5, 0.12);
+    sparks(x, y, 'rgba(255,190,90,0.95)', 26, 130);
+    for (let i = 0; i < 7; i++) smoke(x + rand(-14, 14), y + rand(-12, 8));
+  }
+
   // Neue Sim-Ereignisse seit dem letzten Aufruf in Partikel übersetzen.
   // Ein Simulationswechsel (Revanche/Planung) setzt alles zurück.
   function consume(sim) {
@@ -124,10 +134,14 @@ export function createEffects(map) {
       const p = resolve(ev.where);
       if (ev.type === 'damage') {
         damageNumber(p.x, p.y, ev.amount, {
-          big: ev.boss,
-          color: ev.boss ? '#ffb14e' : '#ffd76a',
+          big: ev.boss || ev.tower,
+          color: ev.boss ? '#ffb14e' : ev.tower ? '#dfe6f2' : '#ffd76a',
         });
-        sparks(p.x, p.y - 4, facColor(ev.faction), 5, 55);
+        sparks(p.x, p.y - 4, facColor(ev.faction), ev.tower ? 7 : 5, 55);
+      } else if (ev.type === 'towerFight') {
+        ring(p.x, p.y, facColor(ev.faction), 30, 0.5, 2.5);
+      } else if (ev.type === 'towerDown') {
+        towerFall(p.x, p.y);
       } else if (ev.type === 'combatStart') {
         ring(p.x, p.y, 'rgba(255,150,110,0.8)', 34, 0.5, 3);
         sparks(p.x, p.y, 'rgba(255,230,180,0.9)', 12, 90);
