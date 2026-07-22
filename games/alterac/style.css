@@ -77,20 +77,6 @@ body {
   font: inherit;
 }
 
-.units-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.units-row output {
-  min-width: 1.6rem;
-  text-align: center;
-  font-weight: 700;
-  font-size: 1.1rem;
-  color: #5b9cff;
-}
-
 .rules {
   background: #1a2030;
   border: 1px solid #3d3526;
@@ -109,6 +95,10 @@ body {
 .rules ul {
   padding-left: 1.1rem;
   line-height: 1.5;
+}
+
+.rules ul ul {
+  margin: 0.25rem 0;
 }
 
 /* ------------------------------------------------------------------ Buttons */
@@ -166,7 +156,7 @@ body {
 }
 
 body.phase-plan #map-wrap {
-  padding-bottom: 290px;
+  padding-bottom: 330px;
 }
 
 body.phase-sim #map-wrap {
@@ -205,6 +195,38 @@ body.phase-sim #map-wrap {
   font-family: Georgia, 'Times New Roman', serif;
   letter-spacing: 0.02em;
   color: var(--fac, #e6ebf4);
+}
+
+.recruit-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.budget {
+  font-weight: 700;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: #f0d489;
+  white-space: nowrap;
+}
+
+.btn.recruit {
+  flex: 1;
+  padding: 0.45rem 0.25rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.btn.recruit small {
+  color: #f0d489;
+  font-size: 0.75em;
+}
+
+.btn.recruit:disabled,
+.btn.mode:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .chips {
@@ -246,10 +268,6 @@ body.phase-sim #map-wrap {
 
 .chip.selected span {
   color: #cfd7e6;
-}
-
-.chip.pickable {
-  border-style: dashed;
 }
 
 .mode-row {

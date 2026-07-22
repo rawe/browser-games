@@ -1,8 +1,67 @@
 // Konfigurierbare MVP-Werte für den Alterac Combat Simulator.
-// Alle Kampfwerte (Hitpoints, Schaden, Respawn, Boss) sind hier zentral definiert.
+// Alle Kampf-, Einheiten- und Zeitwerte sind hier zentral definiert.
 
-export const UNIT_MIN = 1;
-export const UNIT_MAX = 10;
+// ---------------------------------------------------------------- Einheitentypen
+// Datengetriebene Definitionen: Neue Typen (oder später Spezialfähigkeiten)
+// werden hier ergänzt – Simulation, Planung und Rendering lesen ausschließlich
+// diese Werte und enthalten keine typspezifischen Sonderfälle.
+//   cost           Ressourcenkosten beim Anwerben
+//   hp             maximale Hitpoints
+//   damage         Schaden pro Angriff
+//   attackInterval Sekunden zwischen zwei Angriffen
+//   speed          Bewegungstempo (1 = Basistempo, Reisezeit = edgeTime / speed)
+//   radius         Token-Größe auf der Karte (nur Darstellung)
+export const UNIT_TYPES = [
+  {
+    key: 'light',
+    name: 'Leicht',
+    short: 'L',
+    icon: '🗡',
+    cost: 1,
+    hp: 8,
+    damage: 3,
+    attackInterval: 1,
+    speed: 1.3,
+    radius: 10,
+    desc: 'Schnell und günstig – ideal zum Abfangen und für Umgehungswege.',
+  },
+  {
+    key: 'medium',
+    name: 'Mittel',
+    short: 'M',
+    icon: '⚔',
+    cost: 2,
+    hp: 18,
+    damage: 7,
+    attackInterval: 1,
+    speed: 1,
+    radius: 12.5,
+    desc: 'Ausgewogener Allrounder für Front und Flanke.',
+  },
+  {
+    key: 'heavy',
+    name: 'Schwer',
+    short: 'S',
+    icon: '🛡',
+    cost: 3,
+    hp: 34,
+    damage: 16,
+    attackInterval: 1.6,
+    speed: 0.75,
+    radius: 15,
+    desc: 'Langsam, aber zäh und mit wuchtigen Schlägen.',
+  },
+];
+
+export const UNIT_TYPE_BY_KEY = Object.fromEntries(UNIT_TYPES.map((t) => [t.key, t]));
+
+// ---------------------------------------------------------------- Spieloptionen
+export const RESOURCE_OPTIONS = [
+  { label: 'Scharmützel (8 Punkte)', value: 8 },
+  { label: 'Feldschlacht (12 Punkte)', value: 12 },
+  { label: 'Großoffensive (18 Punkte)', value: 18 },
+  { label: 'Totaler Krieg (24 Punkte)', value: 24 },
+];
 
 export const TEMPO_OPTIONS = [
   { label: 'Schnell', edgeTime: 1.1 },
@@ -23,17 +82,15 @@ export const BOSS_OPTIONS = [
 ];
 
 export const DEFAULT_CONFIG = {
-  units: 5,
-  edgeTime: 1.7, // Reisezeit pro Wegstück in Sekunden
+  resources: 12, // Ressourcenpunkte pro Spieler zum Anwerben von Einheiten
+  edgeTime: 1.7, // Basis-Reisezeit pro Wegstück in Sekunden (bei speed = 1)
   respawnTime: 7, // Sekunden bis zum Respawn am Friedhof
-  unitHp: 10, // maximale Hitpoints je Basiseinheit
-  unitDamage: 3, // Schaden pro Sekunde je Basiseinheit
-  unitDamageVsDefender: 2, // Schaden je Basiseinheit gegen eingegrabene Verteidiger
+  entrenchedFactor: 0.6, // Anteil des Schadens, den eingegrabene Verteidiger erleiden
   bossHp: 100, // maximale Hitpoints des Endbosses
-  bossDamage: 12, // Schaden pro Sekunde des Endbosses
-  tickInterval: 1, // Sekunden zwischen zwei Schadensintervallen
+  bossDamage: 12, // Schaden des Endbosses pro Angriff
+  bossAttackInterval: 1, // Sekunden zwischen zwei Boss-Angriffen
   maxTime: 300, // Sicherheitslimit der Simulation in Sekunden
 };
 
-// Maximale Länge einer Angriffssequenz in der Planung.
-export const MAX_ATTACK_TARGETS = 6;
+// Maximale Länge eines geplanten Pfads (Anzahl Wegpunkte).
+export const MAX_PATH_LENGTH = 14;
