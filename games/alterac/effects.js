@@ -14,6 +14,7 @@ export function createEffects(map) {
   let shake = 0;
 
   const rand = (a, b) => a + Math.random() * (b - a);
+  const facColor = (f) => (f === 'blue' ? 'rgba(140,190,255,0.95)' : 'rgba(255,150,120,0.95)');
 
   function resolve(where) {
     if (where.node != null) {
@@ -126,16 +127,21 @@ export function createEffects(map) {
           big: ev.boss,
           color: ev.boss ? '#ffb14e' : '#ffd76a',
         });
-        const facColor =
-          ev.faction === 'blue' ? 'rgba(140,190,255,0.95)' : 'rgba(255,150,120,0.95)';
-        sparks(p.x, p.y - 4, facColor, 5, 55);
+        sparks(p.x, p.y - 4, facColor(ev.faction), 5, 55);
       } else if (ev.type === 'combatStart') {
         ring(p.x, p.y, 'rgba(255,150,110,0.8)', 34, 0.5, 3);
         sparks(p.x, p.y, 'rgba(255,230,180,0.9)', 12, 90);
       } else if (ev.type === 'death') {
         puff(p.x, p.y, 'rgba(200,215,235,0.4)', 7, 0.8);
-        const gy = map.nodes[ev.graveyard];
-        wisp(p.x, p.y - 6, gy.x, gy.y - 10);
+        // Ohne kontrollierten Friedhof verweht der Geist an Ort und Stelle.
+        const gy = ev.graveyard ? map.nodes[ev.graveyard] : null;
+        if (gy) wisp(p.x, p.y - 6, gy.x, gy.y - 10);
+      } else if (ev.type === 'captureStart') {
+        ring(p.x, p.y, facColor(ev.faction), 26, 0.6, 2.5);
+      } else if (ev.type === 'graveyardCaptured') {
+        ring(p.x, p.y, facColor(ev.faction), 44, 0.7, 4);
+        sparks(p.x, p.y - 6, facColor(ev.faction), 16, 90);
+        beam(p.x, p.y);
       } else if (ev.type === 'respawn') {
         beam(p.x, p.y);
       } else if (ev.type === 'bossDown') {

@@ -182,8 +182,10 @@ export function createRenderer(canvas, map) {
   }
 
   // Friedhof: Grabsteine im pulsierenden Geisterlicht mit kreisenden Wisps.
-  function drawGraveyard(n) {
-    const c = FACTIONS[n.faction];
+  // Der Besitzring zeigt die haltende Fraktion (neutral grau); eine laufende
+  // Einnahme wird als wachsender Fortschrittsbogen in der Farbe der
+  // einnehmenden Fraktion dargestellt.
+  function drawGraveyard(n, owner, capture) {
     const pulse = 0.5 + 0.5 * Math.sin(anim * 2 + n.y);
     ctx.beginPath();
     ctx.ellipse(n.x, n.y + 8, 16, 6.5, 0, 0, TAU);
@@ -259,8 +261,21 @@ export function createRenderer(canvas, map) {
     ctx.beginPath();
     ctx.arc(n.x, n.y + 2, 14, 0, TAU);
     ctx.lineWidth = 1.5;
-    ctx.strokeStyle = `${c.color}55`;
+    ctx.strokeStyle = owner ? `${FACTIONS[owner].color}55` : 'rgba(124,136,162,0.35)';
     ctx.stroke();
+    if (capture) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y + 2, 19, 0, TAU);
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = 'rgba(226,238,252,0.18)';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(n.x, n.y + 2, 19, -Math.PI / 2, -Math.PI / 2 + TAU * capture.frac);
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = capture.color;
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+    }
   }
 
   // Lebensanzeige: Balken mit aktuellem/maximalem Hitpoint-Stand darüber.
@@ -606,8 +621,20 @@ export function createRenderer(canvas, map) {
         }
       }
       if (n.type === 'combat') drawFlagNode(n, owner, ring);
-      else if (n.type === 'graveyard') drawGraveyard(n);
-      else {
+      else if (n.type === 'graveyard') {
+        // Besitz kommt im Gefecht aus der Simulation, sonst aus der
+        // Kartenkonfiguration (Startbesitz).
+        const gyOwner = sim ? sim.graveyards.owner[n.id] : map.graveyards[n.id].owner;
+        let capture = null;
+        const cap = sim ? sim.graveyards.captures[n.id] : null;
+        if (cap) {
+          capture = {
+            color: FACTIONS[cap.faction].color,
+            frac: Math.min(1, (sim.time - cap.startedAt) / sim.config.graveyardCaptureTime),
+          };
+        }
+        drawGraveyard(n, gyOwner, capture);
+      } else {
         const bossState = sim ? sim.boss[n.faction] : { hp: bossHp, maxHp: bossHp };
         drawKeep(n, sim ? sim.bossAlive[n.faction] : true, bossState);
       }
@@ -639,6 +666,8 @@ export function createRenderer(canvas, map) {
         byEdgeCombat.get(g.edgeCombat).push(g);
       } else if (g.state === 'dead') {
         dead.push(g);
+      } else if (g.state === 'gone') {
+        // Endgültig gefallen (kein Friedhof für den Respawn) – nicht mehr gezeichnet.
       } else {
         if (!byNode.has(g.node)) byNode.set(g.node, []);
         byNode.get(g.node).push(g);
@@ -723,6 +752,8 @@ export function createRenderer(canvas, map) {
     dead.sort((a, b) => (a.id < b.id ? -1 : 1));
     const perGy = new Map();
     for (const g of dead) {
+      // Ohne kontrollierten Friedhof gibt es keinen Warteplatz für den Geist.
+      if (!g.graveyardNode) continue;
       const i = perGy.get(g.graveyardNode) ?? 0;
       perGy.set(g.graveyardNode, i + 1);
       const n = map.nodes[g.graveyardNode];
@@ -780,7 +811,6 @@ export function createRenderer(canvas, map) {
       ctx.strokeStyle = c.color;
       ctx.globalAlpha = 0.45 + pulse * 0.35;
       for (const nb of map.adjacency[endId]) {
-        if (map.nodes[nb].type === 'graveyard') continue;
         const n = map.nodes[nb];
         ctx.beginPath();
         ctx.arc(n.x, n.y, 22 + pulse * 2.5, 0, TAU);

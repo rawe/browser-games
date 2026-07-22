@@ -81,10 +81,17 @@ export const BOSS_OPTIONS = [
   { label: 'Stark (150 LP)', value: 150 },
 ];
 
+export const GRAVEYARD_CAPTURE_OPTIONS = [
+  { label: 'Schnell (6 s)', value: 6 },
+  { label: 'Standard (10 s)', value: 10 },
+  { label: 'Zäh (15 s)', value: 15 },
+];
+
 export const DEFAULT_CONFIG = {
   resources: 12, // Ressourcenpunkte pro Spieler zum Anwerben von Einheiten
   edgeTime: 1.7, // Basis-Reisezeit pro Wegstück in Sekunden (bei speed = 1)
   respawnTime: 7, // Sekunden bis zum Respawn am Friedhof
+  graveyardCaptureTime: 10, // Sekunden ununterbrochener Präsenz bis zur Einnahme eines Friedhofs
   entrenchedFactor: 0.6, // Anteil des Schadens, den eingegrabene Verteidiger erleiden
   bossHp: 100, // maximale Hitpoints des Endbosses
   bossDamage: 12, // Schaden des Endbosses pro Angriff

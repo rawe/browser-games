@@ -10,8 +10,8 @@ Eingriffe ab. Wer den gegnerischen Endboss fällt, gewinnt.
 
 | Datei        | Aufgabe |
 | ------------ | ------- |
-| `sim.js`     | Simulationskern (DOM-frei, deterministisch, ereignisbasiert; liefert typisierte Ereignisse für Effekte) |
-| `map.js`     | Zentrale Kartenkonfiguration (Wegpunkte, Verbindungen, Routen, Wachposten), Wegsuche, Friedhofswahl |
+| `sim.js`     | Simulationskern (DOM-frei, deterministisch, ereignisbasiert; liefert typisierte Ereignisse für Effekte); verwaltet auch Friedhofsbesitz und Einnahmen |
+| `map.js`     | Zentrale Kartenkonfiguration (Wegpunkte, Verbindungen, Friedhöfe samt Startbesitz und Heimat-Markierung, Routen, Wachposten), Wegsuche, Friedhofswahl |
 | `planner.js` | Planungsphase (Rekrutierung aus dem Budget, Pfad- und Haltungswahl pro Einheit) |
 | `ai.js`      | Computergegner (datengetrieben über Einheitentypen und Routen-Konfiguration) |
 | `render.js`  | Canvas-Rendering: Knoten, Token, Overlays, Wetter (keine Spiellogik) |
@@ -51,9 +51,43 @@ Im Kampf schlägt jede Einheit in ihrem eigenen Angriffsintervall zu und trifft
 das schwächste gegnerische Ziel an ihrem Ort (der Boss ist stets das letzte
 Ziel). Eingegrabene Verteidiger erleiden nur einen konfigurierbaren Anteil des
 Schadens (`entrenchedFactor`). Aktuelle Hitpoints bleiben über Kämpfe hinweg
-erhalten; erst der Respawn am nächstgelegenen eigenen Friedhof stellt sie
-vollständig wieder her. Der Boss hat eigene Hitpoints, kämpft mit und
-regeneriert sich nicht.
+erhalten; erst der Respawn am Friedhof stellt sie vollständig wieder her.
+Der Boss hat eigene Hitpoints, kämpft mit und regeneriert sich nicht.
+
+## Friedhofssystem
+
+Alle Friedhofsdaten sind zentral konfigurierbar: Lage und Verbindungen in
+`NODES`/`EDGES`, Startbesitz und Heimat-Markierung in `GRAVEYARDS` (beides
+`map.js`), die Einnahmedauer als `graveyardCaptureTime` in `config.js`
+(Standard: 10 Sekunden, im Setup wählbar). Der laufende Besitzstand einer
+Schlacht lebt im Simulationszustand (`sim.graveyards`).
+
+- **Sackgassen abseits der Hauptwege:** Jeder Friedhof hat genau eine
+  Verbindung und liegt nie auf einem Hauptweg zur gegnerischen Basis. Wer
+  einen Friedhof will, muss ihn in der Planung explizit in den Pfad einer
+  Einheit aufnehmen und Hin- wie Rückweg selbst über Wegpunkte planen; die
+  automatische Wegsuche durchquert Friedhöfe nie.
+- **Einnahme:** Erreicht eine Einheit einen fremden Friedhof, wartet sie dort
+  und die Einnahme beginnt automatisch, sobald ihre Fraktion allein vor Ort
+  ist. Sie verlangt ununterbrochene Präsenz über die volle Einnahmedauer;
+  mehrere eigene Einheiten verkürzen nichts. Trifft eine gegnerische Einheit
+  ein, beginnt ein normaler Kampf – jede Unterbrechung setzt den Fortschritt
+  vollständig auf 0 zurück. Nach erfolgreicher Einnahme gehört der Friedhof
+  sofort der neuen Fraktion, ist unmittelbar Respawnpunkt und kann beliebig
+  oft zurückerobert werden.
+- **Basisfriedhof-Schutz:** Jede Fraktion besitzt einen basisnahen
+  Heimatfriedhof (`home` in `GRAVEYARDS`). Er ist nur einnehmbar, solange
+  seine Fraktion keinen anderen Friedhof mehr kontrolliert; sobald sie wieder
+  mindestens einen anderen hält, greift der Schutz erneut (eine laufende
+  Einnahme bricht dann ab). Hält der Gegner den Heimatfriedhof bereits, ist
+  die Rückeroberung jederzeit erlaubt.
+- **Respawn:** Besiegte Einheiten respawnen nach der Respawnzeit mit vollen
+  Hitpoints am nächstgelegenen aktuell kontrollierten eigenen Friedhof – der
+  Respawnpunkt wird erst im Moment des Respawns bestimmt. Danach setzt die
+  Einheit ihr aktuell offenes Ziel fort und läuft vom Respawn-Friedhof aus den
+  kürzestmöglichen Weg dorthin; die ursprünglich geplante Route wird nicht
+  strikt weiterverwendet. Kontrolliert die Fraktion keinen Friedhof mehr, ist
+  kein Respawn mehr möglich – die Einheit ist endgültig gefallen.
 
 ## Begegnungskämpfe auf Wegstücken
 
@@ -120,3 +154,8 @@ relevanten Zeitpunkt). Damit sie nie hängen bleibt, gilt:
    können dazu führen, dass sich Einheiten nach jedem Respawn erneut
    gegenseitig auslöschen. Solche Schleifen sind gewollt möglich und werden
    wie bisher durch `maxTime` als Unentschieden aufgelöst.
+6. **Friedhöfe erzeugen nur endliche Ereignisse.** Laufende Einnahmen fließen
+   mit ihrem Abschlusszeitpunkt in `nextEventTime` ein. Einheiten, die an
+   einem (noch) geschützten Friedhof warten, sowie endgültig gefallene
+   Einheiten ohne Respawn-Friedhof erzeugen keine Ereignisse mehr – solche
+   Stellungen enden wie bisher über die Patt-Erkennung oder das Zeitlimit.

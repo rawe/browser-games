@@ -42,5 +42,13 @@ export function aiPlan(config, map, faction, rng = Math.random) {
     u.path = [...routes[k < mainCount ? mainIdx : sideIdx].path];
   });
 
+  // Ab zwei Angreifern macht der letzte einen Abstecher zu einem neutralen
+  // Friedhof und nimmt ihn ein; danach marschiert er auf kürzestem Weg weiter
+  // zum gegnerischen Boss (datengetrieben über die Friedhofskonfiguration).
+  const neutral = map.graveyardIds.filter((id) => map.graveyards[id].owner == null);
+  if (neutral.length && attackers.length >= 2) {
+    attackers[attackers.length - 1].path = [neutral[Math.floor(rng() * neutral.length)]];
+  }
+
   return units;
 }
