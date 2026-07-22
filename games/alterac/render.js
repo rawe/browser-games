@@ -277,7 +277,22 @@ export function createRenderer(canvas, map) {
     ctx.stroke();
   }
 
-  function drawKeep(n, alive, bossStrength) {
+  // Lebensanzeige: Balken mit aktuellem/maximalem Hitpoint-Stand darüber.
+  function drawHpBar(cx, top, w, hp, maxHp) {
+    const h = 5;
+    const x = cx - w / 2;
+    const ratio = Math.max(0, Math.min(1, hp / maxHp));
+    const shown = hp > 0 ? Math.max(1, Math.round(hp)) : 0;
+    ctx.fillStyle = 'rgba(5,8,13,0.85)';
+    ctx.fillRect(x - 1.5, top - 1.5, w + 3, h + 3);
+    ctx.fillStyle = '#2a3346';
+    ctx.fillRect(x, top, w, h);
+    ctx.fillStyle = ratio > 0.5 ? '#6ecf73' : ratio > 0.25 ? '#ffd76a' : '#ff6b5e';
+    ctx.fillRect(x, top, w * ratio, h);
+    label(cx, top - 7, `${shown}/${Math.round(maxHp)}`, { size: 9, weight: 700, color: '#e6eefb' });
+  }
+
+  function drawKeep(n, alive, bossState) {
     const c = FACTIONS[n.faction];
     // Plattform
     ctx.beginPath();
@@ -325,15 +340,7 @@ export function createRenderer(canvas, map) {
     ctx.fillStyle = alive ? c.color : '#566073';
     ctx.fill();
     if (alive) {
-      // Stärke-Plakette
-      ctx.beginPath();
-      ctx.arc(n.x + 22, n.y + 14, 10, 0, TAU);
-      ctx.fillStyle = c.dark;
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#0a0f18';
-      ctx.stroke();
-      label(n.x + 22, n.y + 14.5, String(bossStrength), { color: '#fff', weight: 700, size: 11 });
+      drawHpBar(n.x, y0 - 34, 48, bossState.hp, bossState.maxHp);
     } else {
       ctx.lineWidth = 5;
       ctx.strokeStyle = 'rgba(255,90,80,0.9)';
@@ -420,6 +427,9 @@ export function createRenderer(canvas, map) {
     ctx.lineWidth = 1.4;
     ctx.stroke();
     label(x, y + 0.5, String(g.size), { color: '#fff', weight: 700, size: r > 14 ? 13 : 12 });
+    if (g.maxHp != null && !opts.ghost) {
+      drawHpBar(x, y - r - 11, Math.max(28, r * 2.1), g.hp, g.maxHp);
+    }
     if (g.state === 'defending' && g.entrenched && !opts.ghost) {
       drawShieldIcon(x + r * 0.85, y - r * 0.85, 5.5, '#ffd76a');
     }
@@ -481,7 +491,7 @@ export function createRenderer(canvas, map) {
   // ---------------------------------------------------------------- Knoten
   function drawNodes(view) {
     const sim = view.sim;
-    const bossStrength = view.config.bossStrength;
+    const bossHp = view.config.bossHp;
     for (const n of map.nodeList) {
       let ring = null;
       if (sim) {
@@ -498,7 +508,10 @@ export function createRenderer(canvas, map) {
       }
       if (n.type === 'combat') drawCombatNode(n, ring);
       else if (n.type === 'graveyard') drawGraveyard(n);
-      else drawKeep(n, sim ? sim.bossAlive[n.faction] : true, bossStrength);
+      else {
+        const bossState = sim ? sim.boss[n.faction] : { hp: bossHp, maxHp: bossHp };
+        drawKeep(n, sim ? sim.bossAlive[n.faction] : true, bossState);
+      }
       label(n.x + (n.labelDx ?? 0), n.y + (n.labelDy ?? 30), n.name, {
         align: n.labelDx ? 'left' : 'center',
       });
@@ -532,9 +545,10 @@ export function createRenderer(canvas, map) {
         const dx = q.x - p.x;
         const dy = q.y - p.y;
         const len = Math.hypot(dx, dy) || 1;
-        // Gegenverkehr weicht zur eigenen Seite aus, mehrere Gruppen fächern auf.
+        // Gegenverkehr weicht zur eigenen Seite aus, mehrere Gruppen fächern auf
+        // (Abstand groß genug, damit sich die Lebensanzeigen nicht überlappen).
         const side = g.edgeFrom < g.edgeTo ? 1 : -1;
-        const off = side * 7 + (i - (list.length - 1) / 2) * 6;
+        const off = side * 7 + (i - (list.length - 1) / 2) * 15;
         drawToken(p.x + (-dy / len) * off, p.y + (dx / len) * off, g);
       });
     }
@@ -544,18 +558,19 @@ export function createRenderer(canvas, map) {
       const both = new Set(list.map((g) => g.faction)).size === 2;
       const byFaction = { blue: [], red: [] };
       for (const g of list.sort((a, b) => (a.id < b.id ? -1 : 1))) byFaction[g.faction].push(g);
+      // Schwerter zuerst, damit die Lebensanzeigen der Tokens lesbar darüberliegen.
+      if (both || list.some((g) => g.fighting)) drawSwords(n.x, n.y, anim);
       for (const fac of ['red', 'blue']) {
         const fl = byFaction[fac];
         const base = fac === 'red' ? -Math.PI / 2 : Math.PI / 2;
         const spread = both || fl.length > 1;
         fl.forEach((g, i) => {
           const isBossNode = n.type === 'boss';
-          const rad = spread || isBossNode ? (isBossNode ? 40 : 30) : 0;
-          const ang = base + (i - (fl.length - 1) / 2) * 0.75;
+          const rad = spread || isBossNode ? (isBossNode ? 44 : 32) : 0;
+          const ang = base + (i - (fl.length - 1) / 2) * 1.05;
           drawToken(n.x + Math.cos(ang) * rad, n.y + Math.sin(ang) * rad, g);
         });
       }
-      if (both || list.some((g) => g.fighting)) drawSwords(n.x, n.y, anim);
     }
     // Bosskampf ohne stehende Verteidiger sichtbar machen.
     for (const fac of ['blue', 'red']) {

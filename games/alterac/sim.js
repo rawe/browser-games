@@ -1,9 +1,15 @@
 // Simulationskern – DOM-frei und deterministisch.
 //
 // Zeitmodell: kontinuierliche Zeit mit exakten Ereigniszeitpunkten (Ankünfte,
-// Respawns). Alle Ereignisse desselben Zeitpunkts werden gemeinsam verarbeitet,
-// damit gleichzeitige Ankünfte korrekt behandelt werden (kein Verteidigungs-
-// bonus, gleichzeitiger Boss-Sieg = Unentschieden).
+// Respawns, Schadensintervalle). Alle Ereignisse desselben Zeitpunkts werden
+// gemeinsam verarbeitet, damit gleichzeitige Ankünfte korrekt behandelt werden.
+//
+// Kampfsystem: Jede Basiseinheit hat `unitHp` Hitpoints und verursacht
+// `unitDamage` Schaden pro Sekunde (`unitDamageVsDefender` gegen eingegrabene
+// Verteidiger). Fusionierte Gruppen addieren Hitpoints und Schaden. Schaden
+// wird in festen Intervallen (`tickInterval`) gleichzeitig ausgetauscht;
+// erreicht eine Gruppe oder der Boss 0 Hitpoints, fällt sie. Überlebende
+// behalten ihre aktuellen Hitpoints, Respawns kehren mit vollen zurück.
 
 import { FACTIONS, enemyOf, shortestPath, nearestGraveyard } from './map.js';
 
@@ -15,15 +21,29 @@ const EPS = 1e-6;
 //   { type: 'defend', target: nodeId }      → Verteidigung
 //   { type: 'follow', target: unitIndex }   → dauerhafte Fusion
 export function createSim({ map, config, plans }) {
-  const { edgeTime, respawnTime, bossStrength, maxTime } = config;
+  const {
+    edgeTime,
+    respawnTime,
+    unitHp,
+    unitDamage,
+    unitDamageVsDefender,
+    bossHp,
+    bossDamage,
+    tickInterval,
+    maxTime,
+  } = config;
   const groups = [];
   const log = [];
-  const tieKeys = new Map();
   const bossAlive = { blue: true, red: true };
+  const boss = {
+    blue: { hp: bossHp, maxHp: bossHp },
+    red: { hp: bossHp, maxHp: bossHp },
+  };
+  // Kampfpunkt → Zeitpunkt des nächsten Schadensintervalls.
+  const combatTicks = new Map();
   let time = 0;
   let result = null;
 
-  const fmt = (x) => String(Math.round(x * 10) / 10).replace('.', ',');
   const nodeName = (id) => map.nodes[id].name;
   const addLog = (text) => log.push({ t: time, text });
 
@@ -57,6 +77,8 @@ export function createSim({ map, config, plans }) {
         faction,
         members: members.map((m) => m + 1),
         size: members.length,
+        maxHp: members.length * unitHp,
+        hp: members.length * unitHp,
         orders: seq,
         orderIndex: 0,
         state: 'atNode', // 'atNode' | 'moving' | 'defending' | 'dead'
@@ -81,12 +103,24 @@ export function createSim({ map, config, plans }) {
     return { type: 'attack', node: map.bosses[enemyOf(g.faction)] };
   }
 
+  function combatants(nodeId) {
+    return groups.filter(
+      (g) => g.node === nodeId && (g.state === 'atNode' || g.state === 'defending')
+    );
+  }
+
   function enemiesPresent(nodeId, faction) {
     const node = map.nodes[nodeId];
     if (node.type === 'boss' && node.faction !== faction && bossAlive[node.faction]) return true;
-    return groups.some(
-      (g) => g.node === nodeId && g.faction !== faction && (g.state === 'atNode' || g.state === 'defending')
-    );
+    return combatants(nodeId).some((g) => g.faction !== faction);
+  }
+
+  function contested(nodeId) {
+    const node = map.nodes[nodeId];
+    const present = { blue: false, red: false };
+    for (const g of combatants(nodeId)) present[g.faction] = true;
+    if (node.type === 'boss' && bossAlive[node.faction]) present[node.faction] = true;
+    return present.blue && present.red;
   }
 
   // Setzt die Befehle einer frei stehenden Gruppe fort (weiterziehen oder Stellung halten).
@@ -128,61 +162,105 @@ export function createSim({ map, config, plans }) {
     g.respawnAt = t + respawnTime;
   }
 
-  // Kampfauflösung an einem Punkt: Stärken vergleichen, Verlierer fallen komplett.
-  function resolveNode(nodeId, t, defeated) {
+  // Verteilt den Schaden einer Seite auf die gegnerischen Ziele (schwächstes
+  // zuerst, Boss zuletzt). `units` ist die Zahl angreifender Basiseinheiten,
+  // `flat` fester Zusatzschaden (Boss). Gerechnet wird gegen den Hitpoint-Stand
+  // zu Intervallbeginn, damit beide Seiten gleichzeitig austeilen.
+  function allocateDamage(units, flat, targets) {
+    const hits = [];
+    let u = units;
+    let f = flat;
+    for (const tg of targets) {
+      if (u <= EPS && f <= EPS) break;
+      let need = tg.hp;
+      let dealt = 0;
+      if (f > EPS) {
+        const d = Math.min(f, need);
+        f -= d;
+        need -= d;
+        dealt += d;
+      }
+      if (need > EPS && u > EPS) {
+        // Verteidigungsbonus: eingegrabene Verteidiger erleiden weniger Schaden.
+        const rate = tg.defending ? unitDamageVsDefender : unitDamage;
+        const spent = Math.min(u, need / rate);
+        u -= spent;
+        dealt += spent * rate;
+      }
+      if (dealt > 0) hits.push({ target: tg, damage: dealt });
+    }
+    return hits;
+  }
+
+  // Ein Schadensintervall an einem umkämpften Punkt: beide Seiten tauschen
+  // gleichzeitig Schaden aus, danach fallen Gruppen und Bosse mit 0 Hitpoints.
+  function damageTick(nodeId, t, defeated) {
     const node = map.nodes[nodeId];
-    const here = groups.filter(
-      (g) => g.node === nodeId && (g.state === 'atNode' || g.state === 'defending')
-    );
-    const str = { blue: 0, red: 0 };
-    const present = { blue: false, red: false };
-    for (const g of here) {
-      present[g.faction] = true;
-      str[g.faction] += g.size * (g.state === 'defending' && g.entrenched ? 1.5 : 1);
-    }
-    if (node.type === 'boss' && bossAlive[node.faction]) {
-      present[node.faction] = true;
-      str[node.faction] += bossStrength; // Bossstärke ist bereits effektiv (kein ×1,5)
-    }
-    if (!present.blue || !present.red) {
-      for (const g of here) g.fighting = false;
-      tieKeys.delete(nodeId);
-      return;
-    }
-    const winner = str.blue > str.red + EPS ? 'blue' : str.red > str.blue + EPS ? 'red' : null;
-    if (!winner) {
-      // Unentschieden: alle Beteiligten bleiben gebunden, bis Verstärkung eintrifft.
-      const key = here.map((g) => `${g.id}:${g.size}:${g.entrenched}`).sort().join('|');
-      if (tieKeys.get(nodeId) !== key) {
-        tieKeys.set(nodeId, key);
-        addLog(`${nodeName(nodeId)}: ${fmt(str.blue)} gegen ${fmt(str.red)} – Kampf gebunden.`);
+    const here = combatants(nodeId);
+    const bossFaction = node.type === 'boss' && bossAlive[node.faction] ? node.faction : null;
+    const sides = {};
+    for (const fac of ['blue', 'red']) {
+      const enemy = enemyOf(fac);
+      const targets = here
+        .filter((g) => g.faction === enemy)
+        .sort((a, b) => a.hp - b.hp || (a.id < b.id ? -1 : 1))
+        .map((g) => ({
+          kind: 'group',
+          g,
+          hp: g.hp,
+          defending: g.state === 'defending' && g.entrenched,
+        }));
+      if (bossFaction === enemy) {
+        targets.push({ kind: 'boss', faction: enemy, hp: boss[enemy].hp, defending: false });
       }
-      for (const g of here) g.fighting = true;
-      return;
+      sides[fac] = {
+        units: here.filter((g) => g.faction === fac).reduce((s, g) => s + g.size, 0),
+        flat: bossFaction === fac ? bossDamage : 0,
+        targets,
+      };
     }
-    tieKeys.delete(nodeId);
-    const loser = enemyOf(winner);
-    addLog(
-      `Kampf um ${nodeName(nodeId)}: ${FACTIONS.blue.name} ${fmt(str.blue)} gegen ` +
-        `${FACTIONS.red.name} ${fmt(str.red)} – ${FACTIONS[winner].name} siegt.`
-    );
+    if (!sides.blue.targets.length || !sides.red.targets.length) return;
+
+    const hits = [
+      ...allocateDamage(sides.blue.units, sides.blue.flat, sides.blue.targets),
+      ...allocateDamage(sides.red.units, sides.red.flat, sides.red.targets),
+    ];
+    for (const { target, damage } of hits) {
+      if (target.kind === 'group') target.g.hp = Math.max(0, target.g.hp - damage);
+      else boss[target.faction].hp = Math.max(0, boss[target.faction].hp - damage);
+    }
     for (const g of here) {
-      if (g.faction === loser) {
+      if (g.hp <= EPS) {
+        addLog(`${FACTIONS[g.faction].name}-Trupp (${g.size}) fällt bei ${nodeName(nodeId)}.`);
         die(g, t);
-      } else {
-        g.fighting = false;
-        if (g.state === 'defending') g.entrenched = true; // Punkt gehalten → Stellung gefestigt
       }
     }
-    if (node.type === 'boss' && node.faction === loser) {
-      bossAlive[loser] = false;
-      defeated.push(loser);
+    if (bossFaction && boss[bossFaction].hp <= EPS) {
+      bossAlive[bossFaction] = false;
+      defeated.push(bossFaction);
       addLog(`${node.name} ist gefallen!`);
     }
   }
 
+  // Kampfzustand aller Punkte aktualisieren: neue Kämpfe beginnen, beendete
+  // Kämpfe geben die Überlebenden (mit ihren restlichen Hitpoints) wieder frei.
+  function updateCombatState(t) {
+    for (const n of map.nodeList) {
+      const here = combatants(n.id);
+      if (contested(n.id)) {
+        if (!combatTicks.has(n.id)) {
+          combatTicks.set(n.id, t + tickInterval);
+          addLog(`Kampf um ${n.name} entbrennt.`);
+        }
+        for (const g of here) g.fighting = true;
+      } else {
+        combatTicks.delete(n.id);
+        for (const g of here) g.fighting = false;
+      }
+    }
+  }
+
   function processBatch(t) {
-    const affected = new Set();
     for (const g of groups) {
       if (g.state === 'moving' && g.arriveT <= t + EPS) {
         g.node = g.edgeTo;
@@ -190,18 +268,22 @@ export function createSim({ map, config, plans }) {
         g.arrivedAt = t;
         g.edgeFrom = null;
         g.edgeTo = null;
-        affected.add(g.node);
       } else if (g.state === 'dead' && g.respawnAt <= t + EPS) {
         g.node = g.graveyardNode;
         g.state = 'atNode';
         g.arrivedAt = t;
         g.respawnAt = Infinity;
-        affected.add(g.node);
+        g.hp = g.maxHp; // Respawn stellt die vollen Hitpoints wieder her.
         addLog(`${FACTIONS[g.faction].name}-Trupp (${g.size}) kehrt am ${nodeName(g.node)} zurück.`);
       }
     }
     const defeated = [];
-    for (const nodeId of [...affected].sort()) resolveNode(nodeId, t, defeated);
+    for (const [nodeId, tickAt] of [...combatTicks.entries()].sort()) {
+      if (tickAt <= t + EPS) {
+        damageTick(nodeId, t, defeated);
+        combatTicks.set(nodeId, t + tickInterval);
+      }
+    }
     if (defeated.length) {
       if (defeated.length === 2) {
         result = { winner: 'draw', reason: 'Beide Anführer fielen im selben Moment.' };
@@ -211,6 +293,7 @@ export function createSim({ map, config, plans }) {
       }
       return;
     }
+    updateCombatState(t);
     for (const g of groups) {
       if (g.state === 'atNode' && !g.fighting) continueOrders(g, t);
     }
@@ -222,6 +305,7 @@ export function createSim({ map, config, plans }) {
       if (g.state === 'moving') t = Math.min(t, g.arriveT);
       else if (g.state === 'dead') t = Math.min(t, g.respawnAt);
     }
+    for (const tickAt of combatTicks.values()) t = Math.min(t, tickAt);
     return t;
   }
 
@@ -253,11 +337,13 @@ export function createSim({ map, config, plans }) {
 
   // Startaufstellung: alle Gruppen setzen ihre Befehle ab Sekunde 0 um.
   for (const g of groups) continueOrders(g, 0);
+  updateCombatState(0);
 
   return {
     groups,
     log,
     bossAlive,
+    boss,
     config,
     advance,
     get time() {
