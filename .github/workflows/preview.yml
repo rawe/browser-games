@@ -1,0 +1,97 @@
+name: Preview-Deployment (Branch/PR)
+
+# Manuell gestartetes Deployment eines Branches oder PRs zur Abnahme.
+# Die Seite wird IMMER zusammen mit dem aktuellen main-Stand gebaut:
+#   https://rawe.github.io/browser-games/          -> main (wie gehabt)
+#   https://rawe.github.io/browser-games/preview/  -> gewählter Branch/PR
+# Ein späterer Push auf main deployt wieder nur main und entfernt die Vorschau.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch-Name (z. B. claude/mein-feature) oder PR-Nummer (z. B. 7)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Gleiche Gruppe wie deploy.yml, damit sich Pages-Deployments nicht überlappen.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}preview/
+    steps:
+      - name: Eingabe auflösen (Branch oder PR-Nummer)
+        id: ref
+        env:
+          INPUT_REF: ${{ inputs.ref }}
+        run: |
+          if [[ "$INPUT_REF" =~ ^[0-9]+$ ]]; then
+            echo "ref=refs/pull/${INPUT_REF}/head" >> "$GITHUB_OUTPUT"
+            echo "label=PR #${INPUT_REF}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${INPUT_REF}" >> "$GITHUB_OUTPUT"
+            echo "label=Branch ${INPUT_REF}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: main auschecken (stabiler Stand)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Vorschau-Stand auschecken
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
+          path: preview-src
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            preview-src/package-lock.json
+
+      - name: Build main
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build Vorschau
+        working-directory: preview-src
+        run: |
+          npm ci
+          npm run build
+
+      - name: Vorschau unter /preview/ einhängen
+        env:
+          LABEL: ${{ steps.ref.outputs.label }}
+        run: |
+          mkdir -p dist/preview
+          cp -R preview-src/dist/. dist/preview/
+          COMMIT="$(git -C preview-src rev-parse --short HEAD)"
+          printf '%s @ %s\n' "$LABEL" "$COMMIT" > dist/preview/PREVIEW.txt
+          {
+            echo "### Preview-Deployment"
+            echo ""
+            echo "- Vorschau: **$LABEL** @ \`$COMMIT\` → \`/preview/\`"
+            echo "- Root bleibt der aktuelle main-Stand"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
