@@ -41,6 +41,9 @@ export function createSim({ map, config, plans }) {
   } = config;
   const groups = [];
   const log = [];
+  // Typisierte Ereignisse für den Renderer (Effekte); `where` ist entweder
+  // { node } oder { edge: { a, b, frac } }.
+  const events = [];
   const bossAlive = { blue: true, red: true };
   const boss = {
     blue: { hp: bossHp, maxHp: bossHp },
@@ -56,6 +59,7 @@ export function createSim({ map, config, plans }) {
 
   const nodeName = (id) => map.nodes[id].name;
   const addLog = (text) => log.push({ t: time, text });
+  const addEvent = (e) => events.push({ t: time, ...e });
 
   // --- Gruppen aus den Plänen bauen: Folgen-Befehle werden sofort fusioniert ---
   for (const faction of ['blue', 'red']) {
@@ -189,6 +193,7 @@ export function createSim({ map, config, plans }) {
       `${FACTIONS.blue.name} und ${FACTIONS.red.name} treffen zwischen ` +
         `${nodeName(c.a)} und ${nodeName(c.b)} aufeinander!`
     );
+    addEvent({ type: 'combatStart', where: { edge: { a: c.a, b: c.b, frac } } });
   }
 
   // Begegnungen zum Zeitpunkt t auflösen: erst laufen bewegte Gruppen in
@@ -298,6 +303,13 @@ export function createSim({ map, config, plans }) {
     g.edgeCombat = null;
     g.graveyardNode = nearestGraveyard(map, g.faction, g.deathNode);
     g.respawnAt = t + respawnTime;
+    addEvent({
+      type: 'death',
+      faction: g.faction,
+      size: g.size,
+      where: { node: g.deathNode },
+      graveyard: g.graveyardNode,
+    });
   }
 
   // Verteilt den Schaden einer Seite auf die gegnerischen Ziele (schwächstes
@@ -366,6 +378,13 @@ export function createSim({ map, config, plans }) {
     for (const { target, damage } of hits) {
       if (target.kind === 'group') target.g.hp = Math.max(0, target.g.hp - damage);
       else boss[target.faction].hp = Math.max(0, boss[target.faction].hp - damage);
+      addEvent({
+        type: 'damage',
+        amount: damage,
+        boss: target.kind === 'boss',
+        faction: target.kind === 'boss' ? target.faction : target.g.faction,
+        where: { node: nodeId },
+      });
     }
     for (const g of here) {
       if (g.hp <= EPS) {
@@ -377,6 +396,7 @@ export function createSim({ map, config, plans }) {
       bossAlive[bossFaction] = false;
       defeated.push(bossFaction);
       addLog(`${node.name} ist gefallen!`);
+      addEvent({ type: 'bossDown', faction: bossFaction, where: { node: nodeId } });
     }
   }
 
@@ -394,7 +414,16 @@ export function createSim({ map, config, plans }) {
       const units = here.filter((g) => g.faction === fac).reduce((s, g) => s + g.size, 0);
       hits.push(...allocateDamage(units, 0, targets));
     }
-    for (const { target, damage } of hits) target.g.hp = Math.max(0, target.g.hp - damage);
+    for (const { target, damage } of hits) {
+      target.g.hp = Math.max(0, target.g.hp - damage);
+      addEvent({
+        type: 'damage',
+        amount: damage,
+        boss: false,
+        faction: target.g.faction,
+        where: { edge: { a: c.a, b: c.b, frac: c.frac } },
+      });
+    }
     for (const g of here) {
       if (g.hp <= EPS) {
         addLog(
@@ -436,6 +465,7 @@ export function createSim({ map, config, plans }) {
         if (!combatTicks.has(n.id)) {
           combatTicks.set(n.id, t + tickInterval);
           addLog(`Kampf um ${n.name} entbrennt.`);
+          addEvent({ type: 'combatStart', where: { node: n.id } });
         }
         for (const g of here) g.fighting = true;
       } else {
@@ -460,6 +490,7 @@ export function createSim({ map, config, plans }) {
         g.respawnAt = Infinity;
         g.hp = g.maxHp; // Respawn stellt die vollen Hitpoints wieder her.
         addLog(`${FACTIONS[g.faction].name}-Trupp (${g.size}) kehrt am ${nodeName(g.node)} zurück.`);
+        addEvent({ type: 'respawn', faction: g.faction, where: { node: g.node } });
       }
     }
     processEncounters(t);
@@ -537,6 +568,7 @@ export function createSim({ map, config, plans }) {
   return {
     groups,
     log,
+    events,
     bossAlive,
     boss,
     config,

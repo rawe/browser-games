@@ -32,8 +32,11 @@ body {
 .setup h1 {
   margin: 0;
   text-align: center;
-  font-size: 1.6rem;
-  letter-spacing: 0.02em;
+  font-size: 1.7rem;
+  font-family: Georgia, 'Times New Roman', serif;
+  letter-spacing: 0.04em;
+  color: #f0d489;
+  text-shadow: 0 2px 14px rgba(240, 190, 90, 0.28), 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
 .tagline {
@@ -44,12 +47,12 @@ body {
 
 .setup-card {
   background: #1a2030;
-  border: 1px solid #2a3348;
+  border: 1px solid #55462b;
   border-radius: 1rem;
   padding: 1.25rem;
   display: grid;
   gap: 1rem;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(240, 212, 137, 0.1);
 }
 
 .setup-card label {
@@ -90,7 +93,7 @@ body {
 
 .rules {
   background: #1a2030;
-  border: 1px solid #2a3348;
+  border: 1px solid #3d3526;
   border-radius: 1rem;
   padding: 0.9rem 1.25rem;
   color: #aeb8cc;
@@ -133,6 +136,7 @@ body {
   border-color: transparent;
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 235, 180, 0.3);
 }
 
 .btn.ghost {
@@ -179,7 +183,7 @@ body.phase-sim #map-wrap {
   background: rgba(14, 18, 28, 0.94);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 1px solid #2a3348;
+  border: 1px solid #55462b;
   border-bottom: none;
   border-radius: 1rem 1rem 0 0;
   padding: 0.75rem 0.9rem calc(0.75rem + env(safe-area-inset-bottom));
@@ -198,6 +202,8 @@ body.phase-sim #map-wrap {
 
 .plan-title {
   font-weight: 700;
+  font-family: Georgia, 'Times New Roman', serif;
+  letter-spacing: 0.02em;
   color: var(--fac, #e6ebf4);
 }
 
@@ -303,7 +309,7 @@ body.phase-sim #map-wrap {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
-  color: #aeb8cc;
+  color: #f0d489;
 }
 
 .ticker {
@@ -353,6 +359,13 @@ body.phase-sim #map-wrap {
   width: 100%;
   text-align: center;
   animation: pop 0.25s ease-out;
+  outline: 1px solid rgba(240, 212, 137, 0.22);
+  outline-offset: -6px;
+}
+
+#overlay-card h2 {
+  font-family: Georgia, 'Times New Roman', serif;
+  letter-spacing: 0.03em;
 }
 
 .overlay-emoji {

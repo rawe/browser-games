@@ -9,11 +9,13 @@ Endboss fällt, gewinnt.
 
 | Datei        | Aufgabe |
 | ------------ | ------- |
-| `sim.js`     | Simulationskern (DOM-frei, deterministisch, ereignisbasiert) |
+| `sim.js`     | Simulationskern (DOM-frei, deterministisch, ereignisbasiert; liefert typisierte Ereignisse für Effekte) |
 | `map.js`     | Kartendaten, Wegsuche, Friedhofswahl |
 | `planner.js` | Planungsphase (Befehlsvergabe pro Einheit) |
 | `ai.js`      | Computergegner |
-| `render.js`  | Canvas-Rendering (keine Spiellogik) |
+| `render.js`  | Canvas-Rendering: Knoten, Token, Overlays, Wetter (keine Spiellogik) |
+| `terrain.js` | Vorgerenderter Landschafts-Hintergrund (Schneetal, Felswände, Wälder, Wege, Lager) |
+| `effects.js` | Partikeleffekte (Schadenszahlen, Funken, Geister, Respawn-Säulen, Boss-Sturz) |
 | `main.js`    | Bildschirm-Ablauf und Render-Schleife |
 | `config.js`  | Alle Kampf- und Zeitwerte |
 
