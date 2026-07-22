@@ -23,11 +23,8 @@
           <option value="hotseat">2 Spieler an einem Gerät</option>
         </select>
       </label>
-      <label>Einheiten pro Seite
-        <span class="units-row">
-          <input type="range" id="opt-units" min="1" max="10" value="5" />
-          <output id="opt-units-out">5</output>
-        </span>
+      <label>Ressourcenpunkte pro Seite
+        <select id="opt-resources"></select>
       </label>
       <label>Tempo
         <select id="opt-tempo"></select>
@@ -44,13 +41,14 @@
     <details class="rules">
       <summary>Spielregeln (Kurzfassung)</summary>
       <ul>
-        <li>Jede Einheit hat 10 Lebenspunkte und verursacht 3 Schaden pro Sekunde. Fusionierte Gruppen addieren Lebenspunkte und Schaden.</li>
-        <li><strong>Angriff:</strong> Kampfpunkte als Route wählen – danach geht es automatisch zum gegnerischen Boss.</li>
-        <li><strong>Verteidigen:</strong> Die Einheit hält einen Punkt. Ist sie vor dem Angreifer da, erleidet sie nur 2 statt 3 Schaden pro angreifender Einheit.</li>
-        <li><strong>Folgen:</strong> Dauerhafte Fusion mit einer anderen Einheit – stark, aber unflexibel.</li>
-        <li>Kämpfe laufen in Sekundenschritten: Beide Seiten teilen gleichzeitig Schaden aus, bis eine Seite keine Einheit mehr am Punkt hat. Überlebende behalten ihre restlichen Lebenspunkte – regeneriert wird nur per Respawn.</li>
-        <li><strong>Begegnung unterwegs:</strong> Treffen sich verfeindete Trupps auf einem Wegstück, stoppen sie und kämpfen dort im offenen Feld – ohne Verteidigungsbonus. Nachrücker greifen ein, die Sieger ziehen anschließend auf ihrer Route weiter.</li>
-        <li>Wer 0 Lebenspunkte erreicht, fällt und kehrt nach der Respawnzeit mit vollen Lebenspunkten am nächstgelegenen eigenen Friedhof zurück – fusionierte Gruppen als Ganzes.</li>
+        <li><strong>Armee anwerben:</strong> Jeder Spieler stellt seine Truppe aus einem Budget an Ressourcenpunkten zusammen. Es gibt drei Einheitentypen:
+          <ul id="rules-units"></ul>
+        </li>
+        <li><strong>Pfad festlegen:</strong> Jede Einheit erhält einen eigenen Pfad, der Wegpunkt für Wegpunkt über benachbarte Punkte aufgebaut wird. Die Karte bietet Abzweigungen, Querverbindungen und zu jedem Boss mindestens zwei getrennte Zugänge – die Routenwahl liegt komplett beim Spieler.</li>
+        <li><strong>Angriff oder Halten:</strong> Angreifer ziehen nach ihrem Pfad automatisch weiter zum gegnerischen Boss. Haltende Einheiten bewachen das Ende ihres Pfads und erleiden dort weniger Schaden, wenn sie vor dem Gegner eintreffen.</li>
+        <li>Jede Einheit kämpft mit den Werten ihres Typs: Sie schlägt in ihrem eigenen Angriffsrhythmus zu und trifft das schwächste gegnerische Ziel an ihrem Ort. Überlebende behalten ihre restlichen Lebenspunkte – regeneriert wird nur per Respawn.</li>
+        <li><strong>Begegnung unterwegs:</strong> Treffen sich verfeindete Einheiten auf einem Wegstück, stoppen sie und kämpfen dort im offenen Feld – ohne Verteidigungsbonus. Nachrücker greifen ein, die Sieger ziehen anschließend auf ihrer Route weiter.</li>
+        <li>Wer 0 Lebenspunkte erreicht, fällt und kehrt nach der Respawnzeit mit vollen Lebenspunkten am nächstgelegenen eigenen Friedhof zurück.</li>
         <li>Der Boss hat eigene Lebenspunkte, kämpft mit und regeneriert sich nicht. Fällt er, ist die Schlacht sofort vorbei.</li>
       </ul>
     </details>

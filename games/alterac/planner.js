@@ -1,66 +1,68 @@
-// Planungsphase: Befehlsvergabe pro Einheit (Angriff / Verteidigung / Folgen).
-// Baut das Bedienpanel auf und verarbeitet Karten-Taps.
+// Planungsphase: Armee aus dem Ressourcenbudget zusammenstellen und für jede
+// Einheit einen eigenen Plan festlegen – ein konkreter Pfad über benachbarte
+// Wegpunkte plus Haltung (Angriff oder Halten). Baut das Bedienpanel auf und
+// verarbeitet Karten-Taps.
 
-import { FACTIONS, enemyOf } from './map.js';
-import { MAX_ATTACK_TARGETS } from './config.js';
+import { FACTIONS } from './map.js';
+import { UNIT_TYPES, UNIT_TYPE_BY_KEY, MAX_PATH_LENGTH } from './config.js';
 
-export function orderSummary(order, nodes) {
-  if (!order) return '⚔ Auto: zum Boss';
-  if (order.type === 'attack') {
-    return `⚔ ${order.targets.map((t) => nodes[t].name).join(' → ')}`;
+// Kurzbeschreibung des Plans einer Einheit für die Einheitenleiste.
+export function planSummary(unit, nodes) {
+  const names = unit.path.map((id) => nodes[id].name);
+  if (unit.stance === 'defend') {
+    return `🛡 hält ${names.length ? names[names.length - 1] : 'die Basis'}`;
   }
-  if (order.type === 'defend') return `🛡 ${nodes[order.target].name}`;
-  return `⇢ folgt #${order.target + 1}`;
+  return names.length ? `⚔ ${names.join(' → ')}` : '⚔ direkt zum Boss';
 }
 
-// Verhindert Folgen-Zyklen (A folgt B folgt A).
-function wouldCycle(orders, follower, target) {
-  let j = target;
-  const seen = new Set();
-  while (orders[j] && orders[j].type === 'follow') {
-    if (j === follower || seen.has(j)) return true;
-    seen.add(j);
-    j = orders[j].target;
-  }
-  return j === follower;
-}
+const fmt = (n) => String(n).replace('.', ',');
 
-export function createPlanner({ map, faction, unitCount, panel, canvas, renderer, onConfirm }) {
+export function createPlanner({ map, faction, budget, panel, canvas, renderer, onConfirm }) {
   const state = {
     faction,
-    unitCount,
-    orders: new Array(unitCount).fill(null),
-    selected: 0,
-    mode: 'attack',
+    budget,
+    units: [], // { type, path: [nodeId…], stance: 'attack' | 'defend' }
+    selected: -1,
   };
   const fac = FACTIONS[faction];
+  const start = map.start[faction];
+
+  const spent = () => state.units.reduce((s, u) => s + UNIT_TYPE_BY_KEY[u.type].cost, 0);
 
   panel.innerHTML = `
     <div class="panel-head">
       <span class="plan-title" style="--fac:${fac.color}">${fac.name} · ${fac.player} plant</span>
       <button class="btn primary" id="btn-confirm" style="--fac:${fac.color};--fac-dark:${fac.dark}">Bestätigen ✓</button>
     </div>
+    <div class="recruit-row">
+      <span class="budget" id="budget"></span>
+      ${UNIT_TYPES.map(
+        (t) => `
+        <button class="btn recruit" data-type="${t.key}"
+          title="${t.desc} ${t.hp} LP · ${t.damage} Schaden alle ${fmt(t.attackInterval)} s · Tempo ×${fmt(t.speed)}">
+          ${t.icon} ${t.name} <small>· ${t.cost}</small>
+        </button>`
+      ).join('')}
+    </div>
     <div class="chips" id="chips"></div>
     <div class="mode-row">
-      <button class="btn mode" data-mode="attack">⚔ Angriff</button>
-      <button class="btn mode" data-mode="defend">🛡 Verteidigen</button>
-      <button class="btn mode" data-mode="follow">⇢ Folgen</button>
-      <button class="btn ghost" id="btn-undo" title="Letztes Ziel entfernen">↩</button>
-      <button class="btn ghost" id="btn-clear" title="Befehl löschen">✕</button>
+      <button class="btn mode" data-stance="attack">⚔ Angriff</button>
+      <button class="btn mode" data-stance="defend">🛡 Halten</button>
+      <button class="btn ghost" id="btn-undo" title="Letzten Wegpunkt entfernen">↩</button>
+      <button class="btn ghost" id="btn-remove" title="Einheit entlassen">🗑</button>
     </div>
     <p class="hint" id="hint"></p>
   `;
 
   const chipsEl = panel.querySelector('#chips');
   const hintEl = panel.querySelector('#hint');
-  const modeButtons = [...panel.querySelectorAll('.mode')];
+  const budgetEl = panel.querySelector('#budget');
+  const stanceButtons = [...panel.querySelectorAll('.mode')];
+  const recruitButtons = [...panel.querySelectorAll('.recruit')];
 
-  const HINTS = {
-    attack:
-      'Kampfpunkte antippen, um die Angriffsroute festzulegen. Danach zieht die Einheit automatisch zum gegnerischen Boss.',
-    defend: 'Einen Kampfpunkt oder den eigenen Boss antippen – die Einheit hält dort Stellung und erleidet weniger Schaden, wenn sie zuerst da ist.',
-    follow: 'Eine andere Einheit in der Leiste antippen – beide fusionieren dauerhaft zu einer Gruppe.',
-  };
+  const DEFAULT_HINT =
+    'Einheiten anwerben, dann den Pfad der gewählten Einheit Wegpunkt für Wegpunkt antippen ' +
+    '(nur benachbarte Punkte). „Halten" bewacht das Pfadende, „Angriff" zieht danach zum Boss.';
 
   let hintTimer = 0;
   function flashHint(text) {
@@ -69,115 +71,118 @@ export function createPlanner({ map, faction, unitCount, panel, canvas, renderer
     clearTimeout(hintTimer);
     hintTimer = setTimeout(() => {
       hintEl.classList.remove('warn');
-      hintEl.textContent = HINTS[state.mode];
-    }, 2200);
+      hintEl.textContent = DEFAULT_HINT;
+    }, 2600);
   }
 
   function refresh() {
+    const used = spent();
+    budgetEl.textContent = `${used}/${state.budget} ⬢`;
+    for (const b of recruitButtons) {
+      b.disabled = UNIT_TYPE_BY_KEY[b.dataset.type].cost > state.budget - used;
+    }
+    const sel = state.units[state.selected] ?? null;
+    for (const b of stanceButtons) {
+      b.classList.toggle('active', sel != null && b.dataset.stance === sel.stance);
+      b.disabled = sel == null;
+    }
     chipsEl.innerHTML = '';
-    for (let i = 0; i < unitCount; i++) {
+    state.units.forEach((u, i) => {
+      const def = UNIT_TYPE_BY_KEY[u.type];
       const chip = document.createElement('button');
       chip.className = 'chip';
       if (i === state.selected) chip.classList.add('selected');
-      if (state.mode === 'follow' && i !== state.selected) chip.classList.add('pickable');
       chip.style.setProperty('--fac', fac.color);
-      chip.innerHTML = `<strong>#${i + 1}</strong><span>${orderSummary(state.orders[i], map.nodes)}</span>`;
+      chip.innerHTML = `<strong>${def.icon} ${def.name}</strong><span>${planSummary(u, map.nodes)}</span>`;
       chip.addEventListener('click', () => {
-        if (state.mode === 'follow' && i !== state.selected) {
-          if (wouldCycle(state.orders, state.selected, i)) {
-            flashHint('Nicht möglich – das ergäbe einen Kreis aus Folgen-Befehlen.');
-            return;
-          }
-          state.orders[state.selected] = { type: 'follow', target: i };
-          state.mode = 'attack';
-        } else {
-          state.selected = i;
-        }
-        syncModes();
+        state.selected = i;
         refresh();
       });
       chipsEl.appendChild(chip);
-    }
+    });
   }
 
-  function syncModes() {
-    for (const b of modeButtons) b.classList.toggle('active', b.dataset.mode === state.mode);
-    hintEl.classList.remove('warn');
-    hintEl.textContent = HINTS[state.mode];
-  }
-
-  for (const b of modeButtons) {
+  for (const b of recruitButtons) {
     b.addEventListener('click', () => {
-      state.mode = b.dataset.mode;
-      syncModes();
+      const def = UNIT_TYPE_BY_KEY[b.dataset.type];
+      if (spent() + def.cost > state.budget) {
+        flashHint('Nicht genug Ressourcen für diese Einheit.');
+        return;
+      }
+      state.units.push({ type: def.key, path: [], stance: 'attack' });
+      state.selected = state.units.length - 1;
+      refresh();
+    });
+  }
+
+  for (const b of stanceButtons) {
+    b.addEventListener('click', () => {
+      const sel = state.units[state.selected];
+      if (!sel) return;
+      sel.stance = b.dataset.stance;
       refresh();
     });
   }
 
   panel.querySelector('#btn-undo').addEventListener('click', () => {
-    const o = state.orders[state.selected];
-    if (o && o.type === 'attack' && o.targets.length > 1) o.targets.pop();
-    else state.orders[state.selected] = null;
+    const sel = state.units[state.selected];
+    if (sel) sel.path.pop();
     refresh();
   });
-  panel.querySelector('#btn-clear').addEventListener('click', () => {
-    state.orders[state.selected] = null;
+
+  panel.querySelector('#btn-remove').addEventListener('click', () => {
+    if (state.selected < 0) return;
+    state.units.splice(state.selected, 1);
+    state.selected = Math.min(state.selected, state.units.length - 1);
     refresh();
   });
 
   function onCanvasClick(ev) {
     const nodeId = renderer.hitNode(ev.clientX, ev.clientY);
     if (!nodeId) return;
-    const node = map.nodes[nodeId];
-    if (state.mode === 'attack') {
-      if (node.type !== 'combat') {
-        flashHint(
-          node.type === 'graveyard'
-            ? 'Friedhöfe sind keine gültigen Ziele.'
-            : 'Der Boss wird nach der Sequenz automatisch angegriffen.'
-        );
-        return;
-      }
-      let o = state.orders[state.selected];
-      if (!o || o.type !== 'attack') {
-        o = { type: 'attack', targets: [] };
-        state.orders[state.selected] = o;
-      }
-      if (o.targets.length >= MAX_ATTACK_TARGETS) {
-        flashHint(`Maximal ${MAX_ATTACK_TARGETS} Ziele pro Sequenz.`);
-        return;
-      }
-      if (o.targets[o.targets.length - 1] === nodeId) return;
-      o.targets.push(nodeId);
-    } else if (state.mode === 'defend') {
-      const ownBoss = map.bosses[state.faction];
-      if (node.type === 'combat' || nodeId === ownBoss) {
-        state.orders[state.selected] = { type: 'defend', target: nodeId };
-      } else if (nodeId === map.bosses[enemyOf(state.faction)]) {
-        flashHint('Der gegnerische Boss lässt sich nicht verteidigen.');
-        return;
-      } else {
-        flashHint('Friedhöfe sind keine gültigen Ziele.');
-        return;
-      }
-    } else {
-      flashHint('Zum Folgen eine Einheit in der Leiste antippen.');
+    const sel = state.units[state.selected];
+    if (!sel) {
+      flashHint('Zuerst eine Einheit anwerben.');
       return;
     }
+    const end = sel.path.length ? sel.path[sel.path.length - 1] : start;
+    if (nodeId === end) {
+      // Erneutes Antippen des Pfadendes nimmt den letzten Schritt zurück.
+      sel.path.pop();
+      refresh();
+      return;
+    }
+    if (map.nodes[nodeId].type === 'graveyard') {
+      flashHint('Friedhöfe sind keine begehbaren Wegpunkte.');
+      return;
+    }
+    if (!map.adjacency[end].includes(nodeId)) {
+      flashHint('Nur direkt verbundene Wegpunkte wählbar – Pfad Schritt für Schritt aufbauen.');
+      return;
+    }
+    if (sel.path.length >= MAX_PATH_LENGTH) {
+      flashHint(`Maximal ${MAX_PATH_LENGTH} Wegpunkte pro Pfad.`);
+      return;
+    }
+    sel.path.push(nodeId);
     refresh();
   }
   canvas.addEventListener('click', onCanvasClick);
 
   panel.querySelector('#btn-confirm').addEventListener('click', () => {
+    if (!state.units.length) {
+      flashHint('Mindestens eine Einheit anwerben, bevor es losgeht.');
+      return;
+    }
     destroy();
-    onConfirm(state.orders);
+    onConfirm(state.units.map((u) => ({ type: u.type, path: [...u.path], stance: u.stance })));
   });
 
   function destroy() {
     canvas.removeEventListener('click', onCanvasClick);
   }
 
-  syncModes();
+  hintEl.textContent = DEFAULT_HINT;
   refresh();
   return { state, destroy };
 }

@@ -1,4 +1,6 @@
-// Kartendefinition: festes Wegpunkt-Netzwerk des Alteractals.
+// Kartendefinition: konfigurierbares Wegpunkt-Netzwerk des Alteractals.
+// NODES, EDGES, ROUTES und GUARD_POSTS sind die zentralen Konfigurationsdaten –
+// neue Wegpunkte, Verbindungen oder Routenvorschläge werden nur hier ergänzt.
 // Die Karte ist vertikal aufgebaut (Norden oben, Süden unten), damit sie
 // auf Mobilgeräten per Scrollen gut nutzbar ist.
 
@@ -12,15 +14,19 @@ export function enemyOf(faction) {
 }
 
 // Knotentypen: 'combat' (Kampfpunkt), 'graveyard' (Friedhof), 'boss' (Endboss).
+// Jeder Boss ist über mindestens zwei getrennte Zugänge erreichbar:
+// Nordtor + Eisiger Grat (rot), Südtor + Schmugglerpfad (blau).
 const NODES = [
   { id: 'rboss', type: 'boss', faction: 'red', x: 240, y: 78, name: 'Kriegsherr Eiszahn', labelDy: 46 },
   { id: 'rgy', type: 'graveyard', faction: 'red', x: 96, y: 150, name: 'Nordfriedhof', labelDy: 30 },
+  { id: 'reast', type: 'combat', x: 404, y: 178, name: 'Eisiger Grat', labelDx: 12, labelDy: 26 },
   { id: 'rgate', type: 'combat', x: 240, y: 214, name: 'Nordtor', labelDx: 52, labelDy: 4 },
   { id: 'wn', type: 'combat', x: 112, y: 356, name: 'Eisfelsklamm', labelDy: 32 },
   { id: 'en', type: 'combat', x: 368, y: 356, name: 'Steinbruch', labelDy: 32 },
   { id: 'mid', type: 'combat', x: 240, y: 488, name: 'Feldmitte', labelDx: 56, labelDy: 4 },
   { id: 'ws', type: 'combat', x: 112, y: 620, name: 'Wolfsschlucht', labelDy: 32 },
   { id: 'es', type: 'combat', x: 368, y: 620, name: 'Kiefernhang', labelDy: 32 },
+  { id: 'swest', type: 'combat', x: 84, y: 788, name: 'Schmugglerpfad', labelDy: 30 },
   { id: 'sgate', type: 'combat', x: 240, y: 760, name: 'Südtor', labelDx: 48, labelDy: 4 },
   { id: 'bgy', type: 'graveyard', faction: 'blue', x: 384, y: 830, name: 'Südfriedhof', labelDy: 30 },
   { id: 'bboss', type: 'boss', faction: 'blue', x: 240, y: 896, name: 'General Steinbrecher', labelDy: 46 },
@@ -29,20 +35,51 @@ const NODES = [
 // Verbindungen. `bend` krümmt den Weg optisch (und die Einheiten folgen der Kurve).
 const EDGES = [
   { a: 'rboss', b: 'rgate', bend: 0 },
+  { a: 'rboss', b: 'reast', bend: 14 }, // Umgehung des Nordtors
+  { a: 'reast', b: 'en', bend: -14 },
   { a: 'rgate', b: 'rgy', bend: 10 },
   { a: 'rgate', b: 'wn', bend: 16 },
   { a: 'rgate', b: 'en', bend: -16 },
+  { a: 'wn', b: 'en', bend: -16 }, // nördliche Querverbindung
   { a: 'wn', b: 'mid', bend: 8 },
   { a: 'en', b: 'mid', bend: -8 },
   { a: 'wn', b: 'ws', bend: 26 },
   { a: 'en', b: 'es', bend: -26 },
   { a: 'mid', b: 'ws', bend: 8 },
   { a: 'mid', b: 'es', bend: -8 },
+  { a: 'ws', b: 'es', bend: 16 }, // südliche Querverbindung
+  { a: 'ws', b: 'swest', bend: 10 }, // Umgehung des Südtors
+  { a: 'swest', b: 'bboss', bend: -12 },
   { a: 'ws', b: 'sgate', bend: 16 },
   { a: 'es', b: 'sgate', bend: -16 },
   { a: 'sgate', b: 'bgy', bend: -10 },
   { a: 'sgate', b: 'bboss', bend: 0 },
 ];
+
+// Vorgeschlagene Routen (vollständige Pfade aus benachbarten Wegpunkten vom
+// eigenen Start bis zum gegnerischen Boss). Werden vom Computergegner genutzt
+// und können als Vorlagen für weitere UI-Features dienen.
+export const ROUTES = {
+  red: [
+    { name: 'Westflanke', path: ['rgate', 'wn', 'ws', 'sgate', 'bboss'] },
+    { name: 'Ostflanke', path: ['rgate', 'en', 'es', 'sgate', 'bboss'] },
+    { name: 'Feldmitte', path: ['rgate', 'en', 'mid', 'ws', 'sgate', 'bboss'] },
+    { name: 'Schmugglerpfad', path: ['rgate', 'wn', 'ws', 'swest', 'bboss'] },
+  ],
+  blue: [
+    { name: 'Westflanke', path: ['sgate', 'ws', 'wn', 'rgate', 'rboss'] },
+    { name: 'Ostflanke', path: ['sgate', 'es', 'en', 'rgate', 'rboss'] },
+    { name: 'Feldmitte', path: ['sgate', 'ws', 'mid', 'en', 'rgate', 'rboss'] },
+    { name: 'Eisiger Grat', path: ['sgate', 'es', 'en', 'reast', 'rboss'] },
+  ],
+};
+
+// Verteidigungsposten je Fraktion: die Zugänge zum eigenen Boss (alle direkt
+// benachbart zum Startpunkt, damit Wachen sie ohne Umweg beziehen können).
+export const GUARD_POSTS = {
+  red: ['rgate', 'reast'],
+  blue: ['sgate', 'swest'],
+};
 
 export function createMap() {
   const nodes = {};
@@ -99,7 +136,10 @@ function pathLess(a, b) {
   return a.join('/') < b.join('/');
 }
 
-// Kürzester Weg (wenigste Wegstücke). Bei gleicher Länge gewinnt deterministisch
+// Kürzester Weg (wenigste Wegstücke) – wird nur noch als Rückfalllösung
+// genutzt: für den automatischen Marsch zum Boss nach abgearbeitetem Pfad und
+// für den Rückweg nach einem Respawn. Geplante Pfade folgen dagegen exakt den
+// vom Spieler gewählten Wegpunkten. Bei gleicher Länge gewinnt deterministisch
 // der lexikografisch kleinere Pfad – so bleibt die Simulation reproduzierbar.
 // Friedhöfe werden nie durchquert, nur als Ziel (Respawn) betreten.
 export function shortestPath(map, from, to) {

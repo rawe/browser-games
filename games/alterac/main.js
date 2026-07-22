@@ -1,9 +1,11 @@
 // Einstiegspunkt: Bildschirm-Ablauf (Setup → Planung → Simulation → Ergebnis),
 // Render-Schleife und Simulationssteuerung.
 
-import { createMap, FACTIONS, enemyOf } from './map.js';
+import { createMap, FACTIONS } from './map.js';
 import {
   DEFAULT_CONFIG,
+  UNIT_TYPES,
+  RESOURCE_OPTIONS,
   TEMPO_OPTIONS,
   RESPAWN_OPTIONS,
   BOSS_OPTIONS,
@@ -47,18 +49,29 @@ function fillSelect(el, options, selectedValue) {
   }
 }
 
-const unitsInput = document.getElementById('opt-units');
-const unitsOut = document.getElementById('opt-units-out');
-unitsInput.addEventListener('input', () => (unitsOut.textContent = unitsInput.value));
+fillSelect(document.getElementById('opt-resources'), RESOURCE_OPTIONS, DEFAULT_CONFIG.resources);
 fillSelect(document.getElementById('opt-tempo'), TEMPO_OPTIONS, DEFAULT_CONFIG.edgeTime);
 fillSelect(document.getElementById('opt-respawn'), RESPAWN_OPTIONS, DEFAULT_CONFIG.respawnTime);
 fillSelect(document.getElementById('opt-boss'), BOSS_OPTIONS, DEFAULT_CONFIG.bossHp);
+
+// Einheitentypen-Übersicht in den Spielregeln aus den zentralen Definitionen füllen.
+{
+  const list = document.getElementById('rules-units');
+  const fmt = (n) => String(n).replace('.', ',');
+  for (const t of UNIT_TYPES) {
+    const li = document.createElement('li');
+    li.innerHTML =
+      `<strong>${t.icon} ${t.name}</strong> (${t.cost} ⬢): ${t.hp} LP, ` +
+      `${t.damage} Schaden alle ${fmt(t.attackInterval)} s, Tempo ×${fmt(t.speed)} – ${t.desc}`;
+    list.appendChild(li);
+  }
+}
 
 document.getElementById('setup-form').addEventListener('submit', (ev) => {
   ev.preventDefault();
   config = {
     ...DEFAULT_CONFIG,
-    units: Number(unitsInput.value),
+    resources: Number(document.getElementById('opt-resources').value),
     edgeTime: Number(document.getElementById('opt-tempo').value),
     respawnTime: Number(document.getElementById('opt-respawn').value),
     bossHp: Number(document.getElementById('opt-boss').value),
@@ -86,17 +99,17 @@ function startPlanning(faction) {
   planner = createPlanner({
     map,
     faction,
-    unitCount: config.units,
+    budget: config.resources,
     panel: panelEl,
     canvas,
     renderer,
-    onConfirm: (orders) => {
-      plans[faction] = orders;
+    onConfirm: (units) => {
+      plans[faction] = units;
       planner = null;
       view.planning = null;
       if (faction === 'blue') {
         if (mode === 'cpu') {
-          plans.red = aiPlan(config.units, map, 'red');
+          plans.red = aiPlan(config, map, 'red');
           startSim();
         } else {
           showHandover('red', () => startPlanning('red'));
@@ -248,8 +261,8 @@ window.addEventListener('resize', () => {
 const params = new URLSearchParams(location.search);
 if (params.get('test') === 'sim') {
   mode = 'cpu';
-  plans.blue = aiPlan(config.units, map, 'blue', () => 0.3);
-  plans.red = aiPlan(config.units, map, 'red', () => 0.8);
+  plans.blue = aiPlan(config, map, 'blue', () => 0.3);
+  plans.red = aiPlan(config, map, 'red', () => 0.8);
   startSim();
 } else if (params.get('test') === 'plan') {
   startPlanning('blue');

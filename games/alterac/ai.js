@@ -1,47 +1,46 @@
-// Einfacher Computergegner: teilt die Truppe in Haupt- und Nebenstoß auf,
-// stellt ab mittlerer Truppengröße Verteidiger ab und fusioniert Angreifer
-// per Folgen-Befehl zu schlagkräftigen Gruppen.
+// Computergegner: stellt aus dem Ressourcenbudget eine gemischte Armee
+// zusammen, teilt die zähesten Einheiten als Wachen für die eigenen Zugänge
+// ein und verteilt die Angreifer auf zwei verschiedene Routen zum
+// gegnerischen Boss. Vollständig datengetrieben über UNIT_TYPES, ROUTES und
+// GUARD_POSTS – keine typ- oder kartenspezifischen Sonderfälle.
 
-const WEST = ['wn', 'ws'];
-const EAST = ['en', 'es'];
+import { UNIT_TYPES, UNIT_TYPE_BY_KEY } from './config.js';
+import { ROUTES, GUARD_POSTS } from './map.js';
 
-export function aiPlan(unitCount, map, faction, rng = Math.random) {
-  const orders = new Array(unitCount).fill(null);
-  if (unitCount === 1) return orders; // Auto-Angriff auf den Boss
-
-  const ownGate = faction === 'red' ? 'rgate' : 'sgate';
-  const enemyGate = faction === 'red' ? 'sgate' : 'rgate';
-  // Routen aus Sicht der eigenen Seite ordnen (rot zieht nach Süden, blau nach Norden).
-  const routeFor = (r) => (faction === 'red' ? [...r] : [...r].reverse());
-
-  let defenders = 0;
-  if (unitCount >= 4) defenders = 1;
-  if (unitCount >= 8) defenders = 2;
-  if (defenders >= 1) orders[unitCount - 1] = { type: 'defend', target: ownGate };
-  if (defenders >= 2) orders[unitCount - 2] = { type: 'defend', target: map.bosses[faction] };
-
-  const attackers = [];
-  for (let i = 0; i < unitCount - defenders; i++) attackers.push(i);
-
-  const mainRoute = rng() < 0.5 ? WEST : EAST;
-  const sideRoute = mainRoute === WEST ? EAST : WEST;
-  const mainSize = Math.max(1, Math.ceil(attackers.length * 0.6));
-
-  const mainLead = attackers[0];
-  orders[mainLead] = { type: 'attack', targets: [...routeFor(mainRoute), enemyGate] };
-  for (let k = 1; k < mainSize; k++) orders[attackers[k]] = { type: 'follow', target: mainLead };
-
-  if (attackers.length > mainSize) {
-    const sideLead = attackers[mainSize];
-    // Der Nebenstoß nimmt gelegentlich die Feldmitte mit – etwas Varianz.
-    const viaMid = rng() < 0.35;
-    const targets = viaMid
-      ? [routeFor(sideRoute)[0], 'mid', routeFor(sideRoute)[1], enemyGate]
-      : [...routeFor(sideRoute), enemyGate];
-    orders[sideLead] = { type: 'attack', targets };
-    for (let k = mainSize + 1; k < attackers.length; k++) {
-      orders[attackers[k]] = { type: 'follow', target: sideLead };
-    }
+export function aiPlan(config, map, faction, rng = Math.random) {
+  const units = [];
+  let remaining = config.resources;
+  for (;;) {
+    const options = UNIT_TYPES.filter((t) => t.cost <= remaining);
+    if (!options.length) break;
+    const pick = options[Math.floor(rng() * options.length)];
+    units.push({ type: pick.key, path: [], stance: 'attack' });
+    remaining -= pick.cost;
   }
-  return orders;
+
+  // Ab mittlerer Armeegröße bewachen die zähesten Einheiten die eigenen
+  // Zugänge (Zähigkeit datengetrieben über die Hitpoints des Typs).
+  const byToughness = units
+    .map((u, i) => ({ i, hp: UNIT_TYPE_BY_KEY[u.type].hp }))
+    .sort((a, b) => b.hp - a.hp || a.i - b.i);
+  const guardCount = units.length >= 6 ? 2 : units.length >= 4 ? 1 : 0;
+  const posts = GUARD_POSTS[faction];
+  for (let k = 0; k < guardCount; k++) {
+    const u = units[byToughness[k].i];
+    u.stance = 'defend';
+    u.path = [posts[k % posts.length]];
+  }
+
+  // Angreifer auf Haupt- und Nebenstoß über zwei verschiedene Routen verteilen.
+  const attackers = units.filter((u) => u.stance === 'attack');
+  const routes = ROUTES[faction];
+  const mainIdx = Math.floor(rng() * routes.length);
+  let sideIdx = Math.floor(rng() * (routes.length - 1));
+  if (sideIdx >= mainIdx) sideIdx += 1;
+  const mainCount = Math.max(1, Math.ceil(attackers.length * 0.6));
+  attackers.forEach((u, k) => {
+    u.path = [...routes[k < mainCount ? mainIdx : sideIdx].path];
+  });
+
+  return units;
 }

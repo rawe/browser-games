@@ -1,42 +1,46 @@
 // Simulationskern – DOM-frei und deterministisch.
 //
 // Zeitmodell: kontinuierliche Zeit mit exakten Ereigniszeitpunkten (Ankünfte,
-// Respawns, Schadensintervalle). Alle Ereignisse desselben Zeitpunkts werden
-// gemeinsam verarbeitet, damit gleichzeitige Ankünfte korrekt behandelt werden.
+// Respawns, Angriffe). Alle Ereignisse desselben Zeitpunkts werden gemeinsam
+// verarbeitet, damit gleichzeitige Ankünfte und Schläge korrekt behandelt
+// werden.
 //
-// Kampfsystem: Jede Basiseinheit hat `unitHp` Hitpoints und verursacht
-// `unitDamage` Schaden pro Sekunde (`unitDamageVsDefender` gegen eingegrabene
-// Verteidiger). Fusionierte Gruppen addieren Hitpoints und Schaden. Schaden
-// wird in festen Intervallen (`tickInterval`) gleichzeitig ausgetauscht;
-// erreicht eine Gruppe oder der Boss 0 Hitpoints, fällt sie. Überlebende
+// Kampfsystem: Jede Einheit ist eine eigenständige Gruppe mit den Werten ihres
+// Typs (Hitpoints, Schaden pro Angriff, Angriffsintervall, Tempo) aus den
+// zentralen UNIT_TYPES-Definitionen – die Logik hier kennt keine Typnamen.
+// Jede kämpfende Einheit schlägt in ihrem eigenen Intervall zu und trifft das
+// schwächste gegnerische Ziel an ihrem Ort (der Boss zuletzt). Eingegrabene
+// Verteidiger erleiden nur den `entrenchedFactor`-Anteil des Schadens.
+// Erreicht eine Einheit oder der Boss 0 Hitpoints, fällt sie. Überlebende
 // behalten ihre aktuellen Hitpoints, Respawns kehren mit vollen zurück.
 //
-// Begegnungskämpfe: Treffen sich verfeindete Gruppen auf demselben Wegstück
-// (entgegenkommend, oder eine Gruppe läuft in einen dort laufenden Kampf
-// hinein), stoppen sie am exakten Treffpunkt und kämpfen dort im offenen
-// Feld – ohne Boss und ohne Verteidigungsbonus. Die Sieger setzen danach
-// ihre unterbrochene Bewegung samt Befehlskette unverändert fort. Regeln und
-// Deadlock-Betrachtung: siehe README.md in diesem Verzeichnis.
+// Begegnungskämpfe: Treffen sich verfeindete Einheiten auf demselben Wegstück
+// (entgegenkommend, per Aufholen bei unterschiedlichem Tempo, oder eine
+// Einheit läuft in einen dort laufenden Kampf hinein), stoppen sie am exakten
+// Treffpunkt und kämpfen dort im offenen Feld – ohne Boss und ohne
+// Verteidigungsbonus. Die Sieger setzen danach ihre unterbrochene Bewegung
+// samt Befehlskette unverändert fort. Regeln und Deadlock-Betrachtung: siehe
+// README.md in diesem Verzeichnis.
 
 import { FACTIONS, enemyOf, shortestPath, nearestGraveyard } from './map.js';
+import { UNIT_TYPE_BY_KEY } from './config.js';
 
 const EPS = 1e-6;
 
-// plans: { blue: orders[], red: orders[] } mit orders[i] =
-//   null                                    → Auto-Angriff auf den gegnerischen Boss
-//   { type: 'attack', targets: [nodeId…] }  → Angriffssequenz
-//   { type: 'defend', target: nodeId }      → Verteidigung
-//   { type: 'follow', target: unitIndex }   → dauerhafte Fusion
+// plans: { blue: units[], red: units[] } mit units[i] =
+//   { type: unitTypeKey, path: [nodeId…], stance: 'attack' | 'defend' }
+// `path` ist eine Folge benachbarter Wegpunkte ab dem eigenen Startpunkt und
+// wird exakt abgelaufen. Danach greift die Einheit automatisch den
+// gegnerischen Boss an ('attack') oder hält den letzten Wegpunkt ('defend');
+// ein leerer Pfad bedeutet Direktmarsch zum Boss bzw. Verteidigung der Basis.
 export function createSim({ map, config, plans }) {
   const {
     edgeTime,
     respawnTime,
-    unitHp,
-    unitDamage,
-    unitDamageVsDefender,
+    entrenchedFactor,
     bossHp,
     bossDamage,
-    tickInterval,
+    bossAttackInterval,
     maxTime,
   } = config;
   const groups = [];
@@ -49,9 +53,11 @@ export function createSim({ map, config, plans }) {
     blue: { hp: bossHp, maxHp: bossHp },
     red: { hp: bossHp, maxHp: bossHp },
   };
-  // Kampfpunkt → Zeitpunkt des nächsten Schadensintervalls.
-  const combatTicks = new Map();
-  // Aktive Begegnungskämpfe auf Wegstücken: { a, b, frac, tickAt } mit a/b als
+  // Angriffstimer der Bosse (Infinity = kein Kampf am Boss-Knoten).
+  const bossAttackAt = { blue: Infinity, red: Infinity };
+  // Knoten mit aktuell laufendem Kampf (für Log und Effekte).
+  const nodeCombats = new Set();
+  // Aktive Begegnungskämpfe auf Wegstücken: { a, b, frac } mit a/b als
   // kanonisch sortiertem Knotenpaar und frac als Treffpunkt-Position von a aus.
   const edgeCombats = [];
   let time = 0;
@@ -60,46 +66,33 @@ export function createSim({ map, config, plans }) {
   const nodeName = (id) => map.nodes[id].name;
   const addLog = (text) => log.push({ t: time, text });
   const addEvent = (e) => events.push({ t: time, ...e });
+  const groupLabel = (g) => `${FACTIONS[g.faction].name}-Trupp (${g.def.name})`;
 
-  // --- Gruppen aus den Plänen bauen: Folgen-Befehle werden sofort fusioniert ---
+  // --- Gruppen aus den Plänen bauen: jede Einheit ist eine eigene Gruppe ---
   for (const faction of ['blue', 'red']) {
-    const orders = plans[faction];
-    const rootOf = (i) => {
-      let j = i;
-      const seen = new Set([i]);
-      for (;;) {
-        const o = orders[j];
-        if (!o || o.type !== 'follow') return j;
-        if (seen.has(o.target)) return j; // Zyklus: Einheit agiert als eigene Gruppe
-        seen.add(o.target);
-        j = o.target;
+    plans[faction].forEach((u, i) => {
+      const def = UNIT_TYPE_BY_KEY[u.type];
+      let orders = u.path.map((node) => ({ type: 'attack', node }));
+      if (u.stance === 'defend') {
+        if (orders.length) orders[orders.length - 1] = { type: 'defend', node: u.path[u.path.length - 1] };
+        else orders = [{ type: 'defend', node: map.start[faction] }];
       }
-    };
-    const byRoot = new Map();
-    for (let i = 0; i < orders.length; i++) {
-      const r = rootOf(i);
-      if (!byRoot.has(r)) byRoot.set(r, []);
-      byRoot.get(r).push(i);
-    }
-    for (const [root, members] of [...byRoot.entries()].sort((a, b) => a[0] - b[0])) {
-      const o = orders[root];
-      let seq = [];
-      if (o && o.type === 'attack') seq = o.targets.map((node) => ({ type: 'attack', node }));
-      if (o && o.type === 'defend') seq = [{ type: 'defend', node: o.target }];
       groups.push({
-        id: `${faction === 'blue' ? 'S' : 'F'}${root + 1}`,
+        id: `${faction === 'blue' ? 'S' : 'F'}${i + 1}`,
         faction,
-        members: members.map((m) => m + 1),
-        size: members.length,
-        maxHp: members.length * unitHp,
-        hp: members.length * unitHp,
-        orders: seq,
+        def,
+        maxHp: def.hp,
+        hp: def.hp,
+        damage: def.damage,
+        attackInterval: def.attackInterval,
+        edgeTime: edgeTime / (def.speed ?? 1), // Reisezeit pro Wegstück
+        orders,
         orderIndex: 0,
         state: 'atNode', // 'atNode' | 'moving' | 'edgeFight' | 'defending' | 'dead'
         node: map.start[faction],
-        arrivedAt: 0,
         fighting: false,
         entrenched: false,
+        nextAttackAt: Infinity,
         edgeFrom: null,
         edgeTo: null,
         edgeFrac: 0, // im Begegnungskampf: zurückgelegter Anteil des Wegstücks
@@ -110,12 +103,12 @@ export function createSim({ map, config, plans }) {
         graveyardNode: null,
         deathNode: null,
       });
-    }
+    });
   }
 
   function currentObjective(g) {
     if (g.orderIndex < g.orders.length) return g.orders[g.orderIndex];
-    // Sequenz abgeschlossen → automatisch weiter zum gegnerischen Endboss.
+    // Pfad abgearbeitet → automatisch weiter zum gegnerischen Endboss.
     return { type: 'attack', node: map.bosses[enemyOf(g.faction)] };
   }
 
@@ -143,23 +136,37 @@ export function createSim({ map, config, plans }) {
 
   // Bewegung einer Gruppe in kanonischer Kantensicht: Position als lineare
   // Funktion der Zeit, gemessen vom lexikografisch kleineren Endknoten `a`.
+  // `rate` ist die (vorzeichenbehaftete) Geschwindigkeit in Kantenanteilen pro
+  // Sekunde – Einheitentypen können unterschiedlich schnell sein.
   function edgeMotion(g) {
     const [a, b] = [g.edgeFrom, g.edgeTo].sort();
     const dir = g.edgeFrom === a ? 1 : -1;
-    return { a, b, dir, pos0: dir === 1 ? 0 : 1, depart: g.departT, arrive: g.arriveT };
+    return {
+      a,
+      b,
+      dir,
+      pos0: dir === 1 ? 0 : 1,
+      rate: dir / (g.arriveT - g.departT),
+      depart: g.departT,
+      arrive: g.arriveT,
+    };
   }
 
-  // Zeitpunkt und Ort, an dem sich zwei entgegenkommende Gruppen auf derselben
-  // Kante treffen – oder null (andere Kante, gleiche Richtung, oder das Treffen
-  // fiele auf einen Endknoten: dann übernimmt der normale Knotenkampf).
+  // Zeitpunkt und Ort, an dem sich zwei verfeindete Gruppen auf derselben
+  // Kante treffen – entgegenkommend oder als Aufholen bei unterschiedlichem
+  // Tempo. null bei anderer Kante, gleicher Geschwindigkeit in gleicher
+  // Richtung, oder wenn das Treffen auf einen Endknoten fiele (dann übernimmt
+  // der normale Knotenkampf).
   function meetTime(g1, g2) {
     const m1 = edgeMotion(g1);
     const m2 = edgeMotion(g2);
-    if (m1.a !== m2.a || m1.b !== m2.b || m1.dir === m2.dir) return null;
-    const t = (m1.depart + m2.depart + m1.dir * (m2.pos0 - m1.pos0) * edgeTime) / 2;
+    if (m1.a !== m2.a || m1.b !== m2.b) return null;
+    const dr = m1.rate - m2.rate;
+    if (Math.abs(dr) < EPS) return null;
+    const t = (m2.pos0 - m1.pos0 + m1.rate * m1.depart - m2.rate * m2.depart) / dr;
     if (t < Math.max(m1.depart, m2.depart) - EPS) return null;
     if (t > Math.min(m1.arrive, m2.arrive) - EPS) return null;
-    const frac = m1.pos0 + (m1.dir * (t - m1.depart)) / edgeTime;
+    const frac = m1.pos0 + m1.rate * (t - m1.depart);
     if (frac < EPS || frac > 1 - EPS) return null;
     return { t, frac };
   }
@@ -170,25 +177,26 @@ export function createSim({ map, config, plans }) {
   function reachTime(g, c) {
     const m = edgeMotion(g);
     if (m.a !== c.a || m.b !== c.b) return null;
-    const t = m.depart + ((c.frac - m.pos0) / m.dir) * edgeTime;
+    const t = m.depart + (c.frac - m.pos0) / m.rate;
     if (t < m.depart - EPS || t > m.arrive - EPS) return null;
     return t;
   }
 
-  function joinEdgeCombat(g, c) {
+  function joinEdgeCombat(g, c, t) {
     const m = edgeMotion(g);
     g.state = 'edgeFight';
     g.fighting = true;
     g.edgeFrac = (c.frac - m.pos0) * m.dir;
     g.edgeCombat = c;
+    g.nextAttackAt = t + g.attackInterval;
   }
 
   function startEdgeCombat(g1, g2, frac, t) {
     const m = edgeMotion(g1);
-    const c = { a: m.a, b: m.b, frac, tickAt: t + tickInterval };
+    const c = { a: m.a, b: m.b, frac };
     edgeCombats.push(c);
-    joinEdgeCombat(g1, c);
-    joinEdgeCombat(g2, c);
+    joinEdgeCombat(g1, c, t);
+    joinEdgeCombat(g2, c, t);
     addLog(
       `${FACTIONS.blue.name} und ${FACTIONS.red.name} treffen zwischen ` +
         `${nodeName(c.a)} und ${nodeName(c.b)} aufeinander!`
@@ -197,7 +205,7 @@ export function createSim({ map, config, plans }) {
   }
 
   // Begegnungen zum Zeitpunkt t auflösen: erst laufen bewegte Gruppen in
-  // bestehende Kämpfe hinein, dann treffen entgegenkommende Gegner aufeinander.
+  // bestehende Kämpfe hinein, dann treffen verfeindete Gruppen aufeinander.
   // Wiederholt bis zum Fixpunkt, weil ein neuer Kampf weitere gleichzeitige
   // Beitritte auslösen kann (z. B. mehrere Paare am selben Treffpunkt).
   function processEncounters(t) {
@@ -208,9 +216,9 @@ export function createSim({ map, config, plans }) {
           if (g.state !== 'moving') continue;
           const r = reachTime(g, c);
           if (r != null && Math.abs(r - t) <= EPS) {
-            joinEdgeCombat(g, c);
+            joinEdgeCombat(g, c, t);
             addLog(
-              `${FACTIONS[g.faction].name}-Trupp (${g.size}) greift in den Kampf zwischen ` +
+              `${groupLabel(g)} greift in den Kampf zwischen ` +
                 `${nodeName(c.a)} und ${nodeName(c.b)} ein.`
             );
             changed = true;
@@ -231,8 +239,8 @@ export function createSim({ map, config, plans }) {
             (c) => c.a === key.a && c.b === key.b && Math.abs(c.frac - m.frac) < 1e-4
           );
           if (existing) {
-            joinEdgeCombat(g1, existing);
-            joinEdgeCombat(g2, existing);
+            joinEdgeCombat(g1, existing, t);
+            joinEdgeCombat(g2, existing, t);
           } else {
             startEdgeCombat(g1, g2, m.frac, t);
           }
@@ -275,17 +283,19 @@ export function createSim({ map, config, plans }) {
         }
         if (g.orderIndex < g.orders.length) {
           g.orderIndex += 1;
-          continue; // Ziel war frei → Punkt passieren, Sequenz fortsetzen
+          continue; // Wegpunkt war frei → passieren, Pfad fortsetzen
         }
         return; // steht am gegnerischen Boss – der Kampf wird separat aufgelöst
       }
+      // Benachbarte Pfad-Wegpunkte ergeben hier genau die geplante Kante;
+      // die Wegsuche greift nur als Rückfalllösung (Respawn, Marsch zum Boss).
       const path = shortestPath(map, g.node, obj.node);
       if (!path || path.length < 2) return;
       g.state = 'moving';
       g.edgeFrom = g.node;
       g.edgeTo = path[1];
       g.departT = t;
-      g.arriveT = t + edgeTime;
+      g.arriveT = t + g.edgeTime;
       g.node = null;
       return;
     }
@@ -295,6 +305,7 @@ export function createSim({ map, config, plans }) {
     g.state = 'dead';
     g.fighting = false;
     g.entrenched = false;
+    g.nextAttackAt = Infinity;
     // Auf einem Wegstück Gefallene zählen zum näher gelegenen Endknoten.
     g.deathNode = g.node ?? (g.edgeFrac <= 0.5 ? g.edgeFrom : g.edgeTo);
     g.node = null;
@@ -306,131 +317,101 @@ export function createSim({ map, config, plans }) {
     addEvent({
       type: 'death',
       faction: g.faction,
-      size: g.size,
       where: { node: g.deathNode },
       graveyard: g.graveyardNode,
     });
   }
 
-  // Verteilt den Schaden einer Seite auf die gegnerischen Ziele (schwächstes
-  // zuerst, Boss zuletzt). `units` ist die Zahl angreifender Basiseinheiten,
-  // `flat` fester Zusatzschaden (Boss). Gerechnet wird gegen den Hitpoint-Stand
-  // zu Intervallbeginn, damit beide Seiten gleichzeitig austeilen.
-  function allocateDamage(units, flat, targets) {
-    const hits = [];
-    let u = units;
-    let f = flat;
-    for (const tg of targets) {
-      if (u <= EPS && f <= EPS) break;
-      let need = tg.hp;
-      let dealt = 0;
-      if (f > EPS) {
-        const d = Math.min(f, need);
-        f -= d;
-        need -= d;
-        dealt += d;
+  // Alle zum Zeitpunkt t fälligen Angriffe ausführen. Jeder Angreifer trifft
+  // das schwächste noch stehende gegnerische Ziel an seinem Ort (Knoten oder
+  // Wegstück-Kampf); der Boss ist stets das letzte Ziel. Gefallene werden erst
+  // nach allen Angriffen des Zeitpunkts entfernt, damit gleichzeitige Schläge
+  // beider Seiten fair verrechnet werden.
+  function processAttacks(t, defeated) {
+    const attacks = [];
+    for (const fac of ['blue', 'red']) {
+      if (bossAlive[fac] && bossAttackAt[fac] <= t + EPS) attacks.push({ kind: 'boss', faction: fac });
+    }
+    for (const g of groups) {
+      if (g.fighting && g.nextAttackAt <= t + EPS) attacks.push({ kind: 'group', g });
+    }
+    if (!attacks.length) return;
+    // Feste, reproduzierbare Reihenfolge: Bosse zuerst, dann Gruppen nach Kennung.
+    attacks.sort((x, y) => {
+      const kx = x.kind === 'boss' ? `0${x.faction}` : `1${x.g.id.padStart(4, '0')}`;
+      const ky = y.kind === 'boss' ? `0${y.faction}` : `1${y.g.id.padStart(4, '0')}`;
+      return kx < ky ? -1 : kx > ky ? 1 : 0;
+    });
+
+    for (const atk of attacks) {
+      let faction;
+      let damage;
+      let where;
+      let targetGroups;
+      let bossTargetFaction = null;
+      if (atk.kind === 'boss') {
+        faction = atk.faction;
+        damage = bossDamage;
+        bossAttackAt[faction] = t + bossAttackInterval;
+        const nodeId = map.bosses[faction];
+        targetGroups = combatants(nodeId).filter((g) => g.faction !== faction);
+        where = { node: nodeId };
+      } else {
+        const g = atk.g;
+        faction = g.faction;
+        damage = g.damage;
+        g.nextAttackAt = t + g.attackInterval;
+        const enemy = enemyOf(faction);
+        if (g.state === 'edgeFight') {
+          const c = g.edgeCombat;
+          targetGroups = groups.filter(
+            (o) => o.edgeCombat === c && o.state === 'edgeFight' && o.faction === enemy
+          );
+          where = { edge: { a: c.a, b: c.b, frac: c.frac } };
+        } else {
+          targetGroups = combatants(g.node).filter((o) => o.faction === enemy);
+          const n = map.nodes[g.node];
+          if (n.type === 'boss' && n.faction === enemy && bossAlive[enemy]) {
+            bossTargetFaction = enemy;
+          }
+          where = { node: g.node };
+        }
       }
-      if (need > EPS && u > EPS) {
+      const alive = targetGroups
+        .filter((o) => o.hp > EPS)
+        .sort((a, b) => a.hp - b.hp || (a.id < b.id ? -1 : 1));
+      const target = alive[0] ?? null;
+      if (target) {
         // Verteidigungsbonus: eingegrabene Verteidiger erleiden weniger Schaden.
-        const rate = tg.defending ? unitDamageVsDefender : unitDamage;
-        const spent = Math.min(u, need / rate);
-        u -= spent;
-        dealt += spent * rate;
+        const dealt =
+          target.state === 'defending' && target.entrenched ? damage * entrenchedFactor : damage;
+        target.hp = Math.max(0, target.hp - dealt);
+        addEvent({ type: 'damage', amount: dealt, boss: false, faction: target.faction, where });
+      } else if (bossTargetFaction) {
+        boss[bossTargetFaction].hp = Math.max(0, boss[bossTargetFaction].hp - damage);
+        addEvent({ type: 'damage', amount: damage, boss: true, faction: bossTargetFaction, where });
       }
-      if (dealt > 0) hits.push({ target: tg, damage: dealt });
     }
-    return hits;
-  }
 
-  // Ein Schadensintervall an einem umkämpften Punkt: beide Seiten tauschen
-  // gleichzeitig Schaden aus, danach fallen Gruppen und Bosse mit 0 Hitpoints.
-  function damageTick(nodeId, t, defeated) {
-    const node = map.nodes[nodeId];
-    const here = combatants(nodeId);
-    const bossFaction = node.type === 'boss' && bossAlive[node.faction] ? node.faction : null;
-    const sides = {};
-    for (const fac of ['blue', 'red']) {
-      const enemy = enemyOf(fac);
-      const targets = here
-        .filter((g) => g.faction === enemy)
-        .sort((a, b) => a.hp - b.hp || (a.id < b.id ? -1 : 1))
-        .map((g) => ({
-          kind: 'group',
-          g,
-          hp: g.hp,
-          defending: g.state === 'defending' && g.entrenched,
-        }));
-      if (bossFaction === enemy) {
-        targets.push({ kind: 'boss', faction: enemy, hp: boss[enemy].hp, defending: false });
-      }
-      sides[fac] = {
-        units: here.filter((g) => g.faction === fac).reduce((s, g) => s + g.size, 0),
-        flat: bossFaction === fac ? bossDamage : 0,
-        targets,
-      };
-    }
-    if (!sides.blue.targets.length || !sides.red.targets.length) return;
-
-    const hits = [
-      ...allocateDamage(sides.blue.units, sides.blue.flat, sides.blue.targets),
-      ...allocateDamage(sides.red.units, sides.red.flat, sides.red.targets),
-    ];
-    for (const { target, damage } of hits) {
-      if (target.kind === 'group') target.g.hp = Math.max(0, target.g.hp - damage);
-      else boss[target.faction].hp = Math.max(0, boss[target.faction].hp - damage);
-      addEvent({
-        type: 'damage',
-        amount: damage,
-        boss: target.kind === 'boss',
-        faction: target.kind === 'boss' ? target.faction : target.g.faction,
-        where: { node: nodeId },
-      });
-    }
-    for (const g of here) {
-      if (g.hp <= EPS) {
-        addLog(`${FACTIONS[g.faction].name}-Trupp (${g.size}) fällt bei ${nodeName(nodeId)}.`);
+    for (const g of groups) {
+      if (g.hp <= EPS && g.state !== 'dead') {
+        if (g.state === 'edgeFight') {
+          addLog(
+            `${groupLabel(g)} fällt zwischen ${nodeName(g.edgeCombat.a)} und ` +
+              `${nodeName(g.edgeCombat.b)}.`
+          );
+        } else {
+          addLog(`${groupLabel(g)} fällt bei ${nodeName(g.node)}.`);
+        }
         die(g, t);
       }
     }
-    if (bossFaction && boss[bossFaction].hp <= EPS) {
-      bossAlive[bossFaction] = false;
-      defeated.push(bossFaction);
-      addLog(`${node.name} ist gefallen!`);
-      addEvent({ type: 'bossDown', faction: bossFaction, where: { node: nodeId } });
-    }
-  }
-
-  // Schadensintervall eines Wegstück-Kampfs: offenes Feld – kein Boss, kein
-  // Verteidigungsbonus, ansonsten identisch zum Knotenkampf (gleichzeitiger
-  // Schlagabtausch gegen den Hitpoint-Stand zu Intervallbeginn).
-  function edgeDamageTick(c, t) {
-    const here = groups.filter((g) => g.edgeCombat === c && g.state === 'edgeFight');
-    const hits = [];
     for (const fac of ['blue', 'red']) {
-      const targets = here
-        .filter((g) => g.faction !== fac)
-        .sort((a, b) => a.hp - b.hp || (a.id < b.id ? -1 : 1))
-        .map((g) => ({ kind: 'group', g, hp: g.hp, defending: false }));
-      const units = here.filter((g) => g.faction === fac).reduce((s, g) => s + g.size, 0);
-      hits.push(...allocateDamage(units, 0, targets));
-    }
-    for (const { target, damage } of hits) {
-      target.g.hp = Math.max(0, target.g.hp - damage);
-      addEvent({
-        type: 'damage',
-        amount: damage,
-        boss: false,
-        faction: target.g.faction,
-        where: { edge: { a: c.a, b: c.b, frac: c.frac } },
-      });
-    }
-    for (const g of here) {
-      if (g.hp <= EPS) {
-        addLog(
-          `${FACTIONS[g.faction].name}-Trupp (${g.size}) fällt zwischen ` +
-            `${nodeName(c.a)} und ${nodeName(c.b)}.`
-        );
-        die(g, t);
+      if (bossAlive[fac] && boss[fac].hp <= EPS) {
+        bossAlive[fac] = false;
+        defeated.push(fac);
+        addLog(`${nodeName(map.bosses[fac])} ist gefallen!`);
+        addEvent({ type: 'bossDown', faction: fac, where: { node: map.bosses[fac] } });
       }
     }
   }
@@ -450,27 +431,43 @@ export function createSim({ map, config, plans }) {
         g.state = 'moving';
         g.fighting = false;
         g.edgeCombat = null;
-        g.departT = t - g.edgeFrac * edgeTime;
-        g.arriveT = t + (1 - g.edgeFrac) * edgeTime;
+        g.nextAttackAt = Infinity;
+        g.departT = t - g.edgeFrac * g.edgeTime;
+        g.arriveT = g.departT + g.edgeTime;
       }
     }
   }
 
-  // Kampfzustand aller Punkte aktualisieren: neue Kämpfe beginnen, beendete
-  // Kämpfe geben die Überlebenden (mit ihren restlichen Hitpoints) wieder frei.
+  // Kampfzustand aller Knoten aktualisieren: neue Kämpfe beginnen (jede neu
+  // eingreifende Einheit erhält ihren eigenen Angriffstimer), beendete Kämpfe
+  // geben die Überlebenden (mit ihren restlichen Hitpoints) wieder frei.
   function updateCombatState(t) {
     for (const n of map.nodeList) {
       const here = combatants(n.id);
       if (contested(n.id)) {
-        if (!combatTicks.has(n.id)) {
-          combatTicks.set(n.id, t + tickInterval);
+        if (!nodeCombats.has(n.id)) {
+          nodeCombats.add(n.id);
           addLog(`Kampf um ${n.name} entbrennt.`);
           addEvent({ type: 'combatStart', where: { node: n.id } });
         }
-        for (const g of here) g.fighting = true;
+        for (const g of here) {
+          if (!g.fighting) {
+            g.fighting = true;
+            g.nextAttackAt = t + g.attackInterval;
+          }
+        }
+        if (n.type === 'boss' && bossAlive[n.faction] && bossAttackAt[n.faction] === Infinity) {
+          bossAttackAt[n.faction] = t + bossAttackInterval;
+        }
       } else {
-        combatTicks.delete(n.id);
-        for (const g of here) g.fighting = false;
+        nodeCombats.delete(n.id);
+        for (const g of here) {
+          if (g.fighting) {
+            g.fighting = false;
+            g.nextAttackAt = Infinity;
+          }
+        }
+        if (n.type === 'boss') bossAttackAt[n.faction] = Infinity;
       }
     }
   }
@@ -480,33 +477,20 @@ export function createSim({ map, config, plans }) {
       if (g.state === 'moving' && g.arriveT <= t + EPS) {
         g.node = g.edgeTo;
         g.state = 'atNode';
-        g.arrivedAt = t;
         g.edgeFrom = null;
         g.edgeTo = null;
       } else if (g.state === 'dead' && g.respawnAt <= t + EPS) {
         g.node = g.graveyardNode;
         g.state = 'atNode';
-        g.arrivedAt = t;
         g.respawnAt = Infinity;
         g.hp = g.maxHp; // Respawn stellt die vollen Hitpoints wieder her.
-        addLog(`${FACTIONS[g.faction].name}-Trupp (${g.size}) kehrt am ${nodeName(g.node)} zurück.`);
+        addLog(`${groupLabel(g)} kehrt am ${nodeName(g.node)} zurück.`);
         addEvent({ type: 'respawn', faction: g.faction, where: { node: g.node } });
       }
     }
     processEncounters(t);
     const defeated = [];
-    for (const [nodeId, tickAt] of [...combatTicks.entries()].sort()) {
-      if (tickAt <= t + EPS) {
-        damageTick(nodeId, t, defeated);
-        combatTicks.set(nodeId, t + tickInterval);
-      }
-    }
-    for (const c of edgeCombats) {
-      if (c.tickAt <= t + EPS) {
-        edgeDamageTick(c, t);
-        c.tickAt = t + tickInterval;
-      }
-    }
+    processAttacks(t, defeated);
     if (defeated.length) {
       if (defeated.length === 2) {
         result = { winner: 'draw', reason: 'Beide Anführer fielen im selben Moment.' };
@@ -528,9 +512,9 @@ export function createSim({ map, config, plans }) {
     for (const g of groups) {
       if (g.state === 'moving') t = Math.min(t, g.arriveT);
       else if (g.state === 'dead') t = Math.min(t, g.respawnAt);
+      t = Math.min(t, g.nextAttackAt);
     }
-    for (const tickAt of combatTicks.values()) t = Math.min(t, tickAt);
-    for (const c of edgeCombats) t = Math.min(t, c.tickAt);
+    for (const fac of ['blue', 'red']) t = Math.min(t, bossAttackAt[fac]);
     t = Math.min(t, earliestEncounterTime());
     return t;
   }

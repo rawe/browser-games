@@ -479,9 +479,11 @@ export function createRenderer(canvas, map) {
     }
   }
 
+  // Einheiten-Token: Größe und Kurzzeichen kommen aus der Typdefinition
+  // (g.def), damit neue Einheitentypen ohne Renderer-Anpassung funktionieren.
   function drawToken(x, y, g, opts = {}) {
     const c = FACTIONS[g.faction];
-    const r = 11 + Math.min(9, g.size * 1.4);
+    const r = g.def?.radius ?? 16;
     ctx.save();
     if (opts.ghost) ctx.globalAlpha = 0.45;
     // Marschieren wippt, Kämpfen zittert.
@@ -520,7 +522,7 @@ export function createRenderer(canvas, map) {
     ctx.strokeStyle = 'rgba(255,255,255,0.4)';
     ctx.lineWidth = 1.4;
     ctx.stroke();
-    label(x, yy + 0.5, String(g.size), { color: '#fff', weight: 700, size: r > 14 ? 13 : 12 });
+    label(x, yy + 0.5, g.def?.short ?? '', { color: '#fff', weight: 700, size: r > 13 ? 13 : 11 });
     if (g.maxHp != null && !opts.ghost) {
       drawHpBar(x, yy - r - 11, Math.max(28, r * 2.1), g.hp, g.maxHp);
     }
@@ -655,7 +657,7 @@ export function createRenderer(canvas, map) {
         // Gegenverkehr weicht zur eigenen Seite aus, mehrere Gruppen fächern auf
         // (Abstand groß genug, damit sich die Lebensanzeigen nicht überlappen).
         const side = g.edgeFrom < g.edgeTo ? 1 : -1;
-        const off = side * 7 + (i - (list.length - 1) / 2) * 15;
+        const off = side * 7 + (i - (list.length - 1) / 2) * 18;
         const tx = p.x + (-dy / len) * off;
         const ty = p.y + (dx / len) * off;
         // Aufgewirbelter Schnee hinter marschierenden Trupps.
@@ -739,26 +741,21 @@ export function createRenderer(canvas, map) {
     const start = map.start[faction];
     const enemyBoss = map.bosses[enemyOf(faction)];
 
-    // Kleine Marker: welche Punkte sind bereits in Befehlen enthalten?
-    const attackCount = new Map();
-    const defendCount = new Map();
-    for (const o of pl.orders) {
-      if (!o) continue;
-      if (o.type === 'attack') for (const t of o.targets) attackCount.set(t, (attackCount.get(t) ?? 0) + 1);
-      if (o.type === 'defend') defendCount.set(o.target, (defendCount.get(o.target) ?? 0) + 1);
+    // Halte-Marker aller Einheiten (Pfadende von Einheiten mit „Halten").
+    const holdCount = new Map();
+    for (const u of pl.units) {
+      if (u.stance !== 'defend') continue;
+      const end = u.path.length ? u.path[u.path.length - 1] : start;
+      holdCount.set(end, (holdCount.get(end) ?? 0) + 1);
     }
 
-    // Route der ausgewählten Einheit hervorheben.
-    const sel = pl.orders[pl.selected];
-    let seq = null;
-    if (!sel || sel.type === 'attack') {
-      seq = [start, ...(sel?.targets ?? []), enemyBoss];
-    } else if (sel.type === 'defend') {
-      seq = [start, sel.target];
-    }
-    if (seq) strokeRoute(routePoints(seq), c.color);
-    if (sel && sel.type === 'attack') {
-      sel.targets.forEach((t, i) => {
+    // Pfad der ausgewählten Einheit hervorheben.
+    const sel = pl.units[pl.selected] ?? null;
+    if (sel) {
+      const seq = [start, ...sel.path];
+      if (sel.stance === 'attack' && seq[seq.length - 1] !== enemyBoss) seq.push(enemyBoss);
+      strokeRoute(routePoints(seq), c.color);
+      sel.path.forEach((t, i) => {
         const n = map.nodes[t];
         ctx.beginPath();
         ctx.arc(n.x + 14, n.y - 14, 8.5, 0, TAU);
@@ -769,30 +766,51 @@ export function createRenderer(canvas, map) {
         ctx.stroke();
         label(n.x + 14, n.y - 13.5, String(i + 1), { color: '#fff', weight: 700 });
       });
-    }
-    if (sel && sel.type === 'defend') {
-      const n = map.nodes[sel.target];
-      drawShieldIcon(n.x + 16, n.y - 14, 8, c.color);
+      const endId = sel.path.length ? sel.path[sel.path.length - 1] : start;
+      if (sel.stance === 'defend') {
+        const n = map.nodes[endId];
+        drawShieldIcon(n.x + 16, n.y - 14, 8, c.color);
+      }
+      // Mögliche nächste Wegpunkte (Nachbarn des Pfadendes) pulsierend markieren.
+      const pulse = 0.5 + 0.5 * Math.sin(anim * 5);
+      ctx.save();
+      ctx.setLineDash([5, 7]);
+      ctx.lineDashOffset = -anim * 16;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = c.color;
+      ctx.globalAlpha = 0.45 + pulse * 0.35;
+      for (const nb of map.adjacency[endId]) {
+        if (map.nodes[nb].type === 'graveyard') continue;
+        const n = map.nodes[nb];
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, 22 + pulse * 2.5, 0, TAU);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
 
-    for (const [t, count] of defendCount) {
+    for (const [t, count] of holdCount) {
       const n = map.nodes[t];
       drawShieldIcon(n.x - 17, n.y - 14, 6.5, 'rgba(255,215,106,0.9)');
       if (count > 1) label(n.x - 17, n.y - 26, `×${count}`, { color: '#ffd76a' });
     }
-    for (const [t, count] of attackCount) {
-      const n = map.nodes[t];
-      label(n.x - 18, n.y + 14, `⚔${count > 1 ? '×' + count : ''}`, { color: '#f4c9c2', size: 12 });
-    }
 
-    // Eigene Truppe wartet am Start.
+    // Eigene Armee wartet am Start (Zahl = angeworbene Einheiten).
     const sn = map.nodes[start];
-    drawToken(sn.x - 46, sn.y + 6, { faction, size: pl.unitCount, state: 'atNode' });
-    // Gegnerische Truppe als Silhouette am anderen Ende.
+    drawToken(sn.x - 46, sn.y + 6, {
+      faction,
+      def: { radius: 15, short: String(pl.units.length) },
+      state: 'atNode',
+    });
+    // Gegnerische Armee als Silhouette am anderen Ende – ihr Plan bleibt geheim.
     const en = map.nodes[map.start[enemyOf(faction)]];
     ctx.save();
     ctx.globalAlpha = 0.5;
-    drawToken(en.x - 46, en.y + 6, { faction: enemyOf(faction), size: pl.unitCount, state: 'atNode' });
+    drawToken(en.x - 46, en.y + 6, {
+      faction: enemyOf(faction),
+      def: { radius: 15, short: '?' },
+      state: 'atNode',
+    });
     ctx.restore();
   }
 
