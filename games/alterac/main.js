@@ -7,7 +7,6 @@ import {
   UNIT_TYPES,
   UNIT_STAT_FIELDS,
   RESOURCE_OPTIONS,
-  TEMPO_OPTIONS,
   RESPAWN_OPTIONS,
   GRAVEYARD_CAPTURE_OPTIONS,
   CONFIG_SECTIONS,
@@ -53,7 +52,6 @@ function fillSelect(el, options, selectedValue) {
 }
 
 fillSelect(document.getElementById('opt-resources'), RESOURCE_OPTIONS, DEFAULT_CONFIG.resources);
-fillSelect(document.getElementById('opt-tempo'), TEMPO_OPTIONS, DEFAULT_CONFIG.edgeTime);
 fillSelect(document.getElementById('opt-respawn'), RESPAWN_OPTIONS, DEFAULT_CONFIG.respawnTime);
 fillSelect(
   document.getElementById('opt-capture'),
@@ -195,7 +193,6 @@ document.getElementById('setup-form').addEventListener('submit', (ev) => {
   config = {
     ...DEFAULT_CONFIG,
     resources: Number(document.getElementById('opt-resources').value),
-    edgeTime: Number(document.getElementById('opt-tempo').value),
     respawnTime: Number(document.getElementById('opt-respawn').value),
     graveyardCaptureTime: Number(document.getElementById('opt-capture').value),
     towersPerFaction: towersToggle.checked ? TOWERS_ON_COUNT : 0,

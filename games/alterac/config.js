@@ -88,12 +88,6 @@ export const RESOURCE_OPTIONS = [
   { label: 'Totaler Krieg (24 Punkte)', value: 24 },
 ];
 
-export const TEMPO_OPTIONS = [
-  { label: 'Schnell', edgeTime: 1.1 },
-  { label: 'Normal', edgeTime: 1.7 },
-  { label: 'Gemütlich', edgeTime: 2.4 },
-];
-
 export const RESPAWN_OPTIONS = [
   { label: 'Kurz (4 s)', value: 4 },
   { label: 'Mittel (7 s)', value: 7 },
@@ -112,7 +106,9 @@ export const DEFAULT_CONFIG = {
   // UNIT_TYPES – der Zusammenbau passiert zentral in resolveUnitTypes().
   unitStats: DEFAULT_UNIT_STATS,
   resources: 12, // Ressourcenpunkte pro Spieler zum Anwerben von Einheiten
-  edgeTime: 1.7, // Basis-Reisezeit pro Wegstück in Sekunden (bei speed = 1)
+  // Basis-Reisezeit pro Wegstück in Sekunden (bei speed = 1). Fester Default,
+  // nicht im Setup wählbar – hier anpassen, um das globale Marschtempo zu ändern.
+  edgeTime: 1.7,
   respawnTime: 7, // Sekunden bis zum Respawn am Friedhof
   graveyardCaptureTime: 10, // Sekunden ununterbrochener Präsenz bis zur Einnahme eines Friedhofs
   entrenchedFactor: 0.6, // Anteil des Schadens, den eingegrabene Verteidiger erleiden
