@@ -47,6 +47,19 @@ lesen ausschließlich diese Definitionen – neue Typen oder Attribute lassen
 sich ergänzen, ohne Kernlogik anzupassen. Jede Einheit ist eigenständig;
 Fusionen oder Folgen-Befehle gibt es nicht.
 
+Die Zahlenwerte der Typen (Kosten, Lebenspunkte, Schaden, Angriffsintervall,
+Tempo) sind Datei-Defaults und lassen sich – wie die Boss- und Turmwerte – im
+Setup je Partie feinjustieren. Das aufklappbare **Erweitert-Menü** zeigt dazu
+je Typ eine Gruppe Zahlenfelder (`UNIT_STAT_FIELDS` in `config.js`); die UI
+klemmt jede Eingabe auf ihren gültigen Bereich und schreibt das Ergebnis nach
+`config.unitStats`. Der **einzige Abrufpunkt** der effektiven Werte ist
+`resolveUnitTypes(config)` bzw. `resolveUnitTypeMap(config)`: beide verbinden
+die festen Identitätsfelder (Name, Icon, Radius …) mit den – ggf.
+überschriebenen – Zahlenwerten und fallen pro fehlendem Wert auf den
+Datei-Default zurück. Sim, Planer, KI und Rendering (über die dem Trupp
+angehängte `def`) holen ihre Werte ausschließlich hierüber, egal ob Datei-
+Default oder Override.
+
 Im Kampf schlägt jede Einheit in ihrem eigenen Angriffsintervall zu und trifft
 das schwächste gegnerische Ziel an ihrem Ort (der Boss ist stets das letzte
 Ziel). Eingegrabene Verteidiger erleiden nur einen konfigurierbaren Anteil des
@@ -59,7 +72,8 @@ Der Boss hat eigene Hitpoints, kämpft mit und regeneriert sich nicht.
 Alle Friedhofsdaten sind zentral konfigurierbar: Lage und Verbindungen in
 `NODES`/`EDGES`, Startbesitz und Heimat-Markierung in `GRAVEYARDS` (beides
 `map.js`), die Einnahmedauer als `graveyardCaptureTime` in `config.js`
-(Standard: 10 Sekunden, im Setup wählbar). Der laufende Besitzstand einer
+(Standard: 10 Sekunden, im Erweitert-Menü unter „Zeiten" einstellbar – ebenso
+die Respawnzeit `respawnTime`). Der laufende Besitzstand einer
 Schlacht lebt im Simulationszustand (`sim.graveyards`).
 
 - **Sackgassen abseits der Hauptwege:** Jeder Friedhof hat genau eine

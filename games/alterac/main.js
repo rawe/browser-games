@@ -5,10 +5,8 @@ import { createMap, FACTIONS } from './map.js';
 import {
   DEFAULT_CONFIG,
   UNIT_TYPES,
+  UNIT_STAT_FIELDS,
   RESOURCE_OPTIONS,
-  TEMPO_OPTIONS,
-  RESPAWN_OPTIONS,
-  GRAVEYARD_CAPTURE_OPTIONS,
   CONFIG_SECTIONS,
   TOWERS_ON_COUNT,
 } from './config.js';
@@ -44,25 +42,20 @@ function fillSelect(el, options, selectedValue) {
   el.innerHTML = '';
   for (const o of options) {
     const opt = document.createElement('option');
-    opt.value = String(o.value ?? o.edgeTime);
+    opt.value = String(o.value);
     opt.textContent = o.label;
-    if ((o.value ?? o.edgeTime) === selectedValue) opt.selected = true;
+    if (o.value === selectedValue) opt.selected = true;
     el.appendChild(opt);
   }
 }
 
 fillSelect(document.getElementById('opt-resources'), RESOURCE_OPTIONS, DEFAULT_CONFIG.resources);
-fillSelect(document.getElementById('opt-tempo'), TEMPO_OPTIONS, DEFAULT_CONFIG.edgeTime);
-fillSelect(document.getElementById('opt-respawn'), RESPAWN_OPTIONS, DEFAULT_CONFIG.respawnTime);
-fillSelect(
-  document.getElementById('opt-capture'),
-  GRAVEYARD_CAPTURE_OPTIONS,
-  DEFAULT_CONFIG.graveyardCaptureTime
-);
 
 // ---------------------------------------------- Erweiterte Einstellungen (Zahlenfelder)
-// Die Felder werden datengetrieben aus CONFIG_SECTIONS erzeugt. Prozent-Felder
-// zeigen im Menü ganze Prozent, intern bleibt der Anteil (0–1) erhalten.
+// Die Felder werden datengetrieben erzeugt: je Einheitentyp eine Gruppe aus
+// UNIT_STAT_FIELDS (schreibt nach config.unitStats), dazu die Boss-/Turm-Gruppen
+// aus CONFIG_SECTIONS (schreiben direkt in config[key]). Prozent-Felder zeigen
+// im Menü ganze Prozent, intern bleibt der Anteil (0–1) erhalten.
 const towersToggle = document.getElementById('opt-towers');
 const advancedGroups = document.getElementById('advanced-groups');
 
@@ -74,19 +67,63 @@ function clampField(field, displayValue) {
   return Math.min(field.max, Math.max(field.min, displayValue));
 }
 
-// Feld aus dem DOM lesen, auf [min,max] klemmen und in den config-Wert wandeln.
-function readFieldValue(field) {
-  const input = document.getElementById(`adv-${field.key}`);
+// Erzeugt ein beschriftetes Zahlenfeld für ein Feld-Deskriptor (CONFIG_SECTIONS
+// oder UNIT_STAT_FIELDS). `id` ist die DOM-Kennung, `rawDefault` der interne
+// Ausgangswert (bei Prozent 0–1), auf den leere/ungültige Eingaben zurückfallen.
+function buildNumberField(field, id, rawDefault) {
+  const label = document.createElement('label');
+  label.className = 'num-field';
+  const span = document.createElement('span');
+  span.textContent = field.unit ? `${field.label} (${field.unit})` : field.label;
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.id = id;
+  input.min = field.min;
+  input.max = field.max;
+  input.step = field.step;
+  input.value = fieldToDisplay(field, rawDefault);
+  // Von Hand getippte Werte beim Verlassen sofort auf den gültigen Bereich klemmen.
+  input.addEventListener('change', () => {
+    if (input.value === '' || Number.isNaN(input.valueAsNumber)) {
+      input.value = fieldToDisplay(field, rawDefault);
+      return;
+    }
+    input.value = clampField(field, input.valueAsNumber);
+  });
+  label.appendChild(span);
+  label.appendChild(input);
+  return label;
+}
+
+// Feld aus dem DOM lesen, auf [min,max] klemmen und in den internen Wert wandeln.
+function readNumberField(field, id, rawDefault) {
+  const input = document.getElementById(id);
   let v = input.valueAsNumber;
-  if (Number.isNaN(v)) v = fieldToDisplay(field, DEFAULT_CONFIG[field.key]);
+  if (Number.isNaN(v)) v = fieldToDisplay(field, rawDefault);
   v = clampField(field, v);
   if (field.kind === 'int') v = Math.round(v);
   if (field.kind === 'percent') v = v / 100;
   return v;
 }
 
+// DOM-Kennung eines Einheiten-Statfelds (Typ × Wert).
+const unitFieldId = (typeKey, statKey) => `adv-unit-${typeKey}-${statKey}`;
+
 function buildAdvanced() {
   advancedGroups.innerHTML = '';
+  // Einheitentypen zuerst: je Typ eine Gruppe mit den Statfeldern.
+  for (const type of UNIT_TYPES) {
+    const group = document.createElement('fieldset');
+    group.className = 'advanced-group';
+    const legend = document.createElement('legend');
+    legend.textContent = `${type.icon} ${type.name}`;
+    group.appendChild(legend);
+    for (const stat of UNIT_STAT_FIELDS) {
+      group.appendChild(buildNumberField(stat, unitFieldId(type.key, stat.key), type[stat.key]));
+    }
+    advancedGroups.appendChild(group);
+  }
+  // Danach die Boss-/Turm-Gruppen aus CONFIG_SECTIONS.
   for (const section of CONFIG_SECTIONS) {
     const group = document.createElement('fieldset');
     group.className = 'advanced-group';
@@ -95,31 +132,26 @@ function buildAdvanced() {
     legend.textContent = section.label;
     group.appendChild(legend);
     for (const field of section.fields) {
-      const label = document.createElement('label');
-      label.className = 'num-field';
-      const span = document.createElement('span');
-      span.textContent = field.unit ? `${field.label} (${field.unit})` : field.label;
-      const input = document.createElement('input');
-      input.type = 'number';
-      input.id = `adv-${field.key}`;
-      input.min = field.min;
-      input.max = field.max;
-      input.step = field.step;
-      input.value = fieldToDisplay(field, DEFAULT_CONFIG[field.key]);
-      // Von Hand getippte Werte beim Verlassen sofort auf den gültigen Bereich klemmen.
-      input.addEventListener('change', () => {
-        if (input.value === '' || Number.isNaN(input.valueAsNumber)) {
-          input.value = fieldToDisplay(field, DEFAULT_CONFIG[field.key]);
-          return;
-        }
-        input.value = clampField(field, input.valueAsNumber);
-      });
-      label.appendChild(span);
-      label.appendChild(input);
-      group.appendChild(label);
+      group.appendChild(buildNumberField(field, `adv-${field.key}`, DEFAULT_CONFIG[field.key]));
     }
     advancedGroups.appendChild(group);
   }
+}
+
+// Alle Einheiten-Statfelder auslesen → { light: {cost,hp,…}, medium: {…}, … }.
+function readUnitStats() {
+  const unitStats = {};
+  for (const type of UNIT_TYPES) {
+    unitStats[type.key] = {};
+    for (const stat of UNIT_STAT_FIELDS) {
+      unitStats[type.key][stat.key] = readNumberField(
+        stat,
+        unitFieldId(type.key, stat.key),
+        type[stat.key]
+      );
+    }
+  }
+  return unitStats;
 }
 
 // Turm-Gruppen ausgrauen und deaktivieren, solange der Türme-Schalter aus ist.
@@ -153,14 +185,13 @@ document.getElementById('setup-form').addEventListener('submit', (ev) => {
   config = {
     ...DEFAULT_CONFIG,
     resources: Number(document.getElementById('opt-resources').value),
-    edgeTime: Number(document.getElementById('opt-tempo').value),
-    respawnTime: Number(document.getElementById('opt-respawn').value),
-    graveyardCaptureTime: Number(document.getElementById('opt-capture').value),
     towersPerFaction: towersToggle.checked ? TOWERS_ON_COUNT : 0,
+    // Einheitenwerte aus dem Erweitert-Bereich (zentral via resolveUnitTypes gelesen).
+    unitStats: readUnitStats(),
   };
   // Feinwerte aus dem Erweitert-Bereich übernehmen (bossHp, Boss- und Turmwerte).
   for (const section of CONFIG_SECTIONS) {
-    for (const field of section.fields) config[field.key] = readFieldValue(field);
+    for (const field of section.fields) config[field.key] = readNumberField(field, `adv-${field.key}`, DEFAULT_CONFIG[field.key]);
   }
   view.config = config;
   mode = document.getElementById('opt-mode').value;

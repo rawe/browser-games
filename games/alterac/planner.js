@@ -4,7 +4,7 @@
 // verarbeitet Karten-Taps.
 
 import { FACTIONS, towerNodes } from './map.js';
-import { UNIT_TYPES, UNIT_TYPE_BY_KEY, MAX_PATH_LENGTH } from './config.js';
+import { resolveUnitTypes, resolveUnitTypeMap, MAX_PATH_LENGTH } from './config.js';
 
 // Kurzbeschreibung des Plans einer Einheit für die Einheitenleiste. `towers`
 // ist die aktive Turmzuordnung { nodeId: faction }; endet der Pfad auf einem
@@ -38,8 +38,11 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
   const start = map.start[faction];
   // Aktive Turmzuordnung { nodeId: faction } für die Plan-Zusammenfassungen.
   const towers = towerNodes(map, config?.towersPerFaction ?? 0);
+  // Effektive Einheitenwerte dieser Partie (Datei-Defaults ggf. überschrieben).
+  const unitTypes = resolveUnitTypes(config);
+  const byKey = resolveUnitTypeMap(config);
 
-  const spent = () => state.units.reduce((s, u) => s + UNIT_TYPE_BY_KEY[u.type].cost, 0);
+  const spent = () => state.units.reduce((s, u) => s + byKey[u.type].cost, 0);
 
   panel.innerHTML = `
     <div class="panel-head">
@@ -48,7 +51,7 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     </div>
     <div class="recruit-row">
       <span class="budget" id="budget"></span>
-      ${UNIT_TYPES.map(
+      ${unitTypes.map(
         (t) => `
         <button class="btn recruit" data-type="${t.key}"
           title="${t.desc} ${t.hp} LP · ${t.damage} Schaden alle ${fmt(t.attackInterval)} s · Tempo ×${fmt(t.speed)}">
@@ -94,7 +97,7 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     const used = spent();
     budgetEl.textContent = `${used}/${state.budget} ⬢`;
     for (const b of recruitButtons) {
-      b.disabled = UNIT_TYPE_BY_KEY[b.dataset.type].cost > state.budget - used;
+      b.disabled = byKey[b.dataset.type].cost > state.budget - used;
     }
     const sel = state.units[state.selected] ?? null;
     for (const b of stanceButtons) {
@@ -103,7 +106,7 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     }
     chipsEl.innerHTML = '';
     state.units.forEach((u, i) => {
-      const def = UNIT_TYPE_BY_KEY[u.type];
+      const def = byKey[u.type];
       const chip = document.createElement('button');
       chip.className = 'chip';
       if (i === state.selected) chip.classList.add('selected');
@@ -119,7 +122,7 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
 
   for (const b of recruitButtons) {
     b.addEventListener('click', () => {
-      const def = UNIT_TYPE_BY_KEY[b.dataset.type];
+      const def = byKey[b.dataset.type];
       if (spent() + def.cost > state.budget) {
         flashHint('Nicht genug Ressourcen für diese Einheit.');
         return;
