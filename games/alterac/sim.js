@@ -11,6 +11,10 @@
 // Jede kämpfende Einheit schlägt in ihrem eigenen Intervall zu und trifft das
 // schwächste gegnerische Ziel an ihrem Ort (der Boss zuletzt). Eingegrabene
 // Verteidiger erleiden nur den `entrenchedFactor`-Anteil des Schadens.
+// Zusätzlich führt jeder Boss in eigenem Takt (`bossAoeInterval`) einen
+// Flächen-Gegenschlag, der ALLE gerade an ihm angreifenden Einheiten gleichzeitig
+// trifft (`bossAoeDamage`, gesenkt um denselben Turm-Debuff wie der Einzelangriff)
+// – so wird ein unkoordinierter Massensturm auf den Boss riskant.
 // Erreicht eine Einheit oder der Boss 0 Hitpoints, fällt sie. Überlebende
 // behalten ihre aktuellen Hitpoints, Respawns kehren mit vollen zurück.
 //
@@ -60,6 +64,8 @@ export function createSim({ map, config, plans }) {
     bossHp,
     bossDamage,
     bossAttackInterval,
+    bossAoeDamage,
+    bossAoeInterval,
     maxTime,
     towersPerFaction,
     towerHp,
@@ -82,6 +88,9 @@ export function createSim({ map, config, plans }) {
   };
   // Angriffstimer der Bosse (Infinity = kein Kampf am Boss-Knoten).
   const bossAttackAt = { blue: Infinity, red: Infinity };
+  // Takt des Flächen-Gegenschlags je Boss (Infinity = kein Kampf am Boss-Knoten).
+  // Läuft unabhängig vom Einzelangriff und trifft alle Angreifer gleichzeitig.
+  const bossAoeAt = { blue: Infinity, red: Infinity };
   // Türme: ortsfeste Kampfeinheiten an markierten Wegpunkten. Sie bewegen sich
   // nicht, regenerieren nicht und respawnen nicht. `engaged` ist true, solange
   // ein Turmkampf läuft (eine gegnerische Einheit greift den Turm ausdrücklich
@@ -195,11 +204,16 @@ export function createSim({ map, config, plans }) {
     return towers[g.towerTarget]?.alive ? g.towerTarget : null;
   }
 
-  // Aktueller Angriffsschaden eines Fürsten: je zerstörtem eigenen Turm um
-  // `towerDamageReduction` des Basis-Schadens gesenkt, nie unter `bossDamageFloor`.
+  // Turm-Debuff-Faktor eines Fürsten: je zerstörtem eigenen Turm um
+  // `towerDamageReduction` gesenkt, nie unter `bossDamageFloor`. Gilt einheitlich
+  // für Einzelangriff UND Flächen-Gegenschlag.
+  function bossDamageFactor(faction) {
+    return Math.max(bossDamageFloor, 1 - towerDamageReduction * destroyedTowers[faction]);
+  }
+
+  // Aktueller Angriffsschaden eines Fürsten (Einzelangriff), um den Turm-Debuff gesenkt.
   function bossDamageOf(faction) {
-    const factor = Math.max(bossDamageFloor, 1 - towerDamageReduction * destroyedTowers[faction]);
-    return bossDamage * factor;
+    return bossDamage * bossDamageFactor(faction);
   }
 
   function combatants(nodeId) {
@@ -507,6 +521,7 @@ export function createSim({ map, config, plans }) {
     const attacks = [];
     for (const fac of ['blue', 'red']) {
       if (bossAlive[fac] && bossAttackAt[fac] <= t + EPS) attacks.push({ kind: 'boss', faction: fac });
+      if (bossAlive[fac] && bossAoeAt[fac] <= t + EPS) attacks.push({ kind: 'bossAoe', faction: fac });
     }
     for (const g of groups) {
       if (g.fighting && g.nextAttackAt <= t + EPS) attacks.push({ kind: 'group', g });
@@ -520,10 +535,12 @@ export function createSim({ map, config, plans }) {
     // Kennung, dann Türme nach Knoten.
     const attackKey = (a) =>
       a.kind === 'boss'
-        ? `0${a.faction}`
-        : a.kind === 'tower'
-          ? `2${a.tw.node}`
-          : `1${a.g.id.padStart(4, '0')}`;
+        ? `0${a.faction}a`
+        : a.kind === 'bossAoe'
+          ? `0${a.faction}b`
+          : a.kind === 'tower'
+            ? `2${a.tw.node}`
+            : `1${a.g.id.padStart(4, '0')}`;
     attacks.sort((x, y) => {
       const kx = attackKey(x);
       const ky = attackKey(y);
@@ -531,6 +548,25 @@ export function createSim({ map, config, plans }) {
     });
 
     for (const atk of attacks) {
+      // Flächen-Gegenschlag: trifft ALLE gerade angreifenden Gegner am Boss-Knoten
+      // gleichzeitig (nicht nur den Schwächsten). Angreifer sind nie eingegraben,
+      // daher stets voller Schaden – gesenkt nur um den Turm-Debuff des Fürsten.
+      if (atk.kind === 'bossAoe') {
+        const faction = atk.faction;
+        bossAoeAt[faction] = t + bossAoeInterval;
+        const dmg = bossAoeDamage * bossDamageFactor(faction);
+        if (dmg <= EPS) continue;
+        const nodeId = map.bosses[faction];
+        const where = { node: nodeId };
+        const targets = combatants(nodeId).filter((o) => o.faction !== faction && o.hp > EPS);
+        if (!targets.length) continue;
+        addEvent({ type: 'bossAoe', faction, where });
+        for (const target of targets) {
+          target.hp = Math.max(0, target.hp - dmg);
+          addEvent({ type: 'damage', amount: dmg, boss: false, faction: target.faction, where });
+        }
+        continue;
+      }
       let faction;
       let damage;
       let where;
@@ -697,6 +733,9 @@ export function createSim({ map, config, plans }) {
         if (n.type === 'boss' && bossAlive[n.faction] && bossAttackAt[n.faction] === Infinity) {
           bossAttackAt[n.faction] = t + bossAttackInterval;
         }
+        if (n.type === 'boss' && bossAlive[n.faction] && bossAoeAt[n.faction] === Infinity) {
+          bossAoeAt[n.faction] = t + bossAoeInterval;
+        }
         if (tw && tw.alive) {
           if (towerEngaged && !tw.engaged) {
             tw.engaged = true;
@@ -716,7 +755,10 @@ export function createSim({ map, config, plans }) {
             g.nextAttackAt = Infinity;
           }
         }
-        if (n.type === 'boss') bossAttackAt[n.faction] = Infinity;
+        if (n.type === 'boss') {
+          bossAttackAt[n.faction] = Infinity;
+          bossAoeAt[n.faction] = Infinity;
+        }
         if (tw && tw.alive && tw.engaged) {
           tw.engaged = false;
           tw.attackAt = Infinity;
@@ -784,7 +826,7 @@ export function createSim({ map, config, plans }) {
       else if (g.state === 'dead') t = Math.min(t, g.respawnAt);
       t = Math.min(t, g.nextAttackAt);
     }
-    for (const fac of ['blue', 'red']) t = Math.min(t, bossAttackAt[fac]);
+    for (const fac of ['blue', 'red']) t = Math.min(t, bossAttackAt[fac], bossAoeAt[fac]);
     for (const nodeId of towerIds) {
       const tw = towers[nodeId];
       if (tw.alive && tw.engaged) t = Math.min(t, tw.attackAt);

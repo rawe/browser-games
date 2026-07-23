@@ -103,6 +103,13 @@ export const DEFAULT_CONFIG = {
   bossHp: 100, // maximale Hitpoints des Endbosses
   bossDamage: 12, // Basis-Schaden des Endbosses pro Angriff (Grundwert für die Turm-Reduktion)
   bossAttackInterval: 1, // Sekunden zwischen zwei Boss-Angriffen
+  // Flächen-Gegenschlag des Fürsten: trifft in eigenem Takt ALLE gerade an ihm
+  // angreifenden Einheiten gleichzeitig – so wird ein unkoordinierter Massensturm
+  // riskant, weil der ausgeteilte Gesamtschaden mit der Zahl der Angreifer wächst.
+  // Unterliegt demselben Turm-Debuff wie der Einzelangriff (siehe bossDamageOf in
+  // sim.js), gedeckelt durch bossDamageFloor. AoE-Schaden 0 schaltet ihn ab.
+  bossAoeDamage: 6, // Schaden pro Flächenschlag an jede angreifende Einheit (0 = aus)
+  bossAoeInterval: 3, // Sekunden zwischen zwei Flächenschlägen
   maxTime: 300, // Sicherheitslimit der Simulation in Sekunden
 
   // ------------------------------------------------------------------ Türme
@@ -163,6 +170,8 @@ export const CONFIG_SECTIONS = [
       { key: 'bossHp', label: 'Boss-LP', min: 20, max: 400, step: 10, kind: 'int' },
       { key: 'bossDamage', label: 'Boss-Schaden', min: 1, max: 60, step: 1, kind: 'int' },
       { key: 'bossAttackInterval', label: 'Boss-Angriffsintervall', min: 0.2, max: 5, step: 0.1, kind: 'float', unit: 's' },
+      { key: 'bossAoeDamage', label: 'Boss-Flächenschaden', min: 0, max: 60, step: 1, kind: 'int' },
+      { key: 'bossAoeInterval', label: 'Boss-Flächenintervall', min: 0.2, max: 8, step: 0.1, kind: 'float', unit: 's' },
     ],
   },
 ];

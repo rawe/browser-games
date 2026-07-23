@@ -82,6 +82,17 @@ Schadens (`entrenchedFactor`). Aktuelle Hitpoints bleiben über Kämpfe hinweg
 erhalten; erst der Respawn am Friedhof stellt sie vollständig wieder her.
 Der Boss hat eigene Hitpoints, kämpft mit und regeneriert sich nicht.
 
+Zusätzlich führt der Boss einen **Flächen-Gegenschlag** aus: Neben seinem
+Einzelangriff trifft er in einem eigenen Takt (`bossAoeInterval`) **alle** gerade
+an ihm angreifenden Einheiten gleichzeitig für `bossAoeDamage` Schaden. Der
+ausgeteilte Gesamtschaden wächst so mit der Zahl der Angreifer – ein
+unkoordinierter Massensturm direkt auf den Boss wird dadurch verlustreich, und
+Vorarbeit über Türme und Friedhöfe lohnt sich. Der Flächenschaden unterliegt
+demselben Fürsten-Debuff wie der Einzelangriff (jeder zerstörte eigene Turm senkt
+ihn, Untergrenze `bossDamageFloor`). Beide Werte stehen zentral in `config.js` und
+sind im Erweitert-Menü unter „Boss" feinjustierbar; `bossAoeDamage: 0` schaltet den
+Flächenschlag ab.
+
 ## Friedhofssystem
 
 Alle Friedhofsdaten sind zentral konfigurierbar: Lage und Verbindungen in
