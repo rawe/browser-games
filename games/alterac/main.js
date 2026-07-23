@@ -7,8 +7,6 @@ import {
   UNIT_TYPES,
   UNIT_STAT_FIELDS,
   RESOURCE_OPTIONS,
-  RESPAWN_OPTIONS,
-  GRAVEYARD_CAPTURE_OPTIONS,
   CONFIG_SECTIONS,
   TOWERS_ON_COUNT,
 } from './config.js';
@@ -44,20 +42,14 @@ function fillSelect(el, options, selectedValue) {
   el.innerHTML = '';
   for (const o of options) {
     const opt = document.createElement('option');
-    opt.value = String(o.value ?? o.edgeTime);
+    opt.value = String(o.value);
     opt.textContent = o.label;
-    if ((o.value ?? o.edgeTime) === selectedValue) opt.selected = true;
+    if (o.value === selectedValue) opt.selected = true;
     el.appendChild(opt);
   }
 }
 
 fillSelect(document.getElementById('opt-resources'), RESOURCE_OPTIONS, DEFAULT_CONFIG.resources);
-fillSelect(document.getElementById('opt-respawn'), RESPAWN_OPTIONS, DEFAULT_CONFIG.respawnTime);
-fillSelect(
-  document.getElementById('opt-capture'),
-  GRAVEYARD_CAPTURE_OPTIONS,
-  DEFAULT_CONFIG.graveyardCaptureTime
-);
 
 // ---------------------------------------------- Erweiterte Einstellungen (Zahlenfelder)
 // Die Felder werden datengetrieben erzeugt: je Einheitentyp eine Gruppe aus
@@ -193,8 +185,6 @@ document.getElementById('setup-form').addEventListener('submit', (ev) => {
   config = {
     ...DEFAULT_CONFIG,
     resources: Number(document.getElementById('opt-resources').value),
-    respawnTime: Number(document.getElementById('opt-respawn').value),
-    graveyardCaptureTime: Number(document.getElementById('opt-capture').value),
     towersPerFaction: towersToggle.checked ? TOWERS_ON_COUNT : 0,
     // Einheitenwerte aus dem Erweitert-Bereich (zentral via resolveUnitTypes gelesen).
     unitStats: readUnitStats(),

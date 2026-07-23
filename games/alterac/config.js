@@ -88,18 +88,6 @@ export const RESOURCE_OPTIONS = [
   { label: 'Totaler Krieg (24 Punkte)', value: 24 },
 ];
 
-export const RESPAWN_OPTIONS = [
-  { label: 'Kurz (4 s)', value: 4 },
-  { label: 'Mittel (7 s)', value: 7 },
-  { label: 'Lang (11 s)', value: 11 },
-];
-
-export const GRAVEYARD_CAPTURE_OPTIONS = [
-  { label: 'Schnell (6 s)', value: 6 },
-  { label: 'Standard (10 s)', value: 10 },
-  { label: 'Zäh (15 s)', value: 15 },
-];
-
 export const DEFAULT_CONFIG = {
   // Überschreibbare Zahlenwerte der Einheitentypen (siehe UNIT_STAT_FIELDS).
   // Fehlt der Schlüssel (oder ein einzelner Wert), greift der Basis-Default aus
@@ -148,6 +136,14 @@ export const DEFAULT_CONFIG = {
 // `gate: 'towers'` markiert Gruppen, die nur bei aktiven Türmen wirken; die UI
 // graut sie aus, solange der Türme-Schalter aus ist.
 export const CONFIG_SECTIONS = [
+  {
+    key: 'times',
+    label: 'Zeiten',
+    fields: [
+      { key: 'respawnTime', label: 'Respawnzeit', min: 2, max: 20, step: 1, kind: 'int', unit: 's' },
+      { key: 'graveyardCaptureTime', label: 'Einnahmedauer', min: 3, max: 30, step: 1, kind: 'int', unit: 's' },
+    ],
+  },
   {
     key: 'towers',
     label: 'Türme',

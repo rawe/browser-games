@@ -72,7 +72,8 @@ Der Boss hat eigene Hitpoints, kämpft mit und regeneriert sich nicht.
 Alle Friedhofsdaten sind zentral konfigurierbar: Lage und Verbindungen in
 `NODES`/`EDGES`, Startbesitz und Heimat-Markierung in `GRAVEYARDS` (beides
 `map.js`), die Einnahmedauer als `graveyardCaptureTime` in `config.js`
-(Standard: 10 Sekunden, im Setup wählbar). Der laufende Besitzstand einer
+(Standard: 10 Sekunden, im Erweitert-Menü unter „Zeiten" einstellbar – ebenso
+die Respawnzeit `respawnTime`). Der laufende Besitzstand einer
 Schlacht lebt im Simulationszustand (`sim.graveyards`).
 
 - **Sackgassen abseits der Hauptwege:** Jeder Friedhof hat genau eine
