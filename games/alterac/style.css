@@ -243,13 +243,21 @@ body {
 }
 
 /* ------------------------------------------------------------------ Spielfeld */
+/* Vollbild-Spalte: die Karte scrollt im oberen Bereich, das Panel liegt direkt
+   darunter (kein fixiertes Panel, keine Lücke zwischen Karte und Bedienung). */
 #screen-game {
-  padding-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
 }
 
 #map-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   justify-content: center;
+  align-items: flex-start;
 }
 
 #map {
@@ -259,21 +267,11 @@ body {
   touch-action: pan-y;
 }
 
-body.phase-plan #map-wrap {
-  padding-bottom: 440px;
-}
-
-body.phase-sim #map-wrap {
-  padding-bottom: 170px;
-}
-
 /* ------------------------------------------------------------------ Panel */
 #panel {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  translate: -50% 0;
+  flex: 0 0 auto;
   width: min(100%, 560px);
+  margin: 0 auto;
   background: rgba(14, 18, 28, 0.94);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -331,9 +329,12 @@ body.phase-sim #map-wrap {
   color: #aeb8cc;
 }
 
-/* Karteneinstellung (über der Rekrutierung): Ziel-Marker der Trupps schalten. */
+/* Karteneinstellung ganz oben im Panel (über dem Planungstitel): steuert nur
+   die Anzeige auf der Karte, daher vom Konfigurationsteil abgesetzt. */
 .map-settings {
   display: flex;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid #2a3348;
 }
 
 .btn.map-toggle {

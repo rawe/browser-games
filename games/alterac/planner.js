@@ -57,18 +57,18 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     'der übrigen Trupps direkt auf der Karte (Fraktionsfarbe = Angriff, Gold = Halten).';
 
   panel.innerHTML = `
+    <div class="map-settings">
+      <button class="btn ghost map-toggle active" id="btn-targets" type="button" aria-pressed="true">
+        <span class="map-toggle-dot" aria-hidden="true"></span>
+        🎯 Ziele der übrigen Trupps auf der Karte zeigen
+      </button>
+    </div>
     <div class="panel-head">
       <span class="plan-title" style="--fac:${fac.color}">${fac.name} · ${fac.player} plant</span>
       <button class="btn ghost help-toggle" id="btn-help" type="button"
         title="Hilfe anzeigen" aria-expanded="false" aria-controls="help-text">?</button>
     </div>
     <p class="help-text" id="help-text" hidden>${DEFAULT_HINT}</p>
-    <div class="map-settings">
-      <button class="btn ghost map-toggle active" id="btn-targets" type="button" aria-pressed="true">
-        <span class="map-toggle-dot" aria-hidden="true"></span>
-        🎯 Ziele der übrigen Trupps zeigen
-      </button>
-    </div>
     <div class="recruit-row">
       <span class="budget" id="budget"></span>
       ${unitTypes.map(
