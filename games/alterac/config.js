@@ -132,7 +132,7 @@ export const CONFIG_SECTIONS = [
       { key: 'towerDamage', label: 'Turm-Schaden', min: 1, max: 60, step: 1, kind: 'int' },
       { key: 'towerAttackInterval', label: 'Turm-Angriffsintervall', min: 0.2, max: 5, step: 0.1, kind: 'float', unit: 's' },
       { key: 'towerDamageReduction', label: 'Debuff je Turm', min: 0, max: 50, step: 5, kind: 'percent', unit: '%' },
-      { key: 'bossDamageFloor', label: 'Fürst-Mindestschaden', min: 0, max: 100, step: 5, kind: 'percent', unit: '%' },
+      { key: 'bossDamageFloor', label: 'Boss-Mindestschaden', min: 0, max: 100, step: 5, kind: 'percent', unit: '%' },
     ],
   },
   {
