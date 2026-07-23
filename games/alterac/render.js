@@ -7,6 +7,25 @@ import { createEffects } from './effects.js';
 
 const TAU = Math.PI * 2;
 
+function romanNumeral(value) {
+  const table = [
+    [10, 'X'],
+    [9, 'IX'],
+    [5, 'V'],
+    [4, 'IV'],
+    [1, 'I'],
+  ];
+  let n = value;
+  let result = '';
+  for (const [amount, numeral] of table) {
+    while (n >= amount) {
+      result += numeral;
+      n -= amount;
+    }
+  }
+  return result;
+}
+
 export function createRenderer(canvas, map) {
   const W = map.width;
   const H = map.height;
@@ -689,7 +708,7 @@ export function createRenderer(canvas, map) {
     ctx.strokeStyle = 'rgba(255,255,255,0.4)';
     ctx.lineWidth = 1.4;
     ctx.stroke();
-    label(x, yy + 0.5, g.def?.short ?? '', { color: '#fff', weight: 700, size: r > 13 ? 13 : 11 });
+    label(x, yy + 0.5, g.symbol ?? g.def?.short ?? '', { color: '#fff', weight: 700, size: r > 13 ? 13 : 11 });
     if (g.maxHp != null && !opts.ghost) {
       drawHpBar(x, yy - r - 11, Math.max(28, r * 2.1), g.hp, g.maxHp);
     }
@@ -920,7 +939,7 @@ export function createRenderer(canvas, map) {
   }
 
   // ---------------------------------------------------------------- Planung
-  function drawPlanning(view) {
+  function drawPlanning(view, foreground = false) {
     const pl = view.planning;
     const faction = pl.faction;
     const c = FACTIONS[faction];
@@ -934,6 +953,52 @@ export function createRenderer(canvas, map) {
       return !!(ti && ti.faction === enemy);
     };
 
+    if (!foreground) {
+      // Routen anderer Einheiten bleiben optional und deutlich zurückgenommen.
+      if (pl.showOtherWaypoints) {
+        pl.units.forEach((u, unitIndex) => {
+          if (unitIndex === pl.selected) return;
+          const endTowerTarget = u.stance === 'attack' && isEnemyTower(u.path[u.path.length - 1]);
+          const seq = [start, ...u.path];
+          if (u.stance === 'attack' && !endTowerTarget && seq[seq.length - 1] !== enemyBoss) {
+            seq.push(enemyBoss);
+          }
+          ctx.save();
+          ctx.globalAlpha = 0.22;
+          strokeRoute(routePoints(seq), c.color);
+          ctx.restore();
+        });
+      }
+      const sel = pl.units[pl.selected] ?? null;
+      if (sel) {
+        const endTowerTarget = sel.stance === 'attack' && isEnemyTower(sel.path[sel.path.length - 1]);
+        const seq = [start, ...sel.path];
+        if (sel.stance === 'attack' && !endTowerTarget && seq[seq.length - 1] !== enemyBoss) {
+          seq.push(enemyBoss);
+        }
+        strokeRoute(routePoints(seq), c.color);
+      }
+      // Armeen am Start gehören zur Kartenebene und dürfen die abschließend
+      // gezeichneten Wegpunktmarker nicht verdecken.
+      const sn = map.nodes[start];
+      drawToken(sn.x - 46, sn.y + 6, {
+        faction,
+        symbol: sel?.symbol ?? '',
+        def: { radius: 15, short: '' },
+        state: 'atNode',
+      });
+      const en = map.nodes[map.start[enemyOf(faction)]];
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      drawToken(en.x - 46, en.y + 6, {
+        faction: enemyOf(faction),
+        def: { radius: 15, short: '?' },
+        state: 'atNode',
+      });
+      ctx.restore();
+      return;
+    }
+
     // Halte-Marker aller Einheiten (Pfadende von Einheiten mit „Halten").
     const holdCount = new Map();
     for (const u of pl.units) {
@@ -944,6 +1009,30 @@ export function createRenderer(canvas, map) {
 
     // Pfad der ausgewählten Einheit hervorheben.
     const sel = pl.units[pl.selected] ?? null;
+    if (pl.showOtherWaypoints) {
+      pl.units.forEach((u, unitIndex) => {
+        if (unitIndex === pl.selected) return;
+        u.path.forEach((t, i) => {
+          const n = map.nodes[t];
+          ctx.save();
+          ctx.globalAlpha = 0.48;
+          ctx.beginPath();
+          ctx.arc(n.x + 12, n.y - 12, 6.5, 0, TAU);
+          ctx.fillStyle = c.dark;
+          ctx.fill();
+          ctx.setLineDash([2, 2]);
+          ctx.lineWidth = 1.2;
+          ctx.strokeStyle = c.color;
+          ctx.stroke();
+          label(n.x + 12, n.y - 11.5, `${u.symbol}${romanNumeral(i + 1)}`, {
+            color: '#fff',
+            weight: 600,
+            size: 7,
+          });
+          ctx.restore();
+        });
+      });
+    }
     if (sel) {
       const endTowerTarget = sel.stance === 'attack' && isEnemyTower(sel.path[sel.path.length - 1]);
       const seq = [start, ...sel.path];
@@ -960,7 +1049,12 @@ export function createRenderer(canvas, map) {
         ctx.lineWidth = 1.6;
         ctx.strokeStyle = '#0a0f18';
         ctx.stroke();
-        label(n.x + 14, n.y - 13.5, String(i + 1), { color: '#fff', weight: 700 });
+        label(n.x + 14, n.y - 13.5, romanNumeral(i + 1), {
+          color: '#fff',
+          weight: 700,
+          serif: true,
+          size: 10,
+        });
       });
       const endId = sel.path.length ? sel.path[sel.path.length - 1] : start;
       if (sel.stance === 'defend') {
@@ -993,23 +1087,6 @@ export function createRenderer(canvas, map) {
       if (count > 1) label(n.x - 17, n.y - 26, `×${count}`, { color: '#ffd76a' });
     }
 
-    // Eigene Armee wartet am Start (Zahl = angeworbene Einheiten).
-    const sn = map.nodes[start];
-    drawToken(sn.x - 46, sn.y + 6, {
-      faction,
-      def: { radius: 15, short: String(pl.units.length) },
-      state: 'atNode',
-    });
-    // Gegnerische Armee als Silhouette am anderen Ende – ihr Plan bleibt geheim.
-    const en = map.nodes[map.start[enemyOf(faction)]];
-    ctx.save();
-    ctx.globalAlpha = 0.5;
-    drawToken(en.x - 46, en.y + 6, {
-      faction: enemyOf(faction),
-      def: { radius: 15, short: '?' },
-      state: 'atNode',
-    });
-    ctx.restore();
   }
 
   // ---------------------------------------------------------------- Hauptzeichnung
@@ -1024,7 +1101,7 @@ export function createRenderer(canvas, map) {
     ctx.drawImage(bg, 0, 0, W, H);
 
     effects.consume(view.sim ?? null);
-    if (view.phase === 'plan' && view.planning) drawPlanning(view);
+    if (view.phase === 'plan' && view.planning) drawPlanning(view, false);
     drawNodes(view);
     if (view.phase === 'sim' && view.sim) drawSim(view.sim);
     effects.draw(ctx, dt);
@@ -1060,6 +1137,9 @@ export function createRenderer(canvas, map) {
       ctx.arc(f.x, f.y, f.r, 0, TAU);
       ctx.fill();
     }
+    // Planungsmarker zuletzt zeichnen: aktive Wegpunkte bleiben garantiert vor
+    // Karte, Einheiten, Effekten, Nebel und Schnee.
+    if (view.phase === 'plan' && view.planning) drawPlanning(view, true);
   }
 
   function hitNode(clientX, clientY) {
