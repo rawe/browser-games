@@ -118,7 +118,11 @@ Fraktion); er bewegt sich nicht, regeneriert nicht und respawnt nicht.
 
 Alle Turmwerte, die Turmanzahl (`towersPerFaction`), die Schadensreduktion je
 Turm (`towerDamageReduction`) und die Mindestschadensgrenze des Fürsten
-(`bossDamageFloor`) stehen zentral in `config.js`. Der Renderer visualisiert
+(`bossDamageFloor`) stehen zentral in `config.js`. Im Setup lassen sich die
+Türme über den Schalter **„Türme aktiv"** ganz an- oder abschalten (aus =
+`towersPerFaction: 0`); ihre Kampfwerte samt Fürsten-Debuff sind – wie die
+Boss-Werte – im aufklappbaren **Erweitert-Menü** als Zahlenfelder feinjustierbar
+(siehe `CONFIG_SECTIONS` in `config.js`). Der Renderer visualisiert
 die Fraktion eindeutig (in der Fraktionsfarbe getönter Turmkörper samt Banner
 und Basisring), die aktuellen Hitpoints (Balken), den laufenden Turmkampf
 (Kampfring) und den zerstörten Zustand (dunkle, rissige, rauchende Ruine).

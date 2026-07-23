@@ -35,9 +35,15 @@
       <label>Friedhof-Einnahmedauer
         <select id="opt-capture"></select>
       </label>
-      <label>Boss-Lebenspunkte
-        <select id="opt-boss"></select>
+      <label class="switch-row" for="opt-towers">⚔️ Türme aktiv
+        <input type="checkbox" id="opt-towers" class="switch" checked />
       </label>
+
+      <details class="advanced" id="advanced">
+        <summary>Erweiterte Einstellungen</summary>
+        <div class="advanced-groups" id="advanced-groups"></div>
+      </details>
+
       <button type="submit" class="btn primary">Schlacht planen</button>
     </form>
 

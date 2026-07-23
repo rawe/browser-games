@@ -75,12 +75,6 @@ export const RESPAWN_OPTIONS = [
   { label: 'Lang (11 s)', value: 11 },
 ];
 
-export const BOSS_OPTIONS = [
-  { label: 'Schwach (60 LP)', value: 60 },
-  { label: 'Normal (100 LP)', value: 100 },
-  { label: 'Stark (150 LP)', value: 150 },
-];
-
 export const GRAVEYARD_CAPTURE_OPTIONS = [
   { label: 'Schnell (6 s)', value: 6 },
   { label: 'Standard (10 s)', value: 10 },
@@ -114,6 +108,46 @@ export const DEFAULT_CONFIG = {
   towerDamageReduction: 0.25, // Anteil des Basis-Schadens, um den der Fürst je zerstörtem Turm sinkt
   bossDamageFloor: 0.5, // Mindestanteil des Basis-Schadens, den der Fürst niemals unterschreitet
 };
+
+// ------------------------------------------------------- Erweitertes Konfig-Menü
+// Datengetriebener Deskriptor der Feineinstellungen im aufklappbaren Erweitert-
+// Bereich der Start-UI. Die UI (main.js) baut daraus die Zahlenfelder, liest sie
+// beim Absenden aus und klemmt jeden Wert auf [min, max] – Sim, Planer und KI
+// lesen weiterhin ausschließlich die fertigen `config`-Werte.
+//   key   Schlüssel in DEFAULT_CONFIG / config
+//   min/max/step  Grenzen und Schrittweite der Pfeiltasten (in Anzeige-Einheiten)
+//   unit  optionale Einheit hinter dem Label (z. B. „s", „%")
+//   kind  'int'     ganzzahliger Wert
+//         'float'   Dezimalwert (Sekunden)
+//         'percent' im Menü als Prozent (min/max/step in %), intern als Anteil 0–1
+// `gate: 'towers'` markiert Gruppen, die nur bei aktiven Türmen wirken; die UI
+// graut sie aus, solange der Türme-Schalter aus ist.
+export const CONFIG_SECTIONS = [
+  {
+    key: 'towers',
+    label: 'Türme',
+    gate: 'towers',
+    fields: [
+      { key: 'towerHp', label: 'Turm-LP', min: 5, max: 200, step: 5, kind: 'int' },
+      { key: 'towerDamage', label: 'Turm-Schaden', min: 1, max: 60, step: 1, kind: 'int' },
+      { key: 'towerAttackInterval', label: 'Turm-Angriffsintervall', min: 0.2, max: 5, step: 0.1, kind: 'float', unit: 's' },
+      { key: 'towerDamageReduction', label: 'Debuff je Turm', min: 0, max: 50, step: 5, kind: 'percent', unit: '%' },
+      { key: 'bossDamageFloor', label: 'Fürst-Mindestschaden', min: 0, max: 100, step: 5, kind: 'percent', unit: '%' },
+    ],
+  },
+  {
+    key: 'boss',
+    label: 'Boss',
+    fields: [
+      { key: 'bossHp', label: 'Boss-LP', min: 20, max: 400, step: 10, kind: 'int' },
+      { key: 'bossDamage', label: 'Boss-Schaden', min: 1, max: 60, step: 1, kind: 'int' },
+      { key: 'bossAttackInterval', label: 'Boss-Angriffsintervall', min: 0.2, max: 5, step: 0.1, kind: 'float', unit: 's' },
+    ],
+  },
+];
+
+// Turmzahl je Fraktion, wenn der Türme-Schalter aktiv ist (aus = 0).
+export const TOWERS_ON_COUNT = DEFAULT_CONFIG.towersPerFaction;
 
 // Maximale Länge eines geplanten Pfads (Anzahl Wegpunkte).
 export const MAX_PATH_LENGTH = 14;
