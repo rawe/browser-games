@@ -137,6 +137,9 @@ export function createSim({ map, config, plans }) {
           : null;
       groups.push({
         id: `${faction === 'blue' ? 'S' : 'F'}${i + 1}`,
+        // 1-basierte Nummer der Einheit in der Plan-Reihenfolge ihrer Fraktion –
+        // als römische Ziffer auf dem Token und in der Planungsliste dargestellt.
+        ordinal: i + 1,
         faction,
         def,
         maxHp: def.hp,
