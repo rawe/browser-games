@@ -8,8 +8,9 @@ import {
   RESOURCE_OPTIONS,
   TEMPO_OPTIONS,
   RESPAWN_OPTIONS,
-  BOSS_OPTIONS,
   GRAVEYARD_CAPTURE_OPTIONS,
+  CONFIG_SECTIONS,
+  TOWERS_ON_COUNT,
 } from './config.js';
 import { createSim } from './sim.js';
 import { createRenderer } from './render.js';
@@ -58,7 +59,81 @@ fillSelect(
   GRAVEYARD_CAPTURE_OPTIONS,
   DEFAULT_CONFIG.graveyardCaptureTime
 );
-fillSelect(document.getElementById('opt-boss'), BOSS_OPTIONS, DEFAULT_CONFIG.bossHp);
+
+// ---------------------------------------------- Erweiterte Einstellungen (Zahlenfelder)
+// Die Felder werden datengetrieben aus CONFIG_SECTIONS erzeugt. Prozent-Felder
+// zeigen im Menü ganze Prozent, intern bleibt der Anteil (0–1) erhalten.
+const towersToggle = document.getElementById('opt-towers');
+const advancedGroups = document.getElementById('advanced-groups');
+
+function fieldToDisplay(field, value) {
+  return field.kind === 'percent' ? Math.round(value * 100) : value;
+}
+
+function clampField(field, displayValue) {
+  return Math.min(field.max, Math.max(field.min, displayValue));
+}
+
+// Feld aus dem DOM lesen, auf [min,max] klemmen und in den config-Wert wandeln.
+function readFieldValue(field) {
+  const input = document.getElementById(`adv-${field.key}`);
+  let v = input.valueAsNumber;
+  if (Number.isNaN(v)) v = fieldToDisplay(field, DEFAULT_CONFIG[field.key]);
+  v = clampField(field, v);
+  if (field.kind === 'int') v = Math.round(v);
+  if (field.kind === 'percent') v = v / 100;
+  return v;
+}
+
+function buildAdvanced() {
+  advancedGroups.innerHTML = '';
+  for (const section of CONFIG_SECTIONS) {
+    const group = document.createElement('fieldset');
+    group.className = 'advanced-group';
+    if (section.gate) group.dataset.gate = section.gate;
+    const legend = document.createElement('legend');
+    legend.textContent = section.label;
+    group.appendChild(legend);
+    for (const field of section.fields) {
+      const label = document.createElement('label');
+      label.className = 'num-field';
+      const span = document.createElement('span');
+      span.textContent = field.unit ? `${field.label} (${field.unit})` : field.label;
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.id = `adv-${field.key}`;
+      input.min = field.min;
+      input.max = field.max;
+      input.step = field.step;
+      input.value = fieldToDisplay(field, DEFAULT_CONFIG[field.key]);
+      // Von Hand getippte Werte beim Verlassen sofort auf den gültigen Bereich klemmen.
+      input.addEventListener('change', () => {
+        if (input.value === '' || Number.isNaN(input.valueAsNumber)) {
+          input.value = fieldToDisplay(field, DEFAULT_CONFIG[field.key]);
+          return;
+        }
+        input.value = clampField(field, input.valueAsNumber);
+      });
+      label.appendChild(span);
+      label.appendChild(input);
+      group.appendChild(label);
+    }
+    advancedGroups.appendChild(group);
+  }
+}
+
+// Turm-Gruppen ausgrauen und deaktivieren, solange der Türme-Schalter aus ist.
+function applyTowerGate() {
+  const on = towersToggle.checked;
+  for (const group of advancedGroups.querySelectorAll('.advanced-group[data-gate="towers"]')) {
+    group.classList.toggle('disabled', !on);
+    for (const input of group.querySelectorAll('input')) input.disabled = !on;
+  }
+}
+
+buildAdvanced();
+applyTowerGate();
+towersToggle.addEventListener('change', applyTowerGate);
 
 // Einheitentypen-Übersicht in den Spielregeln aus den zentralen Definitionen füllen.
 {
@@ -81,8 +156,12 @@ document.getElementById('setup-form').addEventListener('submit', (ev) => {
     edgeTime: Number(document.getElementById('opt-tempo').value),
     respawnTime: Number(document.getElementById('opt-respawn').value),
     graveyardCaptureTime: Number(document.getElementById('opt-capture').value),
-    bossHp: Number(document.getElementById('opt-boss').value),
+    towersPerFaction: towersToggle.checked ? TOWERS_ON_COUNT : 0,
   };
+  // Feinwerte aus dem Erweitert-Bereich übernehmen (bossHp, Boss- und Turmwerte).
+  for (const section of CONFIG_SECTIONS) {
+    for (const field of section.fields) config[field.key] = readFieldValue(field);
+  }
   view.config = config;
   mode = document.getElementById('opt-mode').value;
   plans = { blue: null, red: null };

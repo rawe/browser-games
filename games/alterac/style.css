@@ -101,6 +101,110 @@ body {
   margin: 0.25rem 0;
 }
 
+/* ------------------------------------------------ Türme-Schalter (Switch) */
+.setup-card .switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 3rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  background: #2a3348;
+  border: 1px solid #2a3348;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 50%;
+  background: #e6ebf4;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  transition: translate 0.15s;
+}
+
+.switch:checked {
+  background: linear-gradient(180deg, #5b9cff, #2c5aa8);
+  border-color: transparent;
+}
+
+.switch:checked::after {
+  translate: 1.4rem 0;
+}
+
+.switch:focus-visible {
+  outline: 2px solid #5b9cff;
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------- Erweiterte Einstellungen */
+.advanced > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #e6ebf4;
+}
+
+.advanced-groups {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.advanced-group {
+  min-width: 0;
+  border: 1px solid #3d3526;
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.9rem 0.8rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.advanced-group legend {
+  padding: 0 0.4rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #f0d489;
+}
+
+.advanced-group.disabled {
+  opacity: 0.45;
+}
+
+.setup-card .num-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: #aeb8cc;
+}
+
+.setup-card .num-field input[type='number'] {
+  flex: 0 0 auto;
+  width: 5.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid #2a3348;
+  background: #12161f;
+  color: #e6ebf4;
+  font: inherit;
+  text-align: right;
+}
+
 /* ------------------------------------------------------------------ Buttons */
 .btn {
   font: inherit;
