@@ -40,7 +40,7 @@ import { resolveUnitTypeMap } from './config.js';
 const EPS = 1e-6;
 
 // plans: { blue: units[], red: units[] } mit units[i] =
-//   { type: unitTypeKey, path: [nodeId…], stance: 'attack' | 'defend' }
+//   { type: unitTypeKey, symbol, path: [nodeId…], stance: 'attack' | 'defend' }
 // `path` ist eine Folge benachbarter Wegpunkte ab dem eigenen Startpunkt und
 // wird exakt abgelaufen. Danach greift die Einheit automatisch den
 // gegnerischen Boss an ('attack') oder hält den letzten Wegpunkt ('defend');
@@ -137,6 +137,7 @@ export function createSim({ map, config, plans }) {
           : null;
       groups.push({
         id: `${faction === 'blue' ? 'S' : 'F'}${i + 1}`,
+        symbol: u.symbol,
         faction,
         def,
         maxHp: def.hp,
