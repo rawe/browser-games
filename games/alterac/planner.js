@@ -44,11 +44,20 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
 
   const spent = () => state.units.reduce((s, u) => s + byKey[u.type].cost, 0);
 
+  const DEFAULT_HINT =
+    'Einheiten anwerben, dann den Pfad der gewählten Einheit Wegpunkt für Wegpunkt antippen ' +
+    '(nur benachbarte Punkte). Friedhöfe sind Sackgassen: Hin- und Rückweg einplanen – dort ' +
+    'beginnt die Einnahme automatisch. „Halten" bewacht das Pfadende, „Angriff" zieht danach zum Boss. ' +
+    'Türme (an den Toren) werden nur angegriffen, wenn der Pfad ausdrücklich auf einem gegnerischen ' +
+    'Turm endet; ein eigener Turm lässt sich mit „Halten" verteidigen.';
+
   panel.innerHTML = `
     <div class="panel-head">
       <span class="plan-title" style="--fac:${fac.color}">${fac.name} · ${fac.player} plant</span>
-      <button class="btn primary" id="btn-confirm" style="--fac:${fac.color};--fac-dark:${fac.dark}">Bestätigen ✓</button>
+      <button class="btn ghost help-toggle" id="btn-help" type="button"
+        title="Hilfe anzeigen" aria-expanded="false" aria-controls="help-text">?</button>
     </div>
+    <p class="help-text" id="help-text" hidden>${DEFAULT_HINT}</p>
     <div class="recruit-row">
       <span class="budget" id="budget"></span>
       ${unitTypes.map(
@@ -67,6 +76,18 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
       <button class="btn ghost" id="btn-remove" title="Einheit entlassen">🗑</button>
     </div>
     <p class="hint" id="hint"></p>
+    <div class="confirm-zone">
+      <div class="confirm-ask" id="confirm-ask" hidden>
+        <p class="confirm-ask-msg" id="confirm-ask-msg"></p>
+        <div class="confirm-ask-actions">
+          <button class="btn ghost" id="btn-confirm-cancel" type="button">Zurück</button>
+          <button class="btn primary" id="btn-confirm-go" type="button"
+            style="--fac:${fac.color};--fac-dark:${fac.dark}">Trotzdem starten ✓</button>
+        </div>
+      </div>
+      <button class="btn primary confirm-main" id="btn-confirm" type="button"
+        style="--fac:${fac.color};--fac-dark:${fac.dark}">Schlacht starten ✓</button>
+    </div>
   `;
 
   const chipsEl = panel.querySelector('#chips');
@@ -74,13 +95,10 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
   const budgetEl = panel.querySelector('#budget');
   const stanceButtons = [...panel.querySelectorAll('.mode')];
   const recruitButtons = [...panel.querySelectorAll('.recruit')];
-
-  const DEFAULT_HINT =
-    'Einheiten anwerben, dann den Pfad der gewählten Einheit Wegpunkt für Wegpunkt antippen ' +
-    '(nur benachbarte Punkte). Friedhöfe sind Sackgassen: Hin- und Rückweg einplanen – dort ' +
-    'beginnt die Einnahme automatisch. „Halten" bewacht das Pfadende, „Angriff" zieht danach zum Boss. ' +
-    'Türme (an den Toren) werden nur angegriffen, wenn der Pfad ausdrücklich auf einem gegnerischen ' +
-    'Turm endet; ein eigener Turm lässt sich mit „Halten" verteidigen.';
+  const helpText = panel.querySelector('#help-text');
+  const helpToggle = panel.querySelector('#btn-help');
+  const confirmAsk = panel.querySelector('#confirm-ask');
+  const confirmAskMsg = panel.querySelector('#confirm-ask-msg');
 
   let hintTimer = 0;
   function flashHint(text) {
@@ -89,11 +107,24 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     clearTimeout(hintTimer);
     hintTimer = setTimeout(() => {
       hintEl.classList.remove('warn');
-      hintEl.textContent = DEFAULT_HINT;
+      hintEl.textContent = '';
     }, 2600);
   }
 
+  // Rückfrage zum Bestätigen zurücknehmen, sobald die Armee wieder verändert wird.
+  function closeConfirmAsk() {
+    confirmAsk.hidden = true;
+  }
+
+  helpToggle.addEventListener('click', () => {
+    const show = helpText.hidden;
+    helpText.hidden = !show;
+    helpToggle.classList.toggle('active', show);
+    helpToggle.setAttribute('aria-expanded', String(show));
+  });
+
   function refresh() {
+    closeConfirmAsk();
     const used = spent();
     budgetEl.textContent = `${used}/${state.budget} ⬢`;
     for (const b of recruitButtons) {
@@ -183,20 +214,33 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
   }
   canvas.addEventListener('click', onCanvasClick);
 
+  function commit() {
+    destroy();
+    onConfirm(state.units.map((u) => ({ type: u.type, path: [...u.path], stance: u.stance })));
+  }
+
   panel.querySelector('#btn-confirm').addEventListener('click', () => {
     if (!state.units.length) {
       flashHint('Mindestens eine Einheit anwerben, bevor es losgeht.');
       return;
     }
-    destroy();
-    onConfirm(state.units.map((u) => ({ type: u.type, path: [...u.path], stance: u.stance })));
+    const left = state.budget - spent();
+    if (left > 0) {
+      // Ungenutztes Budget: bewusste Rückfrage, damit nicht versehentlich gestartet wird.
+      confirmAskMsg.textContent = `Noch ${left} ⬢ ungenutzt – du könntest weitere Einheiten anwerben. Trotzdem starten?`;
+      confirmAsk.hidden = false;
+      return;
+    }
+    commit();
   });
+
+  panel.querySelector('#btn-confirm-cancel').addEventListener('click', closeConfirmAsk);
+  panel.querySelector('#btn-confirm-go').addEventListener('click', commit);
 
   function destroy() {
     canvas.removeEventListener('click', onCanvasClick);
   }
 
-  hintEl.textContent = DEFAULT_HINT;
   refresh();
   return { state, destroy };
 }
