@@ -33,6 +33,12 @@
 // Einheiten respawnen am nächstgelegenen aktuell kontrollierten eigenen
 // Friedhof – bestimmt erst im Moment des Respawns; ohne eigenen Friedhof ist
 // kein Respawn mehr möglich (Zustand 'gone').
+//
+// Respawn-Wellen: Der Respawn läuft auf einem globalen Takt statt pro Einheit.
+// `respawnTime` ist das Intervall zwischen zwei Wellen (an Spielbeginn
+// verankerte Vielfache); jede Gefallene wartet bis zur nächsten Welle und
+// kehrt dann gemeinsam mit allen anderen wartenden Gefallenen zurück. So
+// ballen sich Respawns automatisch zu Wellen.
 
 import { FACTIONS, enemyOf, shortestPath, nearestGraveyard, towerNodes } from './map.js';
 import { resolveUnitTypeMap } from './config.js';
@@ -459,6 +465,15 @@ export function createSim({ map, config, plans }) {
     }
   }
 
+  // Globale Respawn-Wellen: Statt individuell nach eigener Respawnzeit kehren
+  // alle Gefallenen gemeinsam an den festen Taktpunkten des globalen Respawn-
+  // Intervalls zurück (Vielfache von `respawnTime`, verankert an Spielbeginn).
+  // Eine gefallene Einheit wartet also bis zur nächsten Welle – so entstehen
+  // automatisch geballte Respawns statt eines stetigen Einzeltropfens.
+  function nextRespawnWave(t) {
+    return (Math.floor(t / respawnTime) + 1) * respawnTime;
+  }
+
   function die(g, t) {
     g.state = 'dead';
     g.fighting = false;
@@ -473,7 +488,8 @@ export function createSim({ map, config, plans }) {
     // Nur Anzeige/Effekt – der verbindliche Respawnpunkt wird erst im Moment
     // des Respawns aus dem dann aktuellen Besitzstand bestimmt.
     g.graveyardNode = nearestGraveyard(map, ownedGraveyards(g.faction), g.deathNode);
-    g.respawnAt = t + respawnTime;
+    // Respawn erst mit der nächsten globalen Welle (nicht t + respawnTime).
+    g.respawnAt = nextRespawnWave(t);
     addEvent({
       type: 'death',
       faction: g.faction,
