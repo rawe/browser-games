@@ -11,6 +11,13 @@
 //   attackInterval Sekunden zwischen zwei Angriffen
 //   speed          Bewegungstempo (1 = Basistempo, Reisezeit = edgeTime / speed)
 //   radius         Token-Größe auf der Karte (nur Darstellung)
+//
+// Die hier hinterlegten Zahlenwerte (cost, hp, damage, attackInterval, speed)
+// sind Datei-Defaults. Sie lassen sich im Setup je Partie überschreiben
+// (`config.unitStats`); der EINZIGE Abrufpunkt der effektiven Werte ist
+// `resolveUnitTypes(config)` bzw. `resolveUnitTypeMap(config)` weiter unten –
+// egal ob Datei-Default oder überschrieben. Identitätsfelder (name, short,
+// icon, radius, desc) bleiben fest.
 export const UNIT_TYPES = [
   {
     key: 'light',
@@ -55,6 +62,24 @@ export const UNIT_TYPES = [
 
 export const UNIT_TYPE_BY_KEY = Object.fromEntries(UNIT_TYPES.map((t) => [t.key, t]));
 
+// Im Setup feinjustierbare Zahlenwerte jedes Einheitentyps. Aufbau wie die
+// Felder in CONFIG_SECTIONS (min/max/step/kind/unit) – die UI (main.js) baut
+// daraus je Typ eine Gruppe von Zahlenfeldern, klemmt jeden Wert auf [min,max]
+// und schreibt das Ergebnis nach `config.unitStats[typKey][statKey]`.
+export const UNIT_STAT_FIELDS = [
+  { key: 'cost', label: 'Kosten', min: 1, max: 8, step: 1, kind: 'int', unit: '⬢' },
+  { key: 'hp', label: 'Lebenspunkte', min: 1, max: 120, step: 1, kind: 'int', unit: 'LP' },
+  { key: 'damage', label: 'Schaden', min: 1, max: 60, step: 1, kind: 'int' },
+  { key: 'attackInterval', label: 'Angriffsintervall', min: 0.2, max: 5, step: 0.1, kind: 'float', unit: 's' },
+  { key: 'speed', label: 'Tempo', min: 0.3, max: 3, step: 0.05, kind: 'float', unit: '×' },
+];
+
+// Default-Overrides je Typ: die reinen Zahlenwerte aus den Basis-Definitionen.
+// Landen in DEFAULT_CONFIG.unitStats und werden im Setup ggf. überschrieben.
+export const DEFAULT_UNIT_STATS = Object.fromEntries(
+  UNIT_TYPES.map((t) => [t.key, Object.fromEntries(UNIT_STAT_FIELDS.map((f) => [f.key, t[f.key]]))])
+);
+
 // ---------------------------------------------------------------- Spieloptionen
 export const RESOURCE_OPTIONS = [
   { label: 'Scharmützel (8 Punkte)', value: 8 },
@@ -82,6 +107,10 @@ export const GRAVEYARD_CAPTURE_OPTIONS = [
 ];
 
 export const DEFAULT_CONFIG = {
+  // Überschreibbare Zahlenwerte der Einheitentypen (siehe UNIT_STAT_FIELDS).
+  // Fehlt der Schlüssel (oder ein einzelner Wert), greift der Basis-Default aus
+  // UNIT_TYPES – der Zusammenbau passiert zentral in resolveUnitTypes().
+  unitStats: DEFAULT_UNIT_STATS,
   resources: 12, // Ressourcenpunkte pro Spieler zum Anwerben von Einheiten
   edgeTime: 1.7, // Basis-Reisezeit pro Wegstück in Sekunden (bei speed = 1)
   respawnTime: 7, // Sekunden bis zum Respawn am Friedhof
@@ -151,3 +180,19 @@ export const TOWERS_ON_COUNT = DEFAULT_CONFIG.towersPerFaction;
 
 // Maximale Länge eines geplanten Pfads (Anzahl Wegpunkte).
 export const MAX_PATH_LENGTH = 14;
+
+// ------------------------------------------------- Zentraler Einheiten-Zugriff
+// EINZIGER Abrufpunkt der effektiven Einheitenwerte: verbindet die festen
+// Basis-Definitionen (name, short, icon, radius, desc) mit den – ggf. im Setup
+// überschriebenen – Zahlenwerten aus `config.unitStats`. Fehlt der config-Wert,
+// bleibt der Datei-Default aus UNIT_TYPES erhalten. Sim, Planer, KI und
+// Rendering holen ihre Werte ausschließlich hierüber, egal ob Datei oder
+// Override. `config` darf fehlen (dann reine Datei-Defaults).
+export function resolveUnitTypes(config) {
+  const overrides = config?.unitStats ?? {};
+  return UNIT_TYPES.map((t) => ({ ...t, ...(overrides[t.key] ?? {}) }));
+}
+
+export function resolveUnitTypeMap(config) {
+  return Object.fromEntries(resolveUnitTypes(config).map((t) => [t.key, t]));
+}

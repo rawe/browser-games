@@ -4,14 +4,17 @@
 // gegnerischen Boss. Vollständig datengetrieben über UNIT_TYPES, ROUTES und
 // GUARD_POSTS – keine typ- oder kartenspezifischen Sonderfälle.
 
-import { UNIT_TYPES, UNIT_TYPE_BY_KEY } from './config.js';
+import { resolveUnitTypes, resolveUnitTypeMap } from './config.js';
 import { ROUTES, GUARD_POSTS, enemyOf } from './map.js';
 
 export function aiPlan(config, map, faction, rng = Math.random) {
+  // Effektive Einheitenwerte dieser Partie (Datei-Defaults ggf. überschrieben).
+  const unitTypes = resolveUnitTypes(config);
+  const byKey = resolveUnitTypeMap(config);
   const units = [];
   let remaining = config.resources;
   for (;;) {
-    const options = UNIT_TYPES.filter((t) => t.cost <= remaining);
+    const options = unitTypes.filter((t) => t.cost <= remaining);
     if (!options.length) break;
     const pick = options[Math.floor(rng() * options.length)];
     units.push({ type: pick.key, path: [], stance: 'attack' });
@@ -21,7 +24,7 @@ export function aiPlan(config, map, faction, rng = Math.random) {
   // Ab mittlerer Armeegröße bewachen die zähesten Einheiten die eigenen
   // Zugänge (Zähigkeit datengetrieben über die Hitpoints des Typs).
   const byToughness = units
-    .map((u, i) => ({ i, hp: UNIT_TYPE_BY_KEY[u.type].hp }))
+    .map((u, i) => ({ i, hp: byKey[u.type].hp }))
     .sort((a, b) => b.hp - a.hp || a.i - b.i);
   const guardCount = units.length >= 6 ? 2 : units.length >= 4 ? 1 : 0;
   const posts = GUARD_POSTS[faction];

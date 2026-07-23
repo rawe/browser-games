@@ -35,7 +35,7 @@
 // kein Respawn mehr möglich (Zustand 'gone').
 
 import { FACTIONS, enemyOf, shortestPath, nearestGraveyard, towerNodes } from './map.js';
-import { UNIT_TYPE_BY_KEY } from './config.js';
+import { resolveUnitTypeMap } from './config.js';
 
 const EPS = 1e-6;
 
@@ -62,6 +62,8 @@ export function createSim({ map, config, plans }) {
     towerDamageReduction,
     bossDamageFloor,
   } = config;
+  // Effektive Einheitenwerte dieser Partie (Datei-Defaults ggf. überschrieben).
+  const unitTypes = resolveUnitTypeMap(config);
   const groups = [];
   const log = [];
   // Typisierte Ereignisse für den Renderer (Effekte); `where` ist entweder
@@ -118,7 +120,7 @@ export function createSim({ map, config, plans }) {
   // --- Gruppen aus den Plänen bauen: jede Einheit ist eine eigene Gruppe ---
   for (const faction of ['blue', 'red']) {
     plans[faction].forEach((u, i) => {
-      const def = UNIT_TYPE_BY_KEY[u.type];
+      const def = unitTypes[u.type];
       let orders = u.path.map((node) => ({ type: 'attack', node }));
       if (u.stance === 'defend') {
         if (orders.length) orders[orders.length - 1] = { type: 'defend', node: u.path[u.path.length - 1] };
