@@ -62,6 +62,14 @@ export const UNIT_TYPES = [
 
 export const UNIT_TYPE_BY_KEY = Object.fromEntries(UNIT_TYPES.map((t) => [t.key, t]));
 
+// Taktische Kennzeichen zur eindeutigen Identifikation einzelner Trupps.
+// Sie sind absichtlich unabhängig vom Einheitentyp und werden je Armee
+// automatisch eindeutig vorbelegt; im Planer kann die Auswahl geändert werden.
+export const UNIT_SYMBOLS = [
+  '●', '▲', '■', '◆', '★', '✚', '✦', '⬟', '☾', '☀', '⚑', '♜',
+  '⬢', '⬣', '✕', '✖', '✧', '♠', '♥', '♦', '♣', '☁', '⚡', '☄',
+];
+
 // Im Setup feinjustierbare Zahlenwerte jedes Einheitentyps. Aufbau wie die
 // Felder in CONFIG_SECTIONS (min/max/step/kind/unit) – die UI (main.js) baut
 // daraus je Typ eine Gruppe von Zahlenfeldern, klemmt jeden Wert auf [min,max]
