@@ -4,7 +4,7 @@
 // gegnerischen Boss. Vollständig datengetrieben über UNIT_TYPES, ROUTES und
 // GUARD_POSTS – keine typ- oder kartenspezifischen Sonderfälle.
 
-import { resolveUnitTypes, resolveUnitTypeMap } from './config.js';
+import { resolveUnitTypes, resolveUnitTypeMap, UNIT_SYMBOLS } from './config.js';
 import { ROUTES, GUARD_POSTS, enemyOf } from './map.js';
 
 export function aiPlan(config, map, faction, rng = Math.random) {
@@ -17,7 +17,12 @@ export function aiPlan(config, map, faction, rng = Math.random) {
     const options = unitTypes.filter((t) => t.cost <= remaining);
     if (!options.length) break;
     const pick = options[Math.floor(rng() * options.length)];
-    units.push({ type: pick.key, path: [], stance: 'attack' });
+    units.push({
+      type: pick.key,
+      symbol: UNIT_SYMBOLS[units.length % UNIT_SYMBOLS.length],
+      path: [],
+      stance: 'attack',
+    });
     remaining -= pick.cost;
   }
 
