@@ -88,7 +88,7 @@ Alle Friedhofsdaten sind zentral konfigurierbar: Lage und Verbindungen in
 `NODES`/`EDGES`, Startbesitz und Heimat-Markierung in `GRAVEYARDS` (beides
 `map.js`), die Einnahmedauer als `graveyardCaptureTime` in `config.js`
 (Standard: 10 Sekunden, im Erweitert-Menü unter „Zeiten" einstellbar – ebenso
-die Respawnzeit `respawnTime`). Der laufende Besitzstand einer
+das Respawn-Intervall `respawnTime`). Der laufende Besitzstand einer
 Schlacht lebt im Simulationszustand (`sim.graveyards`).
 
 - **Sackgassen abseits der Hauptwege:** Jeder Friedhof hat genau eine
@@ -110,13 +110,18 @@ Schlacht lebt im Simulationszustand (`sim.graveyards`).
   mindestens einen anderen hält, greift der Schutz erneut (eine laufende
   Einnahme bricht dann ab). Hält der Gegner den Heimatfriedhof bereits, ist
   die Rückeroberung jederzeit erlaubt.
-- **Respawn:** Besiegte Einheiten respawnen nach der Respawnzeit mit vollen
-  Hitpoints am nächstgelegenen aktuell kontrollierten eigenen Friedhof – der
-  Respawnpunkt wird erst im Moment des Respawns bestimmt. Danach setzt die
-  Einheit ihr aktuell offenes Ziel fort und läuft vom Respawn-Friedhof aus den
-  kürzestmöglichen Weg dorthin; die ursprünglich geplante Route wird nicht
-  strikt weiterverwendet. Kontrolliert die Fraktion keinen Friedhof mehr, ist
-  kein Respawn mehr möglich – die Einheit ist endgültig gefallen.
+- **Respawn in Wellen:** Der Respawn läuft auf einem **globalen Takt** statt
+  pro Einheit: `respawnTime` ist das Intervall zwischen zwei Respawn-Wellen
+  (an Spielbeginn verankerte Vielfache). Eine gefallene Einheit wartet bis zur
+  nächsten Welle und kehrt dann **gemeinsam** mit allen anderen wartenden
+  Gefallenen zurück – so ballen sich Respawns automatisch. Zurück kommen sie
+  mit vollen Hitpoints am nächstgelegenen aktuell kontrollierten eigenen
+  Friedhof; der Respawnpunkt wird erst im Moment der Welle bestimmt. Danach
+  setzt die Einheit ihr aktuell offenes Ziel fort und läuft vom Respawn-Friedhof
+  aus den kürzestmöglichen Weg dorthin; die ursprünglich geplante Route wird
+  nicht strikt weiterverwendet. Kontrolliert die Fraktion zum Wellenzeitpunkt
+  keinen Friedhof mehr, ist kein Respawn mehr möglich – die Einheit ist
+  endgültig gefallen.
 
 ## Türme
 

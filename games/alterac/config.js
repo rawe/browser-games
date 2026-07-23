@@ -97,7 +97,7 @@ export const DEFAULT_CONFIG = {
   // Basis-Reisezeit pro Wegstück in Sekunden (bei speed = 1). Fester Default,
   // nicht im Setup wählbar – hier anpassen, um das globale Marschtempo zu ändern.
   edgeTime: 1.7,
-  respawnTime: 7, // Sekunden bis zum Respawn am Friedhof
+  respawnTime: 7, // Intervall der globalen Respawn-Wellen in Sekunden (Gefallene kehren gebündelt am nächsten Taktpunkt zurück)
   graveyardCaptureTime: 10, // Sekunden ununterbrochener Präsenz bis zur Einnahme eines Friedhofs
   entrenchedFactor: 0.6, // Anteil des Schadens, den eingegrabene Verteidiger erleiden
   bossHp: 100, // maximale Hitpoints des Endbosses
@@ -140,7 +140,7 @@ export const CONFIG_SECTIONS = [
     key: 'times',
     label: 'Zeiten',
     fields: [
-      { key: 'respawnTime', label: 'Respawnzeit', min: 2, max: 20, step: 1, kind: 'int', unit: 's' },
+      { key: 'respawnTime', label: 'Respawn-Intervall', min: 2, max: 20, step: 1, kind: 'int', unit: 's' },
       { key: 'graveyardCaptureTime', label: 'Einnahmedauer', min: 3, max: 30, step: 1, kind: 'int', unit: 's' },
     ],
   },
