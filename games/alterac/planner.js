@@ -4,7 +4,7 @@
 // verarbeitet Karten-Taps.
 
 import { FACTIONS, towerNodes } from './map.js';
-import { resolveUnitTypes, resolveUnitTypeMap, MAX_PATH_LENGTH } from './config.js';
+import { resolveUnitTypes, resolveUnitTypeMap, MAX_PATH_LENGTH, UNIT_SYMBOLS } from './config.js';
 
 // Kurzbeschreibung des Plans einer Einheit für die Einheitenleiste. `towers`
 // ist die aktive Turmzuordnung { nodeId: faction }; endet der Pfad auf einem
@@ -31,8 +31,9 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
   const state = {
     faction,
     budget,
-    units: [], // { type, path: [nodeId…], stance: 'attack' | 'defend' }
+    units: [], // { type, symbol, path: [nodeId…], stance: 'attack' | 'defend' }
     selected: -1,
+    showOtherWaypoints: false,
   };
   const fac = FACTIONS[faction];
   const start = map.start[faction];
@@ -69,6 +70,10 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
       ).join('')}
     </div>
     <div class="chips" id="chips"></div>
+    <label class="other-paths-toggle" for="show-other-waypoints">
+      <span>Wegpunkte anderer Trupps</span>
+      <input type="checkbox" id="show-other-waypoints" class="switch" />
+    </label>
     <div class="mode-row">
       <button class="btn mode" data-stance="attack">⚔ Angriff</button>
       <button class="btn mode" data-stance="defend">🛡 Halten</button>
@@ -99,6 +104,7 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
   const helpToggle = panel.querySelector('#btn-help');
   const confirmAsk = panel.querySelector('#confirm-ask');
   const confirmAskMsg = panel.querySelector('#confirm-ask-msg');
+  const otherWaypointsToggle = panel.querySelector('#show-other-waypoints');
 
   let hintTimer = 0;
   function flashHint(text) {
@@ -138,16 +144,36 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     chipsEl.innerHTML = '';
     state.units.forEach((u, i) => {
       const def = byKey[u.type];
+      const row = document.createElement('div');
+      row.className = 'unit-row';
+      const symbol = document.createElement('select');
+      symbol.className = 'unit-symbol';
+      symbol.title = 'Einheitensymbol wählen';
+      symbol.setAttribute('aria-label', `Symbol für ${def.name} wählen`);
+      for (const candidate of UNIT_SYMBOLS) {
+        const option = document.createElement('option');
+        option.value = candidate;
+        option.textContent = candidate;
+        option.selected = candidate === u.symbol;
+        option.disabled = state.units.some((other, j) => j !== i && other.symbol === candidate);
+        symbol.appendChild(option);
+      }
+      symbol.addEventListener('change', () => {
+        u.symbol = symbol.value;
+        refresh();
+      });
       const chip = document.createElement('button');
+      chip.type = 'button';
       chip.className = 'chip';
       if (i === state.selected) chip.classList.add('selected');
       chip.style.setProperty('--fac', fac.color);
-      chip.innerHTML = `<strong>${def.icon} ${def.name}</strong><span>${planSummary(u, map.nodes, towers, faction)}</span>`;
+      chip.innerHTML = `<strong><span class="unit-symbol-preview">${u.symbol}</span> ${def.icon} ${def.name}</strong><span>${planSummary(u, map.nodes, towers, faction)}</span>`;
       chip.addEventListener('click', () => {
         state.selected = i;
         refresh();
       });
-      chipsEl.appendChild(chip);
+      row.append(symbol, chip);
+      chipsEl.appendChild(row);
     });
   }
 
@@ -158,11 +184,20 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
         flashHint('Nicht genug Ressourcen für diese Einheit.');
         return;
       }
-      state.units.push({ type: def.key, path: [], stance: 'attack' });
+      const symbol = UNIT_SYMBOLS.find((candidate) => !state.units.some((u) => u.symbol === candidate));
+      if (!symbol) {
+        flashHint(`Maximal ${UNIT_SYMBOLS.length} Einheiten pro Armee.`);
+        return;
+      }
+      state.units.push({ type: def.key, symbol, path: [], stance: 'attack' });
       state.selected = state.units.length - 1;
       refresh();
     });
   }
+
+  otherWaypointsToggle.addEventListener('change', () => {
+    state.showOtherWaypoints = otherWaypointsToggle.checked;
+  });
 
   for (const b of stanceButtons) {
     b.addEventListener('click', () => {
@@ -216,7 +251,12 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
 
   function commit() {
     destroy();
-    onConfirm(state.units.map((u) => ({ type: u.type, path: [...u.path], stance: u.stance })));
+    onConfirm(state.units.map((u) => ({
+      type: u.type,
+      symbol: u.symbol,
+      path: [...u.path],
+      stance: u.stance,
+    })));
   }
 
   panel.querySelector('#btn-confirm').addEventListener('click', () => {
