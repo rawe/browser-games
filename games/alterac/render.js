@@ -2,6 +2,7 @@
 // Einheiten-Token, Planungs-Overlays, Wetter und Effekte. Keine Spiellogik.
 
 import { FACTIONS, enemyOf, edgePoint, shortestPath } from './map.js';
+import { toRoman } from './config.js';
 import { paintTerrain, mulberry32 } from './terrain.js';
 import { createEffects } from './effects.js';
 
@@ -689,7 +690,15 @@ export function createRenderer(canvas, map) {
     ctx.strokeStyle = 'rgba(255,255,255,0.4)';
     ctx.lineWidth = 1.4;
     ctx.stroke();
-    label(x, yy + 0.5, g.def?.short ?? '', { color: '#fff', weight: 700, size: r > 13 ? 13 : 11 });
+    // Simulations-Token tragen die römische Ziffer der Einheit (eindeutige
+    // Kennung, passend zur Planungsliste); Planungs-Platzhalter (Truppzahl / „?")
+    // behalten ihren Kurztext. Längere Ziffern werden kleiner gesetzt, damit sie
+    // im Kreis bleiben.
+    const centerText = g.ordinal != null ? toRoman(g.ordinal) : g.def?.short ?? '';
+    let centerSize = r > 13 ? 13 : 11;
+    if (centerText.length >= 4) centerSize = r > 13 ? 9 : 8;
+    else if (centerText.length === 3) centerSize = r > 13 ? 11 : 9.5;
+    label(x, yy + 0.5, centerText, { color: '#fff', weight: 700, size: centerSize });
     if (g.maxHp != null && !opts.ghost) {
       drawHpBar(x, yy - r - 11, Math.max(28, r * 2.1), g.hp, g.maxHp);
     }
@@ -934,13 +943,10 @@ export function createRenderer(canvas, map) {
       return !!(ti && ti.faction === enemy);
     };
 
-    // Halte-Marker aller Einheiten (Pfadende von Einheiten mit „Halten").
-    const holdCount = new Map();
-    for (const u of pl.units) {
-      if (u.stance !== 'defend') continue;
-      const end = u.path.length ? u.path[u.path.length - 1] : start;
-      holdCount.set(end, (holdCount.get(end) ?? 0) + 1);
-    }
+    // Zielknoten einer Einheit: das Pfadende (letzter Wegpunkt). Ohne Wegpunkte
+    // ist es die eigene Basis (Halten) bzw. der gegnerische Boss (Angriff).
+    const targetNodeOf = (u) =>
+      u.path.length ? u.path[u.path.length - 1] : u.stance === 'defend' ? start : enemyBoss;
 
     // Pfad der ausgewählten Einheit hervorheben.
     const sel = pl.units[pl.selected] ?? null;
@@ -987,10 +993,34 @@ export function createRenderer(canvas, map) {
       ctx.restore();
     }
 
-    for (const [t, count] of holdCount) {
-      const n = map.nodes[t];
-      drawShieldIcon(n.x - 17, n.y - 14, 6.5, 'rgba(255,215,106,0.9)');
-      if (count > 1) label(n.x - 17, n.y - 26, `×${count}`, { color: '#ffd76a' });
+    // Ziel-Marker der übrigen Trupps (nur das Ziel, nicht der ganze Pfad):
+    // je eine Marke mit römischer Ziffer am Zielknoten, damit auf einen Blick
+    // erkennbar ist, welcher Turm schon angegriffen bzw. welcher Friedhof schon
+    // eingenommen wird. Gold umrandet = Halten, Fraktionsfarbe = Angriff.
+    if (pl.showTargets) {
+      const byTarget = new Map(); // nodeId → [{ ordinal, stance }]
+      pl.units.forEach((u, i) => {
+        if (i === pl.selected) return; // eigener Pfad ist bereits vollständig sichtbar
+        const t = targetNodeOf(u);
+        if (!byTarget.has(t)) byTarget.set(t, []);
+        byTarget.get(t).push({ ordinal: i + 1, stance: u.stance });
+      });
+      for (const [t, list] of byTarget) {
+        const n = map.nodes[t];
+        list.forEach((item, k) => {
+          const bx = n.x - 20 - k * 21;
+          const by = n.y - 15;
+          ctx.beginPath();
+          ctx.arc(bx, by, 9.5, 0, TAU);
+          ctx.fillStyle = 'rgba(9,13,22,0.85)';
+          ctx.fill();
+          ctx.lineWidth = 2.2;
+          ctx.strokeStyle = item.stance === 'defend' ? '#ffd76a' : c.color;
+          ctx.stroke();
+          const rn = toRoman(item.ordinal);
+          label(bx, by + 0.5, rn, { color: '#fff', weight: 700, size: rn.length >= 3 ? 8 : 9.5 });
+        });
+      }
     }
 
     // Eigene Armee wartet am Start (Zahl = angeworbene Einheiten).

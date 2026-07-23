@@ -243,13 +243,21 @@ body {
 }
 
 /* ------------------------------------------------------------------ Spielfeld */
+/* Vollbild-Spalte: die Karte scrollt im oberen Bereich, das Panel liegt direkt
+   darunter (kein fixiertes Panel, keine Lücke zwischen Karte und Bedienung). */
 #screen-game {
-  padding-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
 }
 
 #map-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   justify-content: center;
+  align-items: flex-start;
 }
 
 #map {
@@ -259,21 +267,11 @@ body {
   touch-action: pan-y;
 }
 
-body.phase-plan #map-wrap {
-  padding-bottom: 360px;
-}
-
-body.phase-sim #map-wrap {
-  padding-bottom: 170px;
-}
-
 /* ------------------------------------------------------------------ Panel */
 #panel {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  translate: -50% 0;
+  flex: 0 0 auto;
   width: min(100%, 560px);
+  margin: 0 auto;
   background: rgba(14, 18, 28, 0.94);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -331,6 +329,46 @@ body.phase-sim #map-wrap {
   color: #aeb8cc;
 }
 
+/* Karteneinstellung ganz oben im Panel (über dem Planungstitel): steuert nur
+   die Anzeige auf der Karte, daher vom Konfigurationsteil abgesetzt. */
+.map-settings {
+  display: flex;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid #2a3348;
+}
+
+.btn.map-toggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.82rem;
+  color: #aeb8cc;
+}
+
+.map-toggle-dot {
+  flex: 0 0 auto;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  border: 2px solid #56617a;
+  background: transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn.map-toggle.active {
+  border-color: #5b9cff;
+  background: #223050;
+  color: #e6ebf4;
+}
+
+.btn.map-toggle.active .map-toggle-dot {
+  border-color: #6ecf73;
+  background: #6ecf73;
+}
+
 .recruit-row {
   display: flex;
   align-items: center;
@@ -363,34 +401,57 @@ body.phase-sim #map-wrap {
   cursor: default;
 }
 
+/* Einheitenliste: volle Panelbreite, je Einheit eine eigene Zeile. */
 .chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  max-height: 7.5rem;
+  display: grid;
+  gap: 0.35rem;
+  max-height: 9rem;
   overflow-y: auto;
 }
 
 .chip {
   font: inherit;
   font-size: 0.8rem;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.6rem;
-  border-radius: 999px;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.65rem;
+  border-radius: 0.6rem;
   border: 1.5px solid #2a3348;
   background: #1c2334;
   color: #cfd7e6;
   cursor: pointer;
-  max-width: 100%;
+  text-align: left;
 }
 
-.chip span {
+.chip strong {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Römische Ziffer als kompaktes Kennzeichen vor jeder Einheit. */
+.chip-num {
+  flex: 0 0 auto;
+  min-width: 1.9rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.4rem;
+  border: 1px solid #3a4358;
+  background: #12161f;
+  color: #f0d489;
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Plan-Zusammenfassung füllt die restliche Breite und kürzt bei Bedarf. */
+.chip-plan {
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 11rem;
   color: #8a94a8;
 }
 
@@ -400,8 +461,13 @@ body.phase-sim #map-wrap {
   color: #fff;
 }
 
-.chip.selected span {
+.chip.selected .chip-plan {
   color: #cfd7e6;
+}
+
+.chip.selected .chip-num {
+  border-color: var(--fac, #5b9cff);
+  color: #fff;
 }
 
 .mode-row {

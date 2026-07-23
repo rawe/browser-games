@@ -21,6 +21,7 @@ const renderer = createRenderer(canvas, map);
 
 const setupEl = document.getElementById('screen-setup');
 const gameEl = document.getElementById('screen-game');
+const mapWrapEl = document.getElementById('map-wrap');
 const panelEl = document.getElementById('panel');
 const overlayEl = document.getElementById('overlay');
 const overlayCard = document.getElementById('overlay-card');
@@ -203,8 +204,6 @@ document.getElementById('setup-form').addEventListener('submit', (ev) => {
 function showScreen(phase) {
   setupEl.hidden = phase === 'setup' ? false : true;
   gameEl.hidden = phase === 'setup';
-  document.body.classList.toggle('phase-plan', phase === 'plan');
-  document.body.classList.toggle('phase-sim', phase === 'sim');
   view.phase = phase;
 }
 
@@ -238,9 +237,9 @@ function startPlanning(faction) {
     },
   });
   view.planning = planner.state;
-  // Zur eigenen Basis scrollen (blau unten, rot oben).
+  // Im Kartenbereich zur eigenen Basis scrollen (blau unten, rot oben).
   requestAnimationFrame(() => {
-    window.scrollTo({ top: faction === 'blue' ? document.body.scrollHeight : 0 });
+    mapWrapEl.scrollTop = faction === 'blue' ? mapWrapEl.scrollHeight : 0;
   });
 }
 
@@ -272,7 +271,7 @@ function startSim() {
   renderer.resize();
   buildSimPanel();
   requestAnimationFrame(() => {
-    window.scrollTo({ top: (document.body.scrollHeight - innerHeight) / 2 });
+    mapWrapEl.scrollTop = (mapWrapEl.scrollHeight - mapWrapEl.clientHeight) / 2;
   });
 }
 

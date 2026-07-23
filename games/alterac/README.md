@@ -47,6 +47,21 @@ lesen ausschließlich diese Definitionen – neue Typen oder Attribute lassen
 sich ergänzen, ohne Kernlogik anzupassen. Jede Einheit ist eigenständig;
 Fusionen oder Folgen-Befehle gibt es nicht.
 
+Jede angeworbene Einheit trägt eine fortlaufende **römische Ziffer** (in der
+Reihenfolge des Anwerbens je Fraktion). Sie erscheint als Kennzeichen in der
+Einheitenliste des Planungspanels und – sobald die Schlacht läuft – im Token-
+Kreis der Einheit auf der Karte, sodass Liste und Kampfgeschehen eindeutig
+zusammenpassen. Die Ziffer stammt aus `group.ordinal` (gesetzt beim Aufbau der
+Trupps in `sim.js`); `toRoman` in `config.js` ist der gemeinsame Formatierer.
+
+Über der Rekrutierung schaltet eine Karteneinstellung die **Ziel-Marker der
+übrigen Trupps** ein oder aus (`planner`-State `showTargets`, vom Renderer je
+Frame gelesen): eine Marke mit der römischen Ziffer am jeweiligen Zielknoten –
+nur das Ziel, nicht der ganze Pfad. So ist auf einen Blick erkennbar, welcher
+Turm bereits angegriffen bzw. welcher Friedhof schon eingenommen wird
+(Fraktionsfarbe = Angriff, Gold = Halten). Der Pfad der gerade gewählten
+Einheit bleibt davon unberührt vollständig sichtbar.
+
 Die Zahlenwerte der Typen (Kosten, Lebenspunkte, Schaden, Angriffsintervall,
 Tempo) sind Datei-Defaults und lassen sich – wie die Boss- und Turmwerte – im
 Setup je Partie feinjustieren. Das aufklappbare **Erweitert-Menü** zeigt dazu

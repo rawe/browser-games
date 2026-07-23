@@ -173,6 +173,23 @@ export const TOWERS_ON_COUNT = DEFAULT_CONFIG.towersPerFaction;
 // Maximale Länge eines geplanten Pfads (Anzahl Wegpunkte).
 export const MAX_PATH_LENGTH = 14;
 
+// Ganzzahl (ab 1) als römische Ziffer. Dient der eindeutigen Kennzeichnung
+// jeder angeworbenen Einheit – in der Einheitenliste und auf ihrem Karten-Token
+// während der Simulation. Fällt bei ungültigen Werten auf die Dezimalzahl zurück.
+export function toRoman(n) {
+  const v = Math.floor(n);
+  if (!Number.isFinite(v) || v < 1) return String(n);
+  const table = [
+    [1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'],
+    [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'],
+    [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I'],
+  ];
+  let out = '';
+  let rest = v;
+  for (const [val, sym] of table) while (rest >= val) { out += sym; rest -= val; }
+  return out;
+}
+
 // ------------------------------------------------- Zentraler Einheiten-Zugriff
 // EINZIGER Abrufpunkt der effektiven Einheitenwerte: verbindet die festen
 // Basis-Definitionen (name, short, icon, radius, desc) mit den – ggf. im Setup

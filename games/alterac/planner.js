@@ -4,7 +4,7 @@
 // verarbeitet Karten-Taps.
 
 import { FACTIONS, towerNodes } from './map.js';
-import { resolveUnitTypes, resolveUnitTypeMap, MAX_PATH_LENGTH } from './config.js';
+import { resolveUnitTypes, resolveUnitTypeMap, MAX_PATH_LENGTH, toRoman } from './config.js';
 
 // Kurzbeschreibung des Plans einer Einheit für die Einheitenleiste. `towers`
 // ist die aktive Turmzuordnung { nodeId: faction }; endet der Pfad auf einem
@@ -33,6 +33,9 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     budget,
     units: [], // { type, path: [nodeId…], stance: 'attack' | 'defend' }
     selected: -1,
+    // Karteneinstellung: Ziel-Marker der übrigen Trupps auf der Karte zeigen
+    // (nur das Ziel, nicht den ganzen Pfad). Vom Renderer (drawPlanning) gelesen.
+    showTargets: true,
   };
   const fac = FACTIONS[faction];
   const start = map.start[faction];
@@ -46,12 +49,20 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
 
   const DEFAULT_HINT =
     'Einheiten anwerben, dann den Pfad der gewählten Einheit Wegpunkt für Wegpunkt antippen ' +
-    '(nur benachbarte Punkte). Friedhöfe sind Sackgassen: Hin- und Rückweg einplanen – dort ' +
+    '(nur benachbarte Punkte). Jede Einheit trägt eine römische Ziffer – dieselbe Kennung erscheint ' +
+    'später auf ihrem Token in der Schlacht. Friedhöfe sind Sackgassen: Hin- und Rückweg einplanen – dort ' +
     'beginnt die Einnahme automatisch. „Halten" bewacht das Pfadende, „Angriff" zieht danach zum Boss. ' +
     'Türme (an den Toren) werden nur angegriffen, wenn der Pfad ausdrücklich auf einem gegnerischen ' +
-    'Turm endet; ein eigener Turm lässt sich mit „Halten" verteidigen.';
+    'Turm endet; ein eigener Turm lässt sich mit „Halten" verteidigen. Der Schalter oben zeigt die Ziele ' +
+    'der übrigen Trupps direkt auf der Karte (Fraktionsfarbe = Angriff, Gold = Halten).';
 
   panel.innerHTML = `
+    <div class="map-settings">
+      <button class="btn ghost map-toggle active" id="btn-targets" type="button" aria-pressed="true">
+        <span class="map-toggle-dot" aria-hidden="true"></span>
+        🎯 Ziele der übrigen Trupps auf der Karte zeigen
+      </button>
+    </div>
     <div class="panel-head">
       <span class="plan-title" style="--fac:${fac.color}">${fac.name} · ${fac.player} plant</span>
       <button class="btn ghost help-toggle" id="btn-help" type="button"
@@ -123,6 +134,15 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     helpToggle.setAttribute('aria-expanded', String(show));
   });
 
+  // Karteneinstellung: Ziel-Marker der übrigen Trupps ein-/ausblenden. Der
+  // Renderer liest `state.showTargets` jeden Frame – kein refresh() nötig.
+  const targetsToggle = panel.querySelector('#btn-targets');
+  targetsToggle.addEventListener('click', () => {
+    state.showTargets = !state.showTargets;
+    targetsToggle.classList.toggle('active', state.showTargets);
+    targetsToggle.setAttribute('aria-pressed', String(state.showTargets));
+  });
+
   function refresh() {
     closeConfirmAsk();
     const used = spent();
@@ -142,7 +162,10 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
       chip.className = 'chip';
       if (i === state.selected) chip.classList.add('selected');
       chip.style.setProperty('--fac', fac.color);
-      chip.innerHTML = `<strong>${def.icon} ${def.name}</strong><span>${planSummary(u, map.nodes, towers, faction)}</span>`;
+      chip.innerHTML =
+        `<span class="chip-num">${toRoman(i + 1)}</span>` +
+        `<strong>${def.icon} ${def.name}</strong>` +
+        `<span class="chip-plan">${planSummary(u, map.nodes, towers, faction)}</span>`;
       chip.addEventListener('click', () => {
         state.selected = i;
         refresh();
