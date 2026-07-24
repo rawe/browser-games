@@ -126,8 +126,7 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
         )
         .join('')}
     </div>
-    <div class="chips" id="chips"></div>
-    <div class="editor" id="editor" hidden></div>
+    <div class="roster" id="roster"></div>
     <p class="hint" id="hint"></p>
     <div class="confirm-zone">
       <div class="confirm-ask" id="confirm-ask" hidden>
@@ -143,8 +142,7 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     </div>
   `;
 
-  const chipsEl = panel.querySelector('#chips');
-  const editorEl = panel.querySelector('#editor');
+  const rosterEl = panel.querySelector('#roster');
   const hintEl = panel.querySelector('#hint');
   const budgetEl = panel.querySelector('#budget');
   const recruitButtons = [...panel.querySelectorAll('.recruit')];
@@ -189,34 +187,40 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     return extra > 0 ? `${first} · +${extra} Auftrag${extra > 1 ? 'e' : ''}` : first;
   }
 
-  function buildChips() {
-    chipsEl.innerHTML = '';
+  // Einheitenliste (Roster): je Einheit ein kompakter Chip; die gewählte Einheit
+  // klappt ihren Auftrags-Editor direkt darunter auf (Akkordeon). Alles lebt in
+  // einem einzigen, höhenbegrenzten Scrollbereich – so bleibt die Karte immer
+  // anklickbar, egal wie lang die Liste wird.
+  function buildRoster() {
+    rosterEl.innerHTML = '';
     state.units.forEach((u, i) => {
       const def = byKey[u.type];
+      const selected = i === state.selected;
+      const item = document.createElement('div');
+      item.className = 'unit' + (selected ? ' selected' : '');
+
       const chip = document.createElement('button');
-      chip.className = 'chip';
-      if (i === state.selected) chip.classList.add('selected');
+      chip.type = 'button';
+      chip.className = 'chip' + (selected ? ' selected' : '');
+      chip.dataset.selectUnit = i;
       chip.style.setProperty('--fac', fac.color);
       chip.innerHTML =
         `<span class="chip-num">${toRoman(i + 1)}</span>` +
         `<strong>${def.icon} ${def.name}</strong>` +
         `<span class="chip-plan">${unitSummary(u)}</span>`;
-      chip.addEventListener('click', () => {
-        state.selected = i;
-        state.selectedAction = u.actions.length - 1;
-        state.pickTower = false;
-        refresh();
-      });
-      chipsEl.appendChild(chip);
+      item.appendChild(chip);
+
+      if (selected) item.appendChild(buildEditor(u));
+      rosterEl.appendChild(item);
     });
   }
 
   // --- Editor (Auftragskette der gewählten Einheit) ------------------------
-  function buildEditor() {
-    const u = selectedUnit();
-    editorEl.hidden = !u;
-    editorEl.innerHTML = '';
-    if (!u) return;
+  // Baut den Editor-Block der Einheit `u` und gibt ihn als DOM-Knoten zurück
+  // (wird vom Roster direkt unter dem gewählten Chip eingehängt).
+  function buildEditor(u) {
+    const editor = document.createElement('div');
+    editor.className = 'editor';
 
     const list = document.createElement('div');
     list.className = 'action-list';
@@ -247,7 +251,7 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
       if (idx === state.selectedAction) item.appendChild(buildActionControls(u, a, idx));
       list.appendChild(item);
     });
-    editorEl.appendChild(list);
+    editor.appendChild(list);
 
     const footer = document.createElement('div');
     footer.className = 'editor-footer';
@@ -255,7 +259,8 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
       footer.innerHTML += `<button class="btn ghost add-action" id="btn-add-action" type="button">➕ Auftrag</button>`;
     }
     footer.innerHTML += `<button class="btn ghost" id="btn-remove-unit" type="button" title="Einheit entlassen">🗑 Einheit</button>`;
-    editorEl.appendChild(footer);
+    editor.appendChild(footer);
+    return editor;
   }
 
   function buildActionControls(u, a, idx) {
@@ -309,11 +314,22 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     return box;
   }
 
-  // Editor-Interaktionen (Delegation, da der Editor je refresh neu gebaut wird).
-  editorEl.addEventListener('click', (ev) => {
+  // Roster-Interaktionen (Delegation, da Liste und Editor je refresh neu gebaut
+  // werden). Zuerst die Einheitenauswahl – sie greift unabhängig davon, welche
+  // Einheit gerade gewählt ist.
+  rosterEl.addEventListener('click', (ev) => {
+    const t = ev.target;
+    const pickUnit = t.closest('[data-select-unit]');
+    if (pickUnit) {
+      const i = Number(pickUnit.dataset.selectUnit);
+      state.selected = i;
+      state.selectedAction = state.units[i].actions.length - 1;
+      state.pickTower = false;
+      refresh();
+      return;
+    }
     const u = selectedUnit();
     if (!u) return;
-    const t = ev.target;
     if (t.closest('#btn-add-action')) {
       if (u.actions.length >= MAX_ACTIONS) return;
       u.actions.push({ path: [], stance: 'attack', trigger: { kind: 'then' } });
@@ -384,7 +400,7 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     }
   });
 
-  editorEl.addEventListener('change', (ev) => {
+  rosterEl.addEventListener('change', (ev) => {
     const sel = ev.target.closest('[data-cond]');
     if (!sel) return;
     const a = selectedActionObj();
@@ -403,8 +419,7 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
       b.disabled = byKey[b.dataset.type].cost > state.budget - used;
     }
     if (state.selected >= state.units.length) state.selected = state.units.length - 1;
-    buildChips();
-    buildEditor();
+    buildRoster();
   }
 
   for (const b of recruitButtons) {

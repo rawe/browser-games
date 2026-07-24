@@ -283,7 +283,12 @@ html {
 
 /* ------------------------------------------------------------------ Panel */
 #panel {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  /* Höhe deckeln, damit die Karte immer einen nutzbaren Anteil behält und
+     anklickbar bleibt – egal wie lang die Einheiten-/Auftragsliste wird. Die
+     Liste (.roster) scrollt intern; Rekrutierung und „Schlacht starten" bleiben
+     als fixe Kopf-/Fußzeile stets sichtbar. */
+  max-height: min(60dvh, 32rem);
   width: min(100%, 560px);
   margin: 0 auto;
   background: rgba(14, 18, 28, 0.94);
@@ -293,10 +298,16 @@ html {
   border-bottom: none;
   border-radius: 1rem 1rem 0 0;
   padding: 0.75rem 0.9rem calc(0.75rem + env(safe-area-inset-bottom));
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0.6rem;
   z-index: 10;
   box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* Kopf-/Fußzeilen behalten ihre natürliche Höhe; nur die Liste scrollt. */
+#panel > *:not(.roster) {
+  flex: 0 0 auto;
 }
 
 .panel-head {
@@ -416,13 +427,25 @@ html {
 }
 
 /* Einheitenliste: volle Panelbreite, je Einheit eine eigene Zeile. */
-.chips {
+/* Einziger Scrollbereich des Panels: Einheitenliste samt aufgeklapptem Editor
+   der gewählten Einheit. Nimmt den Platz zwischen fixer Kopf- und Fußzeile ein
+   und scrollt intern – dadurch skaliert das Panel mit beliebig vielen Einheiten
+   und Aufträgen, ohne die Karte zu verdrängen. */
+.roster {
+  flex: 1 1 auto;
+  min-height: 4.5rem;
   display: grid;
   gap: 0.35rem;
-  max-height: 9rem;
+  align-content: start;
   overflow-y: auto;
   touch-action: pan-y;
   overscroll-behavior: contain;
+}
+
+/* Einheit = Chip + (bei Auswahl) direkt darunter aufgeklappter Editor. */
+.unit {
+  display: grid;
+  gap: 0.35rem;
 }
 
 .chip {
