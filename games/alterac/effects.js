@@ -150,6 +150,9 @@ export function createEffects(map) {
         sparks(p.x, p.y - 4, facColor(ev.faction), ev.tower ? 7 : 5, 55);
       } else if (ev.type === 'bossAoe') {
         bossNova(p.x, p.y, facColor(ev.faction));
+      } else if (ev.type === 'bossShielded') {
+        // Abgewehrter Treffer am geschützten Boss: kurzes Schild-Aufblitzen statt Schaden.
+        ring(p.x, p.y, 'rgba(150,210,255,0.7)', 30, 0.4, 3);
       } else if (ev.type === 'towerFight') {
         ring(p.x, p.y, facColor(ev.faction), 30, 0.5, 2.5);
       } else if (ev.type === 'towerDown') {

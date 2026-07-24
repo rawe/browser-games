@@ -15,6 +15,10 @@
 // Flächen-Gegenschlag, der ALLE gerade an ihm angreifenden Einheiten gleichzeitig
 // trifft (`bossAoeDamage`, gesenkt um denselben Turm-Debuff wie der Einzelangriff)
 // – so wird ein unkoordinierter Massensturm auf den Boss riskant.
+// Boss-Schutz: Solange eigene Türme stehen, erleidet der Boss nur den Anteil
+// `bossVulnerability` des Schadens (`bossTowerShield`/`bossShieldFloor`); bei vollem
+// Schutz ist er unverwundbar. Er lässt sich also erst nach dem Fall seiner Türme
+// niederkämpfen – ohne Türme (towersPerFaction=0) greift der Schutz nie.
 // Erreicht eine Einheit oder der Boss 0 Hitpoints, fällt sie. Überlebende
 // behalten ihre aktuellen Hitpoints, Respawns kehren mit vollen zurück.
 //
@@ -73,6 +77,8 @@ export function createSim({ map, config, plans }) {
     towerAttackInterval,
     towerDamageReduction,
     bossDamageFloor,
+    bossTowerShield = 0,
+    bossShieldFloor = 0,
   } = config;
   // Effektive Einheitenwerte dieser Partie (Datei-Defaults ggf. überschrieben).
   const unitTypes = resolveUnitTypeMap(config);
@@ -113,6 +119,9 @@ export function createSim({ map, config, plans }) {
   // Anzahl je Fraktion bereits zerstörter Türme – reduziert dauerhaft den
   // Angriffsschaden des zugehörigen Fürsten (Berechnung stets aus dem Basiswert).
   const destroyedTowers = { blue: 0, red: 0 };
+  // Gesamtzahl der Türme je Fraktion (für den Boss-Schutz durch stehende Türme).
+  const towerCount = { blue: 0, red: 0 };
+  for (const nodeId of Object.keys(towers)) towerCount[towers[nodeId].faction] += 1;
   // Knoten mit aktuell laufendem Kampf (für Log und Effekte).
   const nodeCombats = new Set();
   // Aktive Begegnungskämpfe auf Wegstücken: { a, b, frac } mit a/b als
@@ -214,6 +223,16 @@ export function createSim({ map, config, plans }) {
   // Aktueller Angriffsschaden eines Fürsten (Einzelangriff), um den Turm-Debuff gesenkt.
   function bossDamageOf(faction) {
     return bossDamage * bossDamageFactor(faction);
+  }
+
+  // Boss-Schutz durch eigene Türme: Anteil des Schadens, den der Boss aktuell
+  // erleidet. Je überlebendem eigenen Turm um `bossTowerShield` gesenkt, nie unter
+  // `bossShieldFloor`. Ohne Türme (towerCount 0) bleibt es bei vollem Schaden – so
+  // ist der Boss erst nach dem Fall seiner Türme verwundbar (`bossTowerShield` 1.0 =
+  // ein einziger stehender Turm genügt für Unverwundbarkeit).
+  function bossVulnerability(faction) {
+    const surviving = towerCount[faction] - destroyedTowers[faction];
+    return Math.max(bossShieldFloor, 1 - bossTowerShield * surviving);
   }
 
   function combatants(nodeId) {
@@ -629,8 +648,16 @@ export function createSim({ map, config, plans }) {
         target.hp = Math.max(0, target.hp - dealt);
         addEvent({ type: 'damage', amount: dealt, boss: false, faction: target.faction, where });
       } else if (bossTargetFaction) {
-        boss[bossTargetFaction].hp = Math.max(0, boss[bossTargetFaction].hp - damage);
-        addEvent({ type: 'damage', amount: damage, boss: true, faction: bossTargetFaction, where });
+        // Boss-Schutz durch stehende Türme: der erlittene Schaden wird gesenkt;
+        // bei vollem Schutz (Turm steht) kommt nichts durch – dann signalisiert ein
+        // eigenes Ereignis den abgewehrten Treffer statt einer irreführenden Zahl.
+        const dealt = damage * bossVulnerability(bossTargetFaction);
+        if (dealt > EPS) {
+          boss[bossTargetFaction].hp = Math.max(0, boss[bossTargetFaction].hp - dealt);
+          addEvent({ type: 'damage', amount: dealt, boss: true, faction: bossTargetFaction, where });
+        } else {
+          addEvent({ type: 'bossShielded', faction: bossTargetFaction, where });
+        }
       } else if (towerTargetNode) {
         // Alle Verteidiger gefallen → der Turm erleidet vollen Schaden (kein
         // Verteidigungsbonus, keine zusätzliche Reduktion).
@@ -880,6 +907,11 @@ export function createSim({ map, config, plans }) {
     // sowie die Zahl bereits zerstörter Türme je Fraktion (für den Fürsten-Debuff).
     towers,
     destroyedTowers,
+    // Aktueller Boss-Schutz je Fraktion als geblockter Anteil (0 = ungeschützt,
+    // 1 = unverwundbar), für die Schild-Darstellung am Boss.
+    get bossShield() {
+      return { blue: 1 - bossVulnerability('blue'), red: 1 - bossVulnerability('red') };
+    },
     // Aktueller Friedhofszustand für Renderer/UI (Besitz + laufende Einnahmen).
     graveyards: { owner: gyOwner, captures },
     config,

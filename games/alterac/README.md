@@ -160,10 +160,23 @@ Fraktion); er bewegt sich nicht, regeneriert nicht und respawnt nicht.
   den Angriffsschaden des zugehörigen Fürsten – stets berechnet auf dessen
   **Basiswert**, nie auf den bereits reduzierten Wert (bei zwei Türmen empfohlen:
   −25 % pro Turm, Untergrenze 50 % des Basiswerts).
+- **Boss-Schutz durch stehende Türme:** Solange eine Fraktion noch Türme besitzt,
+  erleidet ihr Boss nur einen Bruchteil des Schadens
+  (`erlittener Anteil = max(bossShieldFloor, 1 − bossTowerShield × überlebende Türme)`).
+  Beim Standardwert `bossTowerShield: 1.0` genügt ein **einziger** stehender Turm,
+  um den Boss unverwundbar zu machen – man muss also erst **alle** Türme des Gegners
+  fällen, bevor sein Boss überhaupt Schaden nimmt. Das verhindert das direkte
+  Niederrennen des Bosses (ein reiner Boss-Sturm richtet nichts aus), ohne einen
+  normalen Angriff unmöglich zu machen: nach dem Turmfall ist der Boss regulär
+  besiegbar. Weil jeder Zugang zum Boss ohnehin an einem eigenen Turm vorbeiführt,
+  ist der Schutz auch geografisch stimmig. Ohne Türme (`towersPerFaction: 0`) greift
+  er nie. Der Renderer zeigt den Schutz als schimmernde Schild-Kuppel über der
+  Festung; abgewehrte Treffer blitzen als Schild-Ring auf (statt einer Schadenszahl).
 
 Alle Turmwerte, die Turmanzahl (`towersPerFaction`), die Schadensreduktion je
-Turm (`towerDamageReduction`) und die Mindestschadensgrenze des Fürsten
-(`bossDamageFloor`) stehen zentral in `config.js`. Im Setup lassen sich die
+Turm (`towerDamageReduction`), die Mindestschadensgrenze des Fürsten
+(`bossDamageFloor`) sowie der Boss-Schutz (`bossTowerShield`, `bossShieldFloor`)
+stehen zentral in `config.js`. Im Setup lassen sich die
 Türme über den Schalter **„Türme aktiv"** ganz an- oder abschalten (aus =
 `towersPerFaction: 0`); ihre Kampfwerte samt Fürsten-Debuff sind – wie die
 Boss-Werte – im aufklappbaren **Erweitert-Menü** als Zahlenfelder feinjustierbar

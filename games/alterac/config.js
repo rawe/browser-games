@@ -127,6 +127,17 @@ export const DEFAULT_CONFIG = {
   // den bereits reduzierten Wert.
   towerDamageReduction: 0.25, // Anteil des Basis-Schadens, um den der Fürst je zerstörtem Turm sinkt
   bossDamageFloor: 0.5, // Mindestanteil des Basis-Schadens, den der Fürst niemals unterschreitet
+  // Boss-Schutz durch eigene Türme: Solange Türme einer Fraktion stehen, erleidet
+  // ihr Boss nur einen Bruchteil des Schadens – so lässt sich der Boss nicht
+  // direkt niederrennen, sondern erst nach dem Fall seiner Türme angreifen.
+  // erlittener Anteil = max(bossShieldFloor, 1 − bossTowerShield × überlebende Türme).
+  //   bossTowerShield: geblockter Anteil je ÜBERLEBENDEM Turm (1.0 = ein einziger
+  //     stehender Turm macht den Boss unverwundbar → man muss ALLE Türme fällen).
+  //   bossShieldFloor: Mindestanteil an Schaden, der trotz Türmen immer durchkommt
+  //     (0 = perfekter Schutz). Ohne Türme (towersPerFaction=0) greift der Schutz
+  //     nie – der Boss ist dann normal angreifbar.
+  bossTowerShield: 1.0,
+  bossShieldFloor: 0.0,
 };
 
 // ------------------------------------------------------- Erweitertes Konfig-Menü
@@ -161,6 +172,8 @@ export const CONFIG_SECTIONS = [
       { key: 'towerAttackInterval', label: 'Turm-Angriffsintervall', min: 0.2, max: 5, step: 0.1, kind: 'float', unit: 's' },
       { key: 'towerDamageReduction', label: 'Debuff je Turm', min: 0, max: 50, step: 5, kind: 'percent', unit: '%' },
       { key: 'bossDamageFloor', label: 'Boss-Mindestschaden', min: 0, max: 100, step: 5, kind: 'percent', unit: '%' },
+      { key: 'bossTowerShield', label: 'Boss-Schutz je Turm', min: 0, max: 100, step: 5, kind: 'percent', unit: '%' },
+      { key: 'bossShieldFloor', label: 'Boss-Restschaden trotz Türmen', min: 0, max: 100, step: 5, kind: 'percent', unit: '%' },
     ],
   },
   {

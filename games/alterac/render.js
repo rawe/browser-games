@@ -301,7 +301,7 @@ export function createRenderer(canvas, map) {
 
   // Festung: Turm mit Seitenmauern, Feuerschalen, leuchtenden Schießscharten
   // und großem Fraktionsbanner. Zerstört: dunkel, rissig, rauchend.
-  function drawKeep(n, alive, bossState) {
+  function drawKeep(n, alive, bossState, shield = 0) {
     const c = FACTIONS[n.faction];
     const w = 40;
     const h = 46;
@@ -311,6 +311,28 @@ export function createRenderer(canvas, map) {
     ctx.ellipse(n.x, n.y + 18, 42, 12, 0, 0, TAU);
     ctx.fillStyle = 'rgba(10,15,24,0.6)';
     ctx.fill();
+    // Schutzschild durch stehende Türme: schimmernde Kuppel über der Festung,
+    // deren Deckkraft mit dem geblockten Anteil steigt. Signalisiert, dass der
+    // Boss unverwundbar bleibt, bis seine Türme fallen.
+    if (alive && shield > 0.001) {
+      const sr = 44;
+      const cy = n.y - 2;
+      const pulse = 0.6 + 0.4 * Math.sin(anim * 3 + n.y * 0.05);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(n.x, cy, sr * 0.55, n.x, cy, sr);
+      g.addColorStop(0, 'rgba(150,210,255,0)');
+      g.addColorStop(0.82, `rgba(150,210,255,${0.05 + 0.12 * shield})`);
+      g.addColorStop(1, `rgba(190,230,255,${0.18 + 0.4 * shield * pulse})`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(n.x, cy, sr, 0, TAU);
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = `rgba(200,235,255,${0.25 + 0.45 * shield * pulse})`;
+      ctx.stroke();
+      ctx.restore();
+    }
     // Seitenmauern mit Zinnen und Schneeauflage
     for (const side of [-1, 1]) {
       const mx = side === -1 ? x0 - 15 : x0 + w;
@@ -799,7 +821,8 @@ export function createRenderer(canvas, map) {
         drawGraveyard(n, gyOwner, capture);
       } else {
         const bossState = sim ? sim.boss[n.faction] : { hp: bossHp, maxHp: bossHp };
-        drawKeep(n, sim ? sim.bossAlive[n.faction] : true, bossState);
+        const bossShield = sim && sim.bossAlive[n.faction] ? sim.bossShield[n.faction] : 0;
+        drawKeep(n, sim ? sim.bossAlive[n.faction] : true, bossState, bossShield);
       }
       label(n.x + (n.labelDx ?? 0), n.y + (n.labelDy ?? 30), n.name, {
         align: n.labelDx ? 'left' : 'center',
