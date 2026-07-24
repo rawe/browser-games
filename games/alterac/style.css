@@ -6,6 +6,18 @@ body {
   color-scheme: dark;
 }
 
+/* Mobil: Pinch-Zoom und Doppeltipp-Zoom unterbinden, vertikales Scrollen der
+   Karte, Setup-Seite und Einheitenliste aber sauber erhalten. `pan-y` erlaubt
+   nur vertikales Wischen (kein Pinch), `overscroll-behavior` stoppt Bounce/
+   Pull-to-Refresh. Ergänzt die JS-Gestensperre in gestures.js (nötig für iOS,
+   das `user-scalable=no` ignoriert). */
+html {
+  touch-action: pan-y;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 .back-link {
   color: #aeb8cc;
   z-index: 20;
@@ -258,6 +270,8 @@ body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
 }
 
 #map {
@@ -407,6 +421,8 @@ body {
   gap: 0.35rem;
   max-height: 9rem;
   overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
 }
 
 .chip {
