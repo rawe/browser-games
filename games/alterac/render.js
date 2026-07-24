@@ -966,21 +966,46 @@ export function createRenderer(canvas, map) {
       return !!(ti && ti.faction === enemy);
     };
 
-    // Zielknoten einer Einheit: das Pfadende (letzter Wegpunkt). Ohne Wegpunkte
+    // Auftrag ist eine Reaktion („Sobald")? Der erste Auftrag nie.
+    const isReaction = (a, i) => i > 0 && a.trigger?.kind === 'when';
+    // Wegpunkte aller sequenziellen Aufträge (Rückgrat) hintereinander.
+    const seqWaypoints = (u) => u.actions.filter((a, i) => !isReaction(a, i)).flatMap((a) => a.path);
+    // Haltung des letzten sequenziellen Auftrags (bestimmt Endmarker & Fallback).
+    const lastSeqStance = (u) => {
+      let st = 'attack';
+      u.actions.forEach((a, i) => {
+        if (!isReaction(a, i)) st = a.stance;
+      });
+      return st;
+    };
+    // Ankerpunkt (Endknoten der Aufträge vor `idx`) und Ende eines Auftrags.
+    const anchorNode = (u, idx) => {
+      let node = start;
+      for (let k = 0; k < idx; k++) if (u.actions[k].path.length) node = u.actions[k].path.at(-1);
+      return node;
+    };
+    const actionEnd = (u, idx) => (u.actions[idx].path.length ? u.actions[idx].path.at(-1) : anchorNode(u, idx));
+
+    // Zielknoten einer Einheit: Ende der sequenziellen Kette. Ohne Wegpunkte
     // ist es die eigene Basis (Halten) bzw. der gegnerische Boss (Angriff).
-    const targetNodeOf = (u) =>
-      u.path.length ? u.path[u.path.length - 1] : u.stance === 'defend' ? start : enemyBoss;
+    const targetNodeOf = (u) => {
+      const wp = seqWaypoints(u);
+      return wp.length ? wp[wp.length - 1] : lastSeqStance(u) === 'defend' ? start : enemyBoss;
+    };
 
     // Pfad der ausgewählten Einheit hervorheben.
     const sel = pl.units[pl.selected] ?? null;
     if (sel) {
-      const endTowerTarget = sel.stance === 'attack' && isEnemyTower(sel.path[sel.path.length - 1]);
-      const seq = [start, ...sel.path];
-      if (sel.stance === 'attack' && !endTowerTarget && seq[seq.length - 1] !== enemyBoss) {
+      const wp = seqWaypoints(sel);
+      const endId = wp.length ? wp[wp.length - 1] : start;
+      const seqStance = lastSeqStance(sel);
+      const endTowerTarget = seqStance === 'attack' && isEnemyTower(endId);
+      const seq = [start, ...wp];
+      if (seqStance === 'attack' && !endTowerTarget && seq[seq.length - 1] !== enemyBoss) {
         seq.push(enemyBoss);
       }
       strokeRoute(routePoints(seq), c.color);
-      sel.path.forEach((t, i) => {
+      wp.forEach((t, i) => {
         const n = map.nodes[t];
         ctx.beginPath();
         ctx.arc(n.x + 14, n.y - 14, 8.5, 0, TAU);
@@ -991,15 +1016,30 @@ export function createRenderer(canvas, map) {
         ctx.stroke();
         label(n.x + 14, n.y - 13.5, String(i + 1), { color: '#fff', weight: 700 });
       });
-      const endId = sel.path.length ? sel.path[sel.path.length - 1] : start;
-      if (sel.stance === 'defend') {
+      if (seqStance === 'defend') {
         const n = map.nodes[endId];
         drawShieldIcon(n.x + 16, n.y - 14, 8, c.color);
       } else if (endTowerTarget) {
         // Turmangriff-Marker: gekreuzte Schwerter am Ziel-Turm.
         drawSwords(map.nodes[endId].x, map.nodes[endId].y, anim);
       }
-      // Mögliche nächste Wegpunkte (Nachbarn des Pfadendes) pulsierend markieren.
+
+      // Aktiver Auftrag: ist es eine Reaktion, den zugehörigen Pfad gestrichelt
+      // ab seinem Anker zeigen (er läuft nicht in der Sequenz).
+      const selIdx = pl.selectedAction ?? 0;
+      const selAction = sel.actions[selIdx];
+      if (selAction && isReaction(selAction, selIdx) && selAction.path.length) {
+        const rnodes = [anchorNode(sel, selIdx), ...selAction.path];
+        ctx.save();
+        ctx.setLineDash([9, 7]);
+        ctx.lineDashOffset = -anim * 12;
+        strokeRoute(routePoints(rnodes), '#ffd76a');
+        ctx.restore();
+      }
+
+      // Mögliche nächste Wegpunkte (Nachbarn des Auftrags-Endes) pulsierend
+      // markieren – dort hängt der nächste Karten-Tap an.
+      const attachId = selAction ? actionEnd(sel, selIdx) : endId;
       const pulse = 0.5 + 0.5 * Math.sin(anim * 5);
       ctx.save();
       ctx.setLineDash([5, 7]);
@@ -1007,7 +1047,7 @@ export function createRenderer(canvas, map) {
       ctx.lineWidth = 2;
       ctx.strokeStyle = c.color;
       ctx.globalAlpha = 0.45 + pulse * 0.35;
-      for (const nb of map.adjacency[endId]) {
+      for (const nb of map.adjacency[attachId]) {
         const n = map.nodes[nb];
         ctx.beginPath();
         ctx.arc(n.x, n.y, 22 + pulse * 2.5, 0, TAU);
@@ -1026,7 +1066,7 @@ export function createRenderer(canvas, map) {
         if (i === pl.selected) return; // eigener Pfad ist bereits vollständig sichtbar
         const t = targetNodeOf(u);
         if (!byTarget.has(t)) byTarget.set(t, []);
-        byTarget.get(t).push({ ordinal: i + 1, stance: u.stance });
+        byTarget.get(t).push({ ordinal: i + 1, stance: lastSeqStance(u) });
       });
       for (const [t, list] of byTarget) {
         const n = map.nodes[t];

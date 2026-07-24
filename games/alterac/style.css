@@ -501,6 +501,162 @@ html {
   flex: 0 0 2.75rem;
 }
 
+/* ------------------------------------------------ Auftragsketten-Editor */
+.editor {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.editor[hidden] {
+  display: none;
+}
+
+.action-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.action-item {
+  border: 1.5px solid #2a3348;
+  border-radius: 0.6rem;
+  background: #171d2b;
+  overflow: hidden;
+}
+
+.action-item.selected {
+  border-color: var(--fac, #5b9cff);
+  background: #1c2334;
+}
+
+.action-line {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.8rem;
+  color: #cfd7e6;
+  cursor: pointer;
+}
+
+.action-num {
+  flex: 0 0 auto;
+  font-size: 0.95rem;
+  color: #f0d489;
+}
+
+.action-trig {
+  flex: 0 0 auto;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.action-trig.then {
+  background: #223050;
+  color: #9fb6e6;
+}
+
+.action-trig.when {
+  background: #4a3a12;
+  color: #ffd76a;
+}
+
+.action-sum {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #9aa4b8;
+}
+
+.mini.del {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: #8a94a8;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0 0.2rem;
+}
+
+.mini.del:hover {
+  color: #ffb27a;
+}
+
+.action-edit {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0 0.55rem 0.5rem;
+}
+
+.stance-row,
+.trigger-row,
+.cond-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.stance-row .btn.mode {
+  flex: 1;
+  padding: 0.4rem 0.25rem;
+  font-size: 0.82rem;
+}
+
+.stance-row .btn.ghost {
+  flex: 0 0 2.5rem;
+}
+
+.trigger-label {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  color: #8a94a8;
+}
+
+.trigger-row .btn.mode.trig {
+  flex: 1;
+  padding: 0.35rem 0.25rem;
+  font-size: 0.8rem;
+}
+
+.cond-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: 0.5rem;
+  border: 1.5px solid #2a3348;
+  background: #12161f;
+  color: #e6ebf4;
+}
+
+.tower-pick {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.tower-pick.active {
+  border-color: #ffd76a;
+  color: #ffd76a;
+}
+
+.editor-footer {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.editor-footer .btn {
+  flex: 1;
+  font-size: 0.82rem;
+  padding: 0.45rem 0.25rem;
+}
+
 .hint {
   margin: 0;
   font-size: 0.78rem;
