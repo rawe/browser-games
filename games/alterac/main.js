@@ -14,6 +14,11 @@ import { createSim } from './sim.js';
 import { createRenderer } from './render.js';
 import { createPlanner } from './planner.js';
 import { aiPlan } from './ai.js';
+import { lockZoomGestures } from './gestures.js';
+
+// Pinch-/Doppeltipp-Zoom auf Mobilgeräten (v. a. iOS) sperren – gilt für alle
+// Bildschirme (Setup, Planung, Simulation). Scrollen bleibt erhalten.
+lockZoomGestures();
 
 const map = createMap();
 const canvas = document.getElementById('map');
