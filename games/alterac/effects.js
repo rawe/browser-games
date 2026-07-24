@@ -108,6 +108,16 @@ export function createEffects(map) {
     for (let i = 0; i < 8; i++) smoke(x + rand(-18, 18), y + rand(-14, 6));
   }
 
+  // Flächen-Gegenschlag des Bosses: eine schnell aufreißende Schockwelle in der
+  // Fraktionsfarbe des Fürsten samt Funkenkranz – die Schadenszahlen an den
+  // getroffenen Einheiten kommen wie gewohnt über die einzelnen `damage`-Ereignisse.
+  function bossNova(x, y, color) {
+    shake = Math.max(shake, 0.3);
+    ring(x, y, color, 62, 0.55, 5);
+    ring(x, y, 'rgba(255,215,150,0.7)', 92, 0.72, 3, 0.08);
+    sparks(x, y, color, 18, 120);
+  }
+
   // Turmsturz: kleiner als der Boss-Fall, aber deutlich – Einsturzstaub inklusive.
   function towerFall(x, y) {
     shake = Math.max(shake, 0.55);
@@ -138,6 +148,11 @@ export function createEffects(map) {
           color: ev.boss ? '#ffb14e' : ev.tower ? '#dfe6f2' : '#ffd76a',
         });
         sparks(p.x, p.y - 4, facColor(ev.faction), ev.tower ? 7 : 5, 55);
+      } else if (ev.type === 'bossAoe') {
+        bossNova(p.x, p.y, facColor(ev.faction));
+      } else if (ev.type === 'bossShielded') {
+        // Abgewehrter Treffer am geschützten Boss: kurzes Schild-Aufblitzen statt Schaden.
+        ring(p.x, p.y, 'rgba(150,210,255,0.7)', 30, 0.4, 3);
       } else if (ev.type === 'towerFight') {
         ring(p.x, p.y, facColor(ev.faction), 30, 0.5, 2.5);
       } else if (ev.type === 'towerDown') {

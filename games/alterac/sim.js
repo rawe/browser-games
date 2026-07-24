@@ -11,6 +11,16 @@
 // Jede kämpfende Einheit schlägt in ihrem eigenen Intervall zu und trifft das
 // schwächste gegnerische Ziel an ihrem Ort (der Boss zuletzt). Eingegrabene
 // Verteidiger erleiden nur den `entrenchedFactor`-Anteil des Schadens.
+// Zusätzlich führt jeder Boss in eigenem Takt (`bossAoeInterval`) einen
+// Flächen-Gegenschlag, der ALLE gerade an ihm angreifenden Einheiten gleichzeitig
+// trifft (`bossAoeDamage`, gesenkt um denselben Turm-Debuff wie der Einzelangriff)
+// – so wird ein unkoordinierter Massensturm auf den Boss riskant.
+// Boss-Schutz: Solange mindestens ein eigener Turm steht, blockt der Boss den
+// prozentualen Anteil `bossTowerShield` des Schadens (er erleidet nur
+// `1 − bossTowerShield`). Sind alle Türme gefallen – oder gibt es keine
+// (towersPerFaction=0) –, fällt der Schild auf 0 % und der Boss ist normal
+// angreifbar. So lässt er sich nicht direkt niederrennen, aber der Schutz ist
+// prozentual justierbar statt absolut.
 // Erreicht eine Einheit oder der Boss 0 Hitpoints, fällt sie. Überlebende
 // behalten ihre aktuellen Hitpoints, Respawns kehren mit vollen zurück.
 //
@@ -60,6 +70,8 @@ export function createSim({ map, config, plans }) {
     bossHp,
     bossDamage,
     bossAttackInterval,
+    bossAoeDamage,
+    bossAoeInterval,
     maxTime,
     towersPerFaction,
     towerHp,
@@ -67,6 +79,7 @@ export function createSim({ map, config, plans }) {
     towerAttackInterval,
     towerDamageReduction,
     bossDamageFloor,
+    bossTowerShield = 0,
   } = config;
   // Effektive Einheitenwerte dieser Partie (Datei-Defaults ggf. überschrieben).
   const unitTypes = resolveUnitTypeMap(config);
@@ -82,6 +95,9 @@ export function createSim({ map, config, plans }) {
   };
   // Angriffstimer der Bosse (Infinity = kein Kampf am Boss-Knoten).
   const bossAttackAt = { blue: Infinity, red: Infinity };
+  // Takt des Flächen-Gegenschlags je Boss (Infinity = kein Kampf am Boss-Knoten).
+  // Läuft unabhängig vom Einzelangriff und trifft alle Angreifer gleichzeitig.
+  const bossAoeAt = { blue: Infinity, red: Infinity };
   // Türme: ortsfeste Kampfeinheiten an markierten Wegpunkten. Sie bewegen sich
   // nicht, regenerieren nicht und respawnen nicht. `engaged` ist true, solange
   // ein Turmkampf läuft (eine gegnerische Einheit greift den Turm ausdrücklich
@@ -104,6 +120,9 @@ export function createSim({ map, config, plans }) {
   // Anzahl je Fraktion bereits zerstörter Türme – reduziert dauerhaft den
   // Angriffsschaden des zugehörigen Fürsten (Berechnung stets aus dem Basiswert).
   const destroyedTowers = { blue: 0, red: 0 };
+  // Gesamtzahl der Türme je Fraktion (für den Boss-Schutz durch stehende Türme).
+  const towerCount = { blue: 0, red: 0 };
+  for (const nodeId of Object.keys(towers)) towerCount[towers[nodeId].faction] += 1;
   // Knoten mit aktuell laufendem Kampf (für Log und Effekte).
   const nodeCombats = new Set();
   // Aktive Begegnungskämpfe auf Wegstücken: { a, b, frac } mit a/b als
@@ -195,11 +214,27 @@ export function createSim({ map, config, plans }) {
     return towers[g.towerTarget]?.alive ? g.towerTarget : null;
   }
 
-  // Aktueller Angriffsschaden eines Fürsten: je zerstörtem eigenen Turm um
-  // `towerDamageReduction` des Basis-Schadens gesenkt, nie unter `bossDamageFloor`.
+  // Turm-Debuff-Faktor eines Fürsten: je zerstörtem eigenen Turm um
+  // `towerDamageReduction` gesenkt, nie unter `bossDamageFloor`. Gilt einheitlich
+  // für Einzelangriff UND Flächen-Gegenschlag.
+  function bossDamageFactor(faction) {
+    return Math.max(bossDamageFloor, 1 - towerDamageReduction * destroyedTowers[faction]);
+  }
+
+  // Aktueller Angriffsschaden eines Fürsten (Einzelangriff), um den Turm-Debuff gesenkt.
   function bossDamageOf(faction) {
-    const factor = Math.max(bossDamageFloor, 1 - towerDamageReduction * destroyedTowers[faction]);
-    return bossDamage * factor;
+    return bossDamage * bossDamageFactor(faction);
+  }
+
+  // Boss-Schutz durch eigene Türme: Anteil des Schadens, den der Boss aktuell
+  // erleidet. Solange mindestens ein eigener Turm steht, blockt der Schild den
+  // (prozentualen, konfigurierbaren) Anteil `bossTowerShield` – der Boss erleidet
+  // dann nur `1 − bossTowerShield`. Sind alle Türme gefallen (oder gibt es keine),
+  // fällt der Schild weg und der Boss erleidet vollen Schaden.
+  function bossVulnerability(faction) {
+    const surviving = towerCount[faction] - destroyedTowers[faction];
+    if (surviving <= 0) return 1;
+    return 1 - bossTowerShield;
   }
 
   function combatants(nodeId) {
@@ -507,6 +542,7 @@ export function createSim({ map, config, plans }) {
     const attacks = [];
     for (const fac of ['blue', 'red']) {
       if (bossAlive[fac] && bossAttackAt[fac] <= t + EPS) attacks.push({ kind: 'boss', faction: fac });
+      if (bossAlive[fac] && bossAoeAt[fac] <= t + EPS) attacks.push({ kind: 'bossAoe', faction: fac });
     }
     for (const g of groups) {
       if (g.fighting && g.nextAttackAt <= t + EPS) attacks.push({ kind: 'group', g });
@@ -520,10 +556,12 @@ export function createSim({ map, config, plans }) {
     // Kennung, dann Türme nach Knoten.
     const attackKey = (a) =>
       a.kind === 'boss'
-        ? `0${a.faction}`
-        : a.kind === 'tower'
-          ? `2${a.tw.node}`
-          : `1${a.g.id.padStart(4, '0')}`;
+        ? `0${a.faction}a`
+        : a.kind === 'bossAoe'
+          ? `0${a.faction}b`
+          : a.kind === 'tower'
+            ? `2${a.tw.node}`
+            : `1${a.g.id.padStart(4, '0')}`;
     attacks.sort((x, y) => {
       const kx = attackKey(x);
       const ky = attackKey(y);
@@ -531,6 +569,25 @@ export function createSim({ map, config, plans }) {
     });
 
     for (const atk of attacks) {
+      // Flächen-Gegenschlag: trifft ALLE gerade angreifenden Gegner am Boss-Knoten
+      // gleichzeitig (nicht nur den Schwächsten). Angreifer sind nie eingegraben,
+      // daher stets voller Schaden – gesenkt nur um den Turm-Debuff des Fürsten.
+      if (atk.kind === 'bossAoe') {
+        const faction = atk.faction;
+        bossAoeAt[faction] = t + bossAoeInterval;
+        const dmg = bossAoeDamage * bossDamageFactor(faction);
+        if (dmg <= EPS) continue;
+        const nodeId = map.bosses[faction];
+        const where = { node: nodeId };
+        const targets = combatants(nodeId).filter((o) => o.faction !== faction && o.hp > EPS);
+        if (!targets.length) continue;
+        addEvent({ type: 'bossAoe', faction, where });
+        for (const target of targets) {
+          target.hp = Math.max(0, target.hp - dmg);
+          addEvent({ type: 'damage', amount: dmg, boss: false, faction: target.faction, where });
+        }
+        continue;
+      }
       let faction;
       let damage;
       let where;
@@ -593,8 +650,16 @@ export function createSim({ map, config, plans }) {
         target.hp = Math.max(0, target.hp - dealt);
         addEvent({ type: 'damage', amount: dealt, boss: false, faction: target.faction, where });
       } else if (bossTargetFaction) {
-        boss[bossTargetFaction].hp = Math.max(0, boss[bossTargetFaction].hp - damage);
-        addEvent({ type: 'damage', amount: damage, boss: true, faction: bossTargetFaction, where });
+        // Boss-Schutz durch stehende Türme: der erlittene Schaden wird gesenkt;
+        // bei vollem Schutz (Turm steht) kommt nichts durch – dann signalisiert ein
+        // eigenes Ereignis den abgewehrten Treffer statt einer irreführenden Zahl.
+        const dealt = damage * bossVulnerability(bossTargetFaction);
+        if (dealt > EPS) {
+          boss[bossTargetFaction].hp = Math.max(0, boss[bossTargetFaction].hp - dealt);
+          addEvent({ type: 'damage', amount: dealt, boss: true, faction: bossTargetFaction, where });
+        } else {
+          addEvent({ type: 'bossShielded', faction: bossTargetFaction, where });
+        }
       } else if (towerTargetNode) {
         // Alle Verteidiger gefallen → der Turm erleidet vollen Schaden (kein
         // Verteidigungsbonus, keine zusätzliche Reduktion).
@@ -697,6 +762,9 @@ export function createSim({ map, config, plans }) {
         if (n.type === 'boss' && bossAlive[n.faction] && bossAttackAt[n.faction] === Infinity) {
           bossAttackAt[n.faction] = t + bossAttackInterval;
         }
+        if (n.type === 'boss' && bossAlive[n.faction] && bossAoeAt[n.faction] === Infinity) {
+          bossAoeAt[n.faction] = t + bossAoeInterval;
+        }
         if (tw && tw.alive) {
           if (towerEngaged && !tw.engaged) {
             tw.engaged = true;
@@ -716,7 +784,10 @@ export function createSim({ map, config, plans }) {
             g.nextAttackAt = Infinity;
           }
         }
-        if (n.type === 'boss') bossAttackAt[n.faction] = Infinity;
+        if (n.type === 'boss') {
+          bossAttackAt[n.faction] = Infinity;
+          bossAoeAt[n.faction] = Infinity;
+        }
         if (tw && tw.alive && tw.engaged) {
           tw.engaged = false;
           tw.attackAt = Infinity;
@@ -784,7 +855,7 @@ export function createSim({ map, config, plans }) {
       else if (g.state === 'dead') t = Math.min(t, g.respawnAt);
       t = Math.min(t, g.nextAttackAt);
     }
-    for (const fac of ['blue', 'red']) t = Math.min(t, bossAttackAt[fac]);
+    for (const fac of ['blue', 'red']) t = Math.min(t, bossAttackAt[fac], bossAoeAt[fac]);
     for (const nodeId of towerIds) {
       const tw = towers[nodeId];
       if (tw.alive && tw.engaged) t = Math.min(t, tw.attackAt);
@@ -838,6 +909,11 @@ export function createSim({ map, config, plans }) {
     // sowie die Zahl bereits zerstörter Türme je Fraktion (für den Fürsten-Debuff).
     towers,
     destroyedTowers,
+    // Aktueller Boss-Schutz je Fraktion als geblockter Anteil (0 = ungeschützt,
+    // 1 = unverwundbar), für die Schild-Darstellung am Boss.
+    get bossShield() {
+      return { blue: 1 - bossVulnerability('blue'), red: 1 - bossVulnerability('red') };
+    },
     // Aktueller Friedhofszustand für Renderer/UI (Besitz + laufende Einnahmen).
     graveyards: { owner: gyOwner, captures },
     config,

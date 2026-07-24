@@ -103,6 +103,13 @@ export const DEFAULT_CONFIG = {
   bossHp: 100, // maximale Hitpoints des Endbosses
   bossDamage: 12, // Basis-Schaden des Endbosses pro Angriff (Grundwert für die Turm-Reduktion)
   bossAttackInterval: 1, // Sekunden zwischen zwei Boss-Angriffen
+  // Flächen-Gegenschlag des Fürsten: trifft in eigenem Takt ALLE gerade an ihm
+  // angreifenden Einheiten gleichzeitig – so wird ein unkoordinierter Massensturm
+  // riskant, weil der ausgeteilte Gesamtschaden mit der Zahl der Angreifer wächst.
+  // Unterliegt demselben Turm-Debuff wie der Einzelangriff (siehe bossDamageOf in
+  // sim.js), gedeckelt durch bossDamageFloor. AoE-Schaden 0 schaltet ihn ab.
+  bossAoeDamage: 6, // Schaden pro Flächenschlag an jede angreifende Einheit (0 = aus)
+  bossAoeInterval: 3, // Sekunden zwischen zwei Flächenschlägen
   maxTime: 300, // Sicherheitslimit der Simulation in Sekunden
 
   // ------------------------------------------------------------------ Türme
@@ -120,6 +127,15 @@ export const DEFAULT_CONFIG = {
   // den bereits reduzierten Wert.
   towerDamageReduction: 0.25, // Anteil des Basis-Schadens, um den der Fürst je zerstörtem Turm sinkt
   bossDamageFloor: 0.5, // Mindestanteil des Basis-Schadens, den der Fürst niemals unterschreitet
+  // Boss-Schutz durch eigene Türme: Solange eine Fraktion noch mindestens einen
+  // Turm besitzt, blockt ihr Boss den Anteil `bossTowerShield` des Schadens (er
+  // erleidet also nur `1 − bossTowerShield`). Der Schild ist prozentual und
+  // konfigurierbar – nicht absolut: beim Standard 0.95 kommen noch 5 % durch.
+  // Sind ALLE Türme gefallen (oder gibt es keine, towersPerFaction=0), fällt der
+  // Schild auf 0 % und der Boss erleidet vollen Schaden. Der hohe Standardwert
+  // verhindert das direkte Niederrennen des Bosses – erst nach dem Fall aller
+  // Türme wird er verwundbar (siehe Balancing-Notiz im README).
+  bossTowerShield: 0.95,
 };
 
 // ------------------------------------------------------- Erweitertes Konfig-Menü
@@ -163,6 +179,9 @@ export const CONFIG_SECTIONS = [
       { key: 'bossHp', label: 'Boss-LP', min: 20, max: 400, step: 10, kind: 'int' },
       { key: 'bossDamage', label: 'Boss-Schaden', min: 1, max: 60, step: 1, kind: 'int' },
       { key: 'bossAttackInterval', label: 'Boss-Angriffsintervall', min: 0.2, max: 5, step: 0.1, kind: 'float', unit: 's' },
+      { key: 'bossAoeDamage', label: 'Boss-Flächenschaden', min: 0, max: 60, step: 1, kind: 'int' },
+      { key: 'bossAoeInterval', label: 'Boss-Flächenintervall', min: 0.2, max: 8, step: 0.1, kind: 'float', unit: 's' },
+      { key: 'bossTowerShield', label: 'Boss-Schutz (Türme stehen)', min: 0, max: 100, step: 5, kind: 'percent', unit: '%' },
     ],
   },
 ];

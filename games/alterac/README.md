@@ -82,6 +82,17 @@ Schadens (`entrenchedFactor`). Aktuelle Hitpoints bleiben über Kämpfe hinweg
 erhalten; erst der Respawn am Friedhof stellt sie vollständig wieder her.
 Der Boss hat eigene Hitpoints, kämpft mit und regeneriert sich nicht.
 
+Zusätzlich führt der Boss einen **Flächen-Gegenschlag** aus: Neben seinem
+Einzelangriff trifft er in einem eigenen Takt (`bossAoeInterval`) **alle** gerade
+an ihm angreifenden Einheiten gleichzeitig für `bossAoeDamage` Schaden. Der
+ausgeteilte Gesamtschaden wächst so mit der Zahl der Angreifer – ein
+unkoordinierter Massensturm direkt auf den Boss wird dadurch verlustreich, und
+Vorarbeit über Türme und Friedhöfe lohnt sich. Der Flächenschaden unterliegt
+demselben Fürsten-Debuff wie der Einzelangriff (jeder zerstörte eigene Turm senkt
+ihn, Untergrenze `bossDamageFloor`). Beide Werte stehen zentral in `config.js` und
+sind im Erweitert-Menü unter „Boss" feinjustierbar; `bossAoeDamage: 0` schaltet den
+Flächenschlag ab.
+
 ## Friedhofssystem
 
 Alle Friedhofsdaten sind zentral konfigurierbar: Lage und Verbindungen in
@@ -149,10 +160,22 @@ Fraktion); er bewegt sich nicht, regeneriert nicht und respawnt nicht.
   den Angriffsschaden des zugehörigen Fürsten – stets berechnet auf dessen
   **Basiswert**, nie auf den bereits reduzierten Wert (bei zwei Türmen empfohlen:
   −25 % pro Turm, Untergrenze 50 % des Basiswerts).
+- **Boss-Schutz durch stehende Türme:** Solange eine Fraktion noch **mindestens
+  einen** Turm besitzt, blockt ihr Boss den prozentualen, konfigurierbaren Anteil
+  `bossTowerShield` des Schadens und erleidet nur `1 − bossTowerShield` (Standard
+  `0.95` → es kommen noch 5 % durch). Sind **alle** Türme des Gegners gefallen,
+  fällt der Schild auf 0 % und der Boss erleidet vollen Schaden. So lässt sich der
+  Boss nicht ungestraft direkt niederrennen, ein normaler Angriff nach dem Turmfall
+  bleibt aber möglich. Weil jeder Zugang zum Boss ohnehin an einem eigenen Turm
+  vorbeiführt, ist der Schutz auch geografisch stimmig. Ohne Türme
+  (`towersPerFaction: 0`) greift er nie. Der Renderer zeigt den Schutz als
+  schimmernde Schild-Kuppel über der Festung; vom Schild geschluckte Treffer blitzen
+  als Schild-Ring auf (statt einer Schadenszahl).
 
 Alle Turmwerte, die Turmanzahl (`towersPerFaction`), die Schadensreduktion je
-Turm (`towerDamageReduction`) und die Mindestschadensgrenze des Fürsten
-(`bossDamageFloor`) stehen zentral in `config.js`. Im Setup lassen sich die
+Turm (`towerDamageReduction`), die Mindestschadensgrenze des Fürsten
+(`bossDamageFloor`) sowie der prozentuale Boss-Schutz (`bossTowerShield`)
+stehen zentral in `config.js`. Im Setup lassen sich die
 Türme über den Schalter **„Türme aktiv"** ganz an- oder abschalten (aus =
 `towersPerFaction: 0`); ihre Kampfwerte samt Fürsten-Debuff sind – wie die
 Boss-Werte – im aufklappbaren **Erweitert-Menü** als Zahlenfelder feinjustierbar
