@@ -438,6 +438,9 @@ html {
   gap: 0.35rem;
   align-content: start;
   overflow-y: auto;
+  /* Scrollbar-Platz stabil reservieren, damit eine klassische Scrollbar nie
+     über den Zeileninhalt (v. a. das ✕) läuft und nichts springt. */
+  scrollbar-gutter: stable;
   touch-action: pan-y;
   overscroll-behavior: contain;
 }
@@ -546,6 +549,31 @@ html {
   overflow: hidden;
 }
 
+/* Kernkorrektur: Jede verschachtelte Grid-/Flex-Ebene von der Liste bis zur
+   Auftragszeile braucht min-width:0. Sonst erzwingt die einzeilige (nowrap)
+   Pfad-Zusammenfassung über ihre min-content-Breite, dass die Elemente breiter
+   als das Panel werden – der Inhalt läuft nach rechts über und schiebt das ✕
+   aus dem sichtbaren Bereich (bei langen Pfaden / schmalen Screens nicht mehr
+   klickbar). Mit min-width:0 greift die Ellipsis-Kürzung, das ✕ bleibt an Ort. */
+.roster,
+.unit,
+.editor,
+.action-list,
+.action-item {
+  min-width: 0;
+}
+
+/* Einspaltige Grids explizit auf minmax(0, 1fr) klemmen: Ohne das sizet die
+   automatische Spur auf die max-content-Breite der nowrap-Zusammenfassung und
+   läuft über den Container hinaus (min-width:0 am Kind wirkt nicht auf die
+   Spur-Breite). Damit bleibt jede Ebene auf Panelbreite und der Inhalt kürzt. */
+.roster,
+.unit,
+.editor,
+.action-list {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .action-item.selected {
   border-color: var(--fac, #5b9cff);
   background: #1c2334;
@@ -568,12 +596,18 @@ html {
 }
 
 .action-trig {
+  /* Kurze Marken („Dann") behalten ihre natürliche Breite; nur sehr lange
+     („Sobald Turm … fällt") werden auf max-width gekürzt. Das ✕ wird nie aus der
+     Zeile gedrängt, weil die Pfad-Zusammenfassung (.action-sum) den Platz abgibt. */
   flex: 0 0 auto;
+  max-width: 45%;
   padding: 0.05rem 0.4rem;
   border-radius: 0.35rem;
   font-size: 0.68rem;
   font-weight: 700;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .action-trig.then {
@@ -595,19 +629,33 @@ html {
   color: #9aa4b8;
 }
 
+/* „Auftrag löschen"-Knopf: bewusst großes Tap-Ziel. Da er rechtsbündig sitzt,
+   rückt seine anklickbare Mitte durch die Größe weit genug von der Zeilenkante
+   weg, sodass eine (ggf. eingeblendete) Overlay-Scrollbar der Liste sie nicht
+   mehr verdeckt – vorher war der 18-px-Winzling direkt an der Kante praktisch
+   nicht mehr treffbar, sobald die Liste scrollte. */
 .mini.del {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.9rem;
+  min-height: 1.9rem;
   border: none;
   background: transparent;
   color: #8a94a8;
   cursor: pointer;
   font: inherit;
-  font-size: 0.9rem;
-  padding: 0 0.2rem;
+  font-size: 1rem;
+  line-height: 1;
+  border-radius: 0.4rem;
+  padding: 0;
 }
 
-.mini.del:hover {
+.mini.del:hover,
+.mini.del:active {
   color: #ffb27a;
+  background: rgba(255, 178, 122, 0.14);
 }
 
 .action-edit {
