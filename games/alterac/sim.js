@@ -15,10 +15,12 @@
 // Flächen-Gegenschlag, der ALLE gerade an ihm angreifenden Einheiten gleichzeitig
 // trifft (`bossAoeDamage`, gesenkt um denselben Turm-Debuff wie der Einzelangriff)
 // – so wird ein unkoordinierter Massensturm auf den Boss riskant.
-// Boss-Schutz: Solange eigene Türme stehen, erleidet der Boss nur den Anteil
-// `bossVulnerability` des Schadens (`bossTowerShield`/`bossShieldFloor`); bei vollem
-// Schutz ist er unverwundbar. Er lässt sich also erst nach dem Fall seiner Türme
-// niederkämpfen – ohne Türme (towersPerFaction=0) greift der Schutz nie.
+// Boss-Schutz: Solange mindestens ein eigener Turm steht, blockt der Boss den
+// prozentualen Anteil `bossTowerShield` des Schadens (er erleidet nur
+// `1 − bossTowerShield`). Sind alle Türme gefallen – oder gibt es keine
+// (towersPerFaction=0) –, fällt der Schild auf 0 % und der Boss ist normal
+// angreifbar. So lässt er sich nicht direkt niederrennen, aber der Schutz ist
+// prozentual justierbar statt absolut.
 // Erreicht eine Einheit oder der Boss 0 Hitpoints, fällt sie. Überlebende
 // behalten ihre aktuellen Hitpoints, Respawns kehren mit vollen zurück.
 //
@@ -78,7 +80,6 @@ export function createSim({ map, config, plans }) {
     towerDamageReduction,
     bossDamageFloor,
     bossTowerShield = 0,
-    bossShieldFloor = 0,
   } = config;
   // Effektive Einheitenwerte dieser Partie (Datei-Defaults ggf. überschrieben).
   const unitTypes = resolveUnitTypeMap(config);
@@ -226,13 +227,14 @@ export function createSim({ map, config, plans }) {
   }
 
   // Boss-Schutz durch eigene Türme: Anteil des Schadens, den der Boss aktuell
-  // erleidet. Je überlebendem eigenen Turm um `bossTowerShield` gesenkt, nie unter
-  // `bossShieldFloor`. Ohne Türme (towerCount 0) bleibt es bei vollem Schaden – so
-  // ist der Boss erst nach dem Fall seiner Türme verwundbar (`bossTowerShield` 1.0 =
-  // ein einziger stehender Turm genügt für Unverwundbarkeit).
+  // erleidet. Solange mindestens ein eigener Turm steht, blockt der Schild den
+  // (prozentualen, konfigurierbaren) Anteil `bossTowerShield` – der Boss erleidet
+  // dann nur `1 − bossTowerShield`. Sind alle Türme gefallen (oder gibt es keine),
+  // fällt der Schild weg und der Boss erleidet vollen Schaden.
   function bossVulnerability(faction) {
     const surviving = towerCount[faction] - destroyedTowers[faction];
-    return Math.max(bossShieldFloor, 1 - bossTowerShield * surviving);
+    if (surviving <= 0) return 1;
+    return 1 - bossTowerShield;
   }
 
   function combatants(nodeId) {
