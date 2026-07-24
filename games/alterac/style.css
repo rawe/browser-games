@@ -283,7 +283,12 @@ html {
 
 /* ------------------------------------------------------------------ Panel */
 #panel {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  /* Höhe deckeln, damit die Karte immer einen nutzbaren Anteil behält und
+     anklickbar bleibt – egal wie lang die Einheiten-/Auftragsliste wird. Die
+     Liste (.roster) scrollt intern; Rekrutierung und „Schlacht starten" bleiben
+     als fixe Kopf-/Fußzeile stets sichtbar. */
+  max-height: min(60dvh, 32rem);
   width: min(100%, 560px);
   margin: 0 auto;
   background: rgba(14, 18, 28, 0.94);
@@ -293,10 +298,16 @@ html {
   border-bottom: none;
   border-radius: 1rem 1rem 0 0;
   padding: 0.75rem 0.9rem calc(0.75rem + env(safe-area-inset-bottom));
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0.6rem;
   z-index: 10;
   box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* Kopf-/Fußzeilen behalten ihre natürliche Höhe; nur die Liste scrollt. */
+#panel > *:not(.roster) {
+  flex: 0 0 auto;
 }
 
 .panel-head {
@@ -416,13 +427,28 @@ html {
 }
 
 /* Einheitenliste: volle Panelbreite, je Einheit eine eigene Zeile. */
-.chips {
+/* Einziger Scrollbereich des Panels: Einheitenliste samt aufgeklapptem Editor
+   der gewählten Einheit. Nimmt den Platz zwischen fixer Kopf- und Fußzeile ein
+   und scrollt intern – dadurch skaliert das Panel mit beliebig vielen Einheiten
+   und Aufträgen, ohne die Karte zu verdrängen. */
+.roster {
+  flex: 1 1 auto;
+  min-height: 4.5rem;
   display: grid;
   gap: 0.35rem;
-  max-height: 9rem;
+  align-content: start;
   overflow-y: auto;
+  /* Scrollbar-Platz stabil reservieren, damit eine klassische Scrollbar nie
+     über den Zeileninhalt (v. a. das ✕) läuft und nichts springt. */
+  scrollbar-gutter: stable;
   touch-action: pan-y;
   overscroll-behavior: contain;
+}
+
+/* Einheit = Chip + (bei Auswahl) direkt darunter aufgeklappter Editor. */
+.unit {
+  display: grid;
+  gap: 0.35rem;
 }
 
 .chip {
@@ -499,6 +525,207 @@ html {
 
 .mode-row .btn.ghost {
   flex: 0 0 2.75rem;
+}
+
+/* ------------------------------------------------ Auftragsketten-Editor */
+.editor {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.editor[hidden] {
+  display: none;
+}
+
+.action-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.action-item {
+  border: 1.5px solid #2a3348;
+  border-radius: 0.6rem;
+  background: #171d2b;
+  overflow: hidden;
+}
+
+/* Kernkorrektur: Jede verschachtelte Grid-/Flex-Ebene von der Liste bis zur
+   Auftragszeile braucht min-width:0. Sonst erzwingt die einzeilige (nowrap)
+   Pfad-Zusammenfassung über ihre min-content-Breite, dass die Elemente breiter
+   als das Panel werden – der Inhalt läuft nach rechts über und schiebt das ✕
+   aus dem sichtbaren Bereich (bei langen Pfaden / schmalen Screens nicht mehr
+   klickbar). Mit min-width:0 greift die Ellipsis-Kürzung, das ✕ bleibt an Ort. */
+.roster,
+.unit,
+.editor,
+.action-list,
+.action-item {
+  min-width: 0;
+}
+
+/* Einspaltige Grids explizit auf minmax(0, 1fr) klemmen: Ohne das sizet die
+   automatische Spur auf die max-content-Breite der nowrap-Zusammenfassung und
+   läuft über den Container hinaus (min-width:0 am Kind wirkt nicht auf die
+   Spur-Breite). Damit bleibt jede Ebene auf Panelbreite und der Inhalt kürzt. */
+.roster,
+.unit,
+.editor,
+.action-list {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.action-item.selected {
+  border-color: var(--fac, #5b9cff);
+  background: #1c2334;
+}
+
+.action-line {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.8rem;
+  color: #cfd7e6;
+  cursor: pointer;
+}
+
+.action-num {
+  flex: 0 0 auto;
+  font-size: 0.95rem;
+  color: #f0d489;
+}
+
+.action-trig {
+  /* Kurze Marken („Dann") behalten ihre natürliche Breite; nur sehr lange
+     („Sobald Turm … fällt") werden auf max-width gekürzt. Das ✕ wird nie aus der
+     Zeile gedrängt, weil die Pfad-Zusammenfassung (.action-sum) den Platz abgibt. */
+  flex: 0 0 auto;
+  max-width: 45%;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action-trig.then {
+  background: #223050;
+  color: #9fb6e6;
+}
+
+.action-trig.when {
+  background: #4a3a12;
+  color: #ffd76a;
+}
+
+.action-sum {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #9aa4b8;
+}
+
+/* „Auftrag löschen"-Knopf: bewusst großes Tap-Ziel. Da er rechtsbündig sitzt,
+   rückt seine anklickbare Mitte durch die Größe weit genug von der Zeilenkante
+   weg, sodass eine (ggf. eingeblendete) Overlay-Scrollbar der Liste sie nicht
+   mehr verdeckt – vorher war der 18-px-Winzling direkt an der Kante praktisch
+   nicht mehr treffbar, sobald die Liste scrollte. */
+.mini.del {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.9rem;
+  min-height: 1.9rem;
+  border: none;
+  background: transparent;
+  color: #8a94a8;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  border-radius: 0.4rem;
+  padding: 0;
+}
+
+.mini.del:hover,
+.mini.del:active {
+  color: #ffb27a;
+  background: rgba(255, 178, 122, 0.14);
+}
+
+.action-edit {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0 0.55rem 0.5rem;
+}
+
+.stance-row,
+.trigger-row,
+.cond-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.stance-row .btn.mode {
+  flex: 1;
+  padding: 0.4rem 0.25rem;
+  font-size: 0.82rem;
+}
+
+.stance-row .btn.ghost {
+  flex: 0 0 2.5rem;
+}
+
+.trigger-label {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  color: #8a94a8;
+}
+
+.trigger-row .btn.mode.trig {
+  flex: 1;
+  padding: 0.35rem 0.25rem;
+  font-size: 0.8rem;
+}
+
+.cond-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: 0.5rem;
+  border: 1.5px solid #2a3348;
+  background: #12161f;
+  color: #e6ebf4;
+}
+
+.tower-pick {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.tower-pick.active {
+  border-color: #ffd76a;
+  color: #ffd76a;
+}
+
+.editor-footer {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.editor-footer .btn {
+  flex: 1;
+  font-size: 0.82rem;
+  padding: 0.45rem 0.25rem;
 }
 
 .hint {

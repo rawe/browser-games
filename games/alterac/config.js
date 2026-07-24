@@ -189,8 +189,37 @@ export const CONFIG_SECTIONS = [
 // Turmzahl je Fraktion, wenn der Türme-Schalter aktiv ist (aus = 0).
 export const TOWERS_ON_COUNT = DEFAULT_CONFIG.towersPerFaction;
 
-// Maximale Länge eines geplanten Pfads (Anzahl Wegpunkte).
+// Maximale Länge eines geplanten Pfads (Anzahl Wegpunkte) – gilt pro Auftrag.
 export const MAX_PATH_LENGTH = 14;
+
+// Maximale Zahl an Aufträgen je Einheit (erster Auftrag + Zusatz-Aufträge).
+export const MAX_ACTIONS = 4;
+
+// ------------------------------------------------- Globale Event-Bedingungen
+// Auswahlliste für „Sobald"-Aufträge (Auslöser-Art 'when'): eine kleine,
+// benannte Menge von Bedingungen über den Weltzustand. Der Spieler wählt eine
+// Bedingung; braucht sie ein Subjekt (`needsTower`), tippt er den betreffenden
+// gegnerischen Turm auf der Karte an – die Identität wird beim Planen in die
+// Bedingung „eingefroren" (siehe design-aktionen-events.md). Die Sim wertet die
+// Bedingung rein lesend über ihren Zustand aus (sim.js: condHolds).
+//   type        Kennung der Bedingung (von der Sim ausgewertet)
+//   label       Anzeigetext in der Auswahl
+//   needsTower  true → Subjekt ist ein konkreter gegnerischer Turm (Knoten)
+export const EVENT_CONDITIONS = [
+  { type: 'enemyShieldDown', label: 'Boss-Schild des Gegners fällt', needsTower: false },
+  { type: 'towerDown', label: 'Gegnerischer Turm fällt', needsTower: true },
+];
+
+export const EVENT_CONDITION_BY_TYPE = Object.fromEntries(EVENT_CONDITIONS.map((c) => [c.type, c]));
+
+// Kurzer Klartext einer Bedingung für Auftrags-Zusammenfassungen (Chip, Marker).
+// `nodes` ist die Knotenkarte (map.nodes) für den Turmnamen.
+export function describeCondition(cond, nodes = {}) {
+  if (!cond) return '';
+  if (cond.type === 'enemyShieldDown') return 'Boss-Schild weg';
+  if (cond.type === 'towerDown') return `Turm ${nodes[cond.node]?.name ?? '?'} fällt`;
+  return '';
+}
 
 // Ganzzahl (ab 1) als römische Ziffer. Dient der eindeutigen Kennzeichnung
 // jeder angeworbenen Einheit – in der Einheitenliste und auf ihrem Karten-Token
