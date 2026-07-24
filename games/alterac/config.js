@@ -170,7 +170,6 @@ export const CONFIG_SECTIONS = [
       { key: 'towerAttackInterval', label: 'Turm-Angriffsintervall', min: 0.2, max: 5, step: 0.1, kind: 'float', unit: 's' },
       { key: 'towerDamageReduction', label: 'Debuff je Turm', min: 0, max: 50, step: 5, kind: 'percent', unit: '%' },
       { key: 'bossDamageFloor', label: 'Boss-Mindestschaden', min: 0, max: 100, step: 5, kind: 'percent', unit: '%' },
-      { key: 'bossTowerShield', label: 'Boss-Schutz (Türme stehen)', min: 0, max: 100, step: 5, kind: 'percent', unit: '%' },
     ],
   },
   {
@@ -182,6 +181,7 @@ export const CONFIG_SECTIONS = [
       { key: 'bossAttackInterval', label: 'Boss-Angriffsintervall', min: 0.2, max: 5, step: 0.1, kind: 'float', unit: 's' },
       { key: 'bossAoeDamage', label: 'Boss-Flächenschaden', min: 0, max: 60, step: 1, kind: 'int' },
       { key: 'bossAoeInterval', label: 'Boss-Flächenintervall', min: 0.2, max: 8, step: 0.1, kind: 'float', unit: 's' },
+      { key: 'bossTowerShield', label: 'Boss-Schutz (Türme stehen)', min: 0, max: 100, step: 5, kind: 'percent', unit: '%' },
     ],
   },
 ];
