@@ -163,7 +163,7 @@ Fraktion); er bewegt sich nicht, regeneriert nicht und respawnt nicht.
 - **Boss-Schutz durch stehende Türme:** Solange eine Fraktion noch **mindestens
   einen** Turm besitzt, blockt ihr Boss den prozentualen, konfigurierbaren Anteil
   `bossTowerShield` des Schadens und erleidet nur `1 − bossTowerShield` (Standard
-  `0.8` → es kommen noch 20 % durch). Sind **alle** Türme des Gegners gefallen,
+  `0.95` → es kommen noch 5 % durch). Sind **alle** Türme des Gegners gefallen,
   fällt der Schild auf 0 % und der Boss erleidet vollen Schaden. So lässt sich der
   Boss nicht ungestraft direkt niederrennen, ein normaler Angriff nach dem Turmfall
   bleibt aber möglich. Weil jeder Zugang zum Boss ohnehin an einem eigenen Turm

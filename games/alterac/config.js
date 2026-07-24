@@ -130,10 +130,12 @@ export const DEFAULT_CONFIG = {
   // Boss-Schutz durch eigene Türme: Solange eine Fraktion noch mindestens einen
   // Turm besitzt, blockt ihr Boss den Anteil `bossTowerShield` des Schadens (er
   // erleidet also nur `1 − bossTowerShield`). Der Schild ist prozentual und
-  // konfigurierbar – nicht absolut: beim Standard 0.8 kommen noch 20 % durch.
+  // konfigurierbar – nicht absolut: beim Standard 0.95 kommen noch 5 % durch.
   // Sind ALLE Türme gefallen (oder gibt es keine, towersPerFaction=0), fällt der
-  // Schild auf 0 % und der Boss erleidet vollen Schaden.
-  bossTowerShield: 0.8,
+  // Schild auf 0 % und der Boss erleidet vollen Schaden. Der hohe Standardwert
+  // verhindert das direkte Niederrennen des Bosses – erst nach dem Fall aller
+  // Türme wird er verwundbar (siehe Balancing-Notiz im README).
+  bossTowerShield: 0.95,
 };
 
 // ------------------------------------------------------- Erweitertes Konfig-Menü
