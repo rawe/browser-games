@@ -350,6 +350,11 @@ html {
   color: #e6ebf4;
 }
 
+.panel-tools {
+  display: flex;
+  gap: 0.35rem;
+}
+
 .help-text {
   margin: 0;
   padding: 0.6rem 0.75rem;
@@ -359,6 +364,195 @@ html {
   font-size: 0.78rem;
   line-height: 1.4;
   color: #aeb8cc;
+}
+
+/* ------------------------------------------------- Plan-Bibliothek (💾) */
+/* Eigener Layer über der Planung. Als Panel-Abschnitt konkurrierte die Liste um
+   dieselbe Höhe wie Karte und Einheitenliste – im Layer bekommt sie den ganzen
+   Platz. Die Karte selbst ist höhenbegrenzt und in drei Zonen geteilt: Kopf und
+   Teilen-Bereich stehen fest, nur die Liste dazwischen scrollt. */
+#plan-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 8, 14, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 40;
+}
+
+#plan-card {
+  width: 100%;
+  max-width: 26rem;
+  max-height: min(80dvh, 40rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.9rem 1rem calc(0.9rem + env(safe-area-inset-bottom));
+  animation: pop 0.25s ease-out;
+  outline: 1px solid rgba(240, 212, 137, 0.22);
+  outline-offset: -6px;
+}
+
+/* Alles außer der Liste behält seine Höhe – nur sie gibt nach. */
+#plan-card > *:not(.plan-list) {
+  flex: 0 0 auto;
+}
+
+.plan-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.plan-card-head h2 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.15rem;
+  letter-spacing: 0.02em;
+}
+
+.btn.plan-close {
+  flex: 0 0 auto;
+  width: 2.2rem;
+  min-height: 2.2rem;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1rem;
+  color: #aeb8cc;
+  line-height: 1;
+}
+
+.plan-sub {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: #8a94a8;
+}
+
+/* Teilen-Bereich unten, vom Bibliotheksteil abgesetzt. */
+.plan-share {
+  display: grid;
+  gap: 0.35rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid #2a3348;
+}
+
+.plan-row {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.plan-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.5rem;
+  border: 1.5px solid #2a3348;
+  background: #12161f;
+  color: #e6ebf4;
+}
+
+.btn.plan-act {
+  flex: 0 0 auto;
+  min-height: 2rem;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.76rem;
+}
+
+.btn.plan-act.plan-share-btn {
+  width: 100%;
+}
+
+/* Einziger Scrollbereich des Layers – er nimmt den Platz, der zwischen Kopf und
+   Teilen-Bereich übrig bleibt. */
+.plan-list {
+  flex: 1 1 auto;
+  min-height: 3rem;
+  display: grid;
+  gap: 0.3rem;
+  align-content: start;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+
+.plan-empty {
+  margin: 0;
+  padding: 0.2rem 0.1rem;
+  font-size: 0.76rem;
+  color: #8a94a8;
+}
+
+.plan-slot {
+  display: flex;
+  align-items: stretch;
+  gap: 0.3rem;
+}
+
+.plan-slot-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 0.1rem;
+  text-align: left;
+  font: inherit;
+  padding: 0.35rem 0.55rem;
+  border-radius: 0.5rem;
+  border: 1px solid #2a3348;
+  background: #232b3d;
+  color: #e6ebf4;
+  cursor: pointer;
+}
+
+/* „Zuletzt gespielt" lässt sich nicht löschen – der Platz des ✕ bleibt trotzdem
+   frei, damit alle Zeilen gleich breit bleiben. */
+.plan-slot-spacer {
+  flex: 0 0 auto;
+  min-width: 1.9rem;
+}
+
+.plan-slot-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-slot-meta {
+  font-size: 0.7rem;
+  color: #8a94a8;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-note {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: #8a94a8;
+}
+
+.plan-note:empty {
+  display: none;
+}
+
+.plan-note.warn {
+  color: #ffb27a;
+}
+
+.btn.plan-undo {
+  min-height: 1.6rem;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.72rem;
+  vertical-align: baseline;
 }
 
 /* Karteneinstellung ganz oben im Panel (über dem Planungstitel): steuert nur

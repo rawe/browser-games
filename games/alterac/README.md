@@ -13,6 +13,7 @@ Eingriffe ab. Wer den gegnerischen Endboss fällt, gewinnt.
 | `sim.js`     | Simulationskern (DOM-frei, deterministisch, ereignisbasiert; liefert typisierte Ereignisse für Effekte); verwaltet auch Friedhofsbesitz, Einnahmen, Türme, Vorratslager und den mächtigen Verbündeten |
 | `map.js`     | Zentrale Kartenkonfiguration (Wegpunkte, Verbindungen, Friedhöfe samt Startbesitz und Heimat-Markierung, Routen, Wachposten, Turm- und Vorratslager-Standorte), Wegsuche, Friedhofswahl |
 | `planner.js` | Planungsphase (Rekrutierung aus dem Budget, Auftragskette je Einheit: Pfad, Haltung und Auslöser pro Auftrag) |
+| `plans.js`   | Aufmärsche sichern, teilen und laden (DOM-frei: Teilen-Code, Prüfung gegen Karte und Partie, Bibliothek im `localStorage`) |
 | `ai.js`      | Computergegner: Stufenliste (`AI_LEVELS`) und Auswahl des Planers anhand von `config.aiLevel` |
 | `ai-easy.js` | Stufe „Leicht": zufällig gemischte Armee, grobe Marschbefehle |
 | `ai-hard.js` | Stufe „Schwer": kampfwertoptimierte Armee, Turmwache, konzentrierte Turmoffensive, Boss-Sturm per Event |
@@ -116,6 +117,53 @@ sich Haltung und – ab dem zweiten – der Auslöser wählen. Braucht eine Bedi
 ein Subjekt („Gegnerischer Turm fällt"), tippt der Spieler den betreffenden
 gegnerischen Turm auf der Karte an; die Turm-Identität wird in die Bedingung
 eingefroren.
+
+## Aufmärsche sichern, teilen und laden
+
+Einen Aufmarsch Wegpunkt für Wegpunkt aufzubauen ist Arbeit – sie soll nicht bei
+jeder Revanche von vorn anfangen. Das Symbol 💾 in der Kopfzeile des
+Planungspanels öffnet dafür die Bibliothek als **eigenen Layer** über der
+Planung (`plans.js` ist die DOM-freie Logik, die UI dazu sitzt in `planner.js`,
+das Layer-Gerüst als `#plan-overlay` in `index.html`). Der Layer ist bewusst kein
+Panel-Abschnitt: Panel und Karte teilen sich eine Bildschirmhöhe, und eine
+gefüllte Liste hatte dort keinen Platz, ohne die Einheitenliste zu verdrängen.
+Im Layer bekommt sie den ganzen Raum und scrollt für sich; geschlossen wird per
+✕, Klick auf den Hintergrund oder Escape.
+
+- **Zuletzt gespielt:** Jeder bestätigte Aufmarsch wird ohne Zutun gemerkt und
+  steht in der Liste ganz oben. Eine Revanche beginnt damit nie bei null.
+- **Bibliothek:** Benannte Einträge (bis zu 20 je Fraktion) im `localStorage`
+  unter dem Schlüssel `alterac.plans.v1`. Jede Zeile nennt Einheitenzahl,
+  Budget, aktive Teilsysteme und Datum. Laden ersetzt die ganze Aufstellung,
+  schließt den Layer und lässt sich einstufig zurücknehmen – die Meldung dazu
+  steht dann im Panel, also dort, wohin der Blick geht.
+- **Teilen-Code:** „🔗 Eigenen Aufmarsch als Link kopieren" erzeugt eine URL mit
+  `?plan=<code>`; ein solcher Link (oder der nackte Code) lässt sich im selben
+  Feld wieder einlesen. Ein Aufmarsch aus drei Einheiten ist so rund 20 Zeichen
+  lang. Der Link wird beim ersten Planungsbildschirm eingelöst.
+
+Drei Regeln halten das Ganze zusammen:
+
+1. **Ein Plan gehört zu genau einer Fraktion.** Er trägt sie im Code mit sich und
+   wird auf der Gegenseite abgelehnt statt umgerechnet: Seine Pfade beginnen an
+   der eigenen Basis und zielen auf die gegnerischen Türme.
+2. **Die Partie-Einstellungen kommen nie aus einem Plan.** Budget, Türme und
+   Vorratslager wählt weiterhin das Setup; ein geladener Plan wird stattdessen
+   dagegen **geprüft** (`validatePlan`). Was nicht mehr passt, fällt heraus –
+   Einheiten über dem Budget, Pfade über nicht mehr vorhandene Verbindungen,
+   Turm-Auslöser in einer Partie ohne Türme – und der Spieler bekommt es als
+   Klartext zu lesen, statt es erst in der Schlacht zu bemerken.
+3. **Die Bibliothek zeigt nur die eigene Fraktion.** Im Hotseat sitzen beide
+   Spieler am selben Gerät; eine gemischte Liste wäre ein Blick in die geheime
+   Planung der Gegenseite.
+
+Der Code ist bewusst kein Base64 von JSON, sondern ein kurzes Format aus
+unreservierten Zeichen (`0-9 a-z . _ ~`), das ohne Prozent-Kodierung durch jede
+URL passt und sich von Hand lesen lässt. Typen, Bedingungen und Wegpunkte stehen
+darin als Index ihrer zentralen Listen – kurz, aber verschiebbar, sobald jemand
+die Karte erweitert. Deshalb trägt jeder Code einen Fingerabdruck dieser Listen:
+Passt er nicht, wird der Code abgelehnt, statt still einen falschen Plan zu
+erzeugen.
 
 ## Computergegner: einstellbare Stärke
 
