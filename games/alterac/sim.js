@@ -818,7 +818,8 @@ export function createSim({ map, config, plans }) {
       }
       // Benachbarte Pfad-Wegpunkte ergeben hier genau die geplante Kante;
       // die Wegsuche greift nur als Rückfalllösung (Respawn, Marsch zum Boss).
-      const path = shortestPath(map, g.node, obj.node);
+      // Die Fraktion entscheidet dabei gleich lange Wege über ihre Flanke.
+      const path = shortestPath(map, g.node, obj.node, g.faction);
       if (!path || path.length < 2) return;
       g.state = 'moving';
       g.edgeFrom = g.node;

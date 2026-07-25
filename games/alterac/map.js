@@ -4,6 +4,17 @@
 // Routenvorschläge werden nur hier ergänzt.
 // Die Karte ist vertikal aufgebaut (Norden oben, Süden unten), damit sie
 // auf Mobilgeräten per Scrollen gut nutzbar ist.
+//
+// Spiegelsymmetrie: Die Karte bildet sich unter der Punktspiegelung Nord↔Süd
+// vollständig auf sich selbst ab (rboss↔bboss, rgate↔sgate, reast↔swest,
+// rgy↔bgy, wn↔es, en↔ws, gyw↔gye; mid und gym liegen auf der Achse). Beide
+// Fraktionen haben dadurch identische Wegstrecken zu allen Zielen. Die
+// **x-Koordinaten sind exakt gespiegelt** – die Summe zweier gespiegelter
+// Knoten ist immer 480 –, denn die Wegsuche entscheidet gleich lange Wege
+// anhand der Flanke (siehe `pathLess`). Wer hier Knoten verschiebt oder
+// ergänzt, muss diese Eigenschaft erhalten, sonst wird eine Fraktion
+// bevorzugt. Die y-Koordinaten sind nur ungefähr gespiegelt; das ist
+// unerheblich, weil die Reisezeit pro Wegstück zählt und nicht die Pixel.
 
 export const FACTIONS = {
   blue: { key: 'blue', name: 'Sturmlanze', color: '#5b9cff', dark: '#2c5aa8', player: 'Spieler 1' },
@@ -35,7 +46,7 @@ const NODES = [
   { id: 'rboss', type: 'boss', faction: 'red', x: 240, y: 78, name: 'Kriegsherr Eiszahn', labelDy: 46 },
   { id: 'rgy', type: 'graveyard', x: 96, y: 150, name: 'Nordfriedhof', labelDy: 30 },
   { id: 'rgate', type: 'combat', tower: 'red', x: 240, y: 214, name: 'Nordtor', labelDx: 52, labelDy: 4 },
-  { id: 'reast', type: 'combat', tower: 'red', x: 404, y: 178, name: 'Eisiger Grat', labelDx: 12, labelDy: 26 },
+  { id: 'reast', type: 'combat', tower: 'red', x: 400, y: 178, name: 'Eisiger Grat', labelDx: 12, labelDy: 26 },
   { id: 'wn', type: 'combat', x: 112, y: 356, name: 'Eisfelsklamm', labelDy: 32 },
   { id: 'en', type: 'combat', supply: true, x: 368, y: 356, name: 'Steinbruch', labelDy: 32 },
   { id: 'gyw', type: 'graveyard', x: 48, y: 452, name: 'Klammfriedhof', labelDy: 32 },
@@ -45,7 +56,7 @@ const NODES = [
   { id: 'ws', type: 'combat', supply: true, x: 112, y: 620, name: 'Wolfsschlucht', labelDy: 32 },
   { id: 'es', type: 'combat', x: 368, y: 620, name: 'Kiefernhang', labelDy: 32 },
   { id: 'sgate', type: 'combat', tower: 'blue', x: 240, y: 760, name: 'Südtor', labelDx: 48, labelDy: 4 },
-  { id: 'swest', type: 'combat', tower: 'blue', x: 84, y: 788, name: 'Schmugglerpfad', labelDy: 30 },
+  { id: 'swest', type: 'combat', tower: 'blue', x: 80, y: 788, name: 'Schmugglerpfad', labelDy: 30 },
   { id: 'bgy', type: 'graveyard', x: 384, y: 830, name: 'Südfriedhof', labelDy: 30 },
   { id: 'bboss', type: 'boss', faction: 'blue', x: 240, y: 896, name: 'General Steinbrecher', labelDy: 46 },
 ];
@@ -207,18 +218,41 @@ export function edgePoint(map, from, to, t) {
   };
 }
 
-function pathLess(a, b) {
+// Bevorzugte Flanke einer Fraktion: +1 = Ostflanke (größere x), −1 = Westflanke.
+// Die Südfraktion marschiert nach Norden – ihre rechte Hand zeigt nach Osten;
+// die Nordfraktion marschiert nach Süden – ihre rechte Hand zeigt nach Westen.
+const FLANK = { blue: 1, red: -1 };
+
+// Vergleich zweier gleich langer Wege. Entscheidend ist die Flanke: Wo sich die
+// Wege zum ersten Mal unterscheiden, gewinnt der Wegpunkt, der auf der eigenen
+// Seite liegt („im Zweifel rechts halten"). Weil die x-Koordinaten der Karte
+// exakt spiegelsymmetrisch sind (Summe gespiegelter Knoten stets 480), ist der
+// Weg, den die eine Fraktion wählt, immer das Spiegelbild des Weges der anderen.
+// Ein rein textlicher Vergleich der Knoten-Kennungen kann das nicht leisten: Eine
+// Spiegelung vertauscht die Kennungen paarweise, und keine alphabetische Ordnung
+// überlebt das – beide Fraktionen liefen dann durch denselben Korridor, womit
+// eine Flanke zur vielbegangenen Hauptachse und die andere zum toten Winkel
+// würde. Ohne Fraktion (reine Streckenmessung) bleibt es beim textlichen
+// Vergleich; dort zählt nur die Länge.
+function pathLess(map, a, b, flank) {
+  if (flank) {
+    for (let i = 0; i < a.length && i < b.length; i++) {
+      const dx = map.nodes[a[i]].x - map.nodes[b[i]].x;
+      if (dx !== 0) return flank > 0 ? dx > 0 : dx < 0;
+    }
+  }
   return a.join('/') < b.join('/');
 }
 
 // Kürzester Weg (wenigste Wegstücke) – wird nur noch als Rückfalllösung
 // genutzt: für den automatischen Marsch zum Boss nach abgearbeitetem Pfad und
 // für den Rückweg nach einem Respawn. Geplante Pfade folgen dagegen exakt den
-// vom Spieler gewählten Wegpunkten. Bei gleicher Länge gewinnt deterministisch
-// der lexikografisch kleinere Pfad – so bleibt die Simulation reproduzierbar.
+// vom Spieler gewählten Wegpunkten. Bei gleicher Länge entscheidet die Flanke
+// der Fraktion (siehe `pathLess`) – deterministisch und spiegelsymmetrisch.
 // Friedhöfe werden nie durchquert, nur als Ziel (Respawn) betreten.
-export function shortestPath(map, from, to) {
+export function shortestPath(map, from, to, faction = null) {
   if (from === to) return [from];
+  const flank = FLANK[faction] ?? 0;
   const best = new Map([[from, [from]]]);
   const queue = [from];
   while (queue.length) {
@@ -228,7 +262,7 @@ export function shortestPath(map, from, to) {
       if (map.nodes[nb].type === 'graveyard' && nb !== to) continue;
       const cand = [...curPath, nb];
       const ex = best.get(nb);
-      if (!ex || cand.length < ex.length || (cand.length === ex.length && pathLess(cand, ex))) {
+      if (!ex || cand.length < ex.length || (cand.length === ex.length && pathLess(map, cand, ex, flank))) {
         best.set(nb, cand);
         queue.push(nb);
       }

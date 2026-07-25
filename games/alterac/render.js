@@ -182,6 +182,163 @@ export function createRenderer(canvas, map) {
     }
   }
 
+  // Vorratskiste: Holzkasten mit Diagonalstreben und Schneehaube. `yBase` ist
+  // die Standfläche, die Kiste wächst von dort nach oben.
+  function drawCrate(x, yBase, w, h) {
+    const wood = ctx.createLinearGradient(0, yBase - h, 0, yBase);
+    wood.addColorStop(0, '#8a6238');
+    wood.addColorStop(1, '#4e3520');
+    ctx.fillStyle = wood;
+    ctx.fillRect(x - w / 2, yBase - h, w, h);
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = '#0a0f18';
+    ctx.strokeRect(x - w / 2, yBase - h, w, h);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(22,15,8,0.55)';
+    ctx.beginPath();
+    ctx.moveTo(x - w / 2, yBase - h);
+    ctx.lineTo(x + w / 2, yBase);
+    ctx.moveTo(x + w / 2, yBase - h);
+    ctx.lineTo(x - w / 2, yBase);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(226,238,252,0.5)';
+    ctx.fillRect(x - w / 2, yBase - h, w, 1.6);
+  }
+
+  // Vorratsfass: bauchiges Holzfass mit zwei Eisenreifen und Schnee auf dem Deckel.
+  function drawBarrel(x, yBase, w, h) {
+    const wood = ctx.createLinearGradient(x - w / 2, 0, x + w / 2, 0);
+    wood.addColorStop(0, '#432c1b');
+    wood.addColorStop(0.45, '#8a6238');
+    wood.addColorStop(1, '#3d2717');
+    ctx.beginPath();
+    ctx.moveTo(x - w / 2, yBase - h + 1.5);
+    ctx.quadraticCurveTo(x - w / 2 - 1.8, yBase - h / 2, x - w / 2, yBase - 1.5);
+    ctx.quadraticCurveTo(x, yBase + 1.5, x + w / 2, yBase - 1.5);
+    ctx.quadraticCurveTo(x + w / 2 + 1.8, yBase - h / 2, x + w / 2, yBase - h + 1.5);
+    ctx.quadraticCurveTo(x, yBase - h - 1.5, x - w / 2, yBase - h + 1.5);
+    ctx.closePath();
+    ctx.fillStyle = wood;
+    ctx.fill();
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = '#0a0f18';
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(185,136,74,0.85)';
+    ctx.lineWidth = 1.2;
+    for (const k of [0.34, 0.7]) {
+      ctx.beginPath();
+      ctx.moveTo(x - w / 2 - 0.6, yBase - h + h * k);
+      ctx.lineTo(x + w / 2 + 0.6, yBase - h + h * k);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.ellipse(x, yBase - h + 1, w / 2 - 0.6, 1.8, 0, 0, TAU);
+    ctx.fillStyle = 'rgba(226,238,252,0.5)';
+    ctx.fill();
+  }
+
+  // Vorratslager: bleibt ein Kampfpunkt (Steinsockel mit Fahnenmast wie beim
+  // gewöhnlichen Wegpunkt), trägt aber zusätzlich das Lagergut – gestapelte
+  // Kisten und ein Fass. Die Flagge zeigt hier den *Besitzer* des Lagers, nicht
+  // die gerade anwesende Fraktion: Ein gesichertes Lager bleibt auch nach dem
+  // Abzug der Einheit in der Hand seiner Fraktion. Besitzring und
+  // Fortschrittsbogen sprechen dieselbe Sprache wie beim Friedhof.
+  // `info` = { owner, capture }, `capture` = { color, frac }; `ring` markiert
+  // wie bei den übrigen Kampfpunkten ein laufendes Gefecht am Knoten.
+  function drawSupplyCamp(n, info, ring) {
+    const c = info.owner ? FACTIONS[info.owner] : null;
+    const phase = n.x * 0.05 + n.y * 0.07;
+    // Bodenschatten über die gesamte Lagerbreite
+    ctx.beginPath();
+    ctx.ellipse(n.x, n.y + 8, 24, 7, 0, 0, TAU);
+    ctx.fillStyle = 'rgba(6,10,18,0.45)';
+    ctx.fill();
+    // Schein des Besitzers unter dem Lagergut – von weitem erkennbar, dass hier
+    // Nachschub für eine Fraktion läuft.
+    if (c) {
+      const pulse = 0.5 + 0.5 * Math.sin(anim * 2 + n.x * 0.03);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.5 + 0.5 * pulse;
+      const glow = ctx.createRadialGradient(n.x, n.y + 2, 2, n.x, n.y + 2, 27);
+      glow.addColorStop(0, `${c.color}3d`);
+      glow.addColorStop(1, `${c.color}00`);
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y + 2, 27, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+    // Steinsockel wie beim Wegpunkt, nur etwas schlanker – das Lagergut steht davor.
+    const base = ctx.createRadialGradient(n.x - 3, n.y - 3, 1, n.x, n.y, 8);
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, 7.5, 0, TAU);
+    base.addColorStop(0, '#5f6d88');
+    base.addColorStop(1, '#303a4e');
+    ctx.fillStyle = base;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#0a0f18';
+    ctx.stroke();
+    // Mast mit Lagerflagge
+    ctx.strokeStyle = '#0a0f18';
+    ctx.lineWidth = 3.4;
+    ctx.beginPath();
+    ctx.moveTo(n.x, n.y + 1);
+    ctx.lineTo(n.x, n.y - 26);
+    ctx.stroke();
+    ctx.strokeStyle = '#9a7a4e';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(n.x, n.y + 1);
+    ctx.lineTo(n.x, n.y - 26);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(n.x, n.y - 27, 1.8, 0, TAU);
+    ctx.fillStyle = '#e6d9a8';
+    ctx.fill();
+    traceFlag(n.x + 1, n.y - 25, 19, 11, anim + phase);
+    const grad = ctx.createLinearGradient(n.x, 0, n.x + 20, 0);
+    grad.addColorStop(0, c ? c.color : '#7c88a2');
+    grad.addColorStop(1, c ? c.dark : '#454f64');
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = 'rgba(8,12,20,0.85)';
+    ctx.stroke();
+    // Lagergut: zwei gestapelte Kisten links, ein Fass rechts.
+    drawCrate(n.x - 12, n.y + 9, 11, 9);
+    drawCrate(n.x - 14, n.y, 8, 6.5);
+    drawBarrel(n.x + 13, n.y + 9, 10, 13);
+    // Besitzring (neutral grau) und – bei laufender Einnahme – der
+    // Fortschrittsbogen darüber, exakt wie beim Friedhof.
+    ctx.beginPath();
+    ctx.arc(n.x, n.y + 2, 21, 0, TAU);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = c ? `${c.color}88` : 'rgba(124,136,162,0.35)';
+    ctx.stroke();
+    if (info.capture) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y + 2, 25, 0, TAU);
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = 'rgba(226,238,252,0.18)';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(n.x, n.y + 2, 25, -Math.PI / 2, -Math.PI / 2 + TAU * info.capture.frac);
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = info.capture.color;
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+    }
+    if (ring) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, 29, 0, TAU);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = ring;
+      ctx.stroke();
+    }
+  }
+
   // Friedhof: Grabsteine im pulsierenden Geisterlicht mit kreisenden Wisps.
   // Der Besitzring zeigt die haltende Fraktion (neutral grau); eine laufende
   // Einnahme wird als wachsender Fortschrittsbogen in der Farbe der
@@ -622,6 +779,30 @@ export function createRenderer(canvas, map) {
     return null;
   }
 
+  // Lagerinfo eines Knotens: im Gefecht aus der Simulation (Besitzer und
+  // laufende Einnahme), in der Planung gibt es keinen Stand – dann ist das
+  // Lager neutral und ohne Fortschritt. `null` heißt „hier ist kein Lager",
+  // etwa weil das System im Setup abgeschaltet wurde.
+  function supplyInfoAt(nodeId, view) {
+    const st = view.sim?.supplyState;
+    if (st) {
+      if (!(st.camps ?? []).includes(nodeId)) return null;
+      const cap = st.captures?.[nodeId] ?? null;
+      const dur = st.captureTime || 1;
+      return {
+        owner: st.owner?.[nodeId] ?? null,
+        capture: cap
+          ? {
+              color: FACTIONS[cap.faction].color,
+              frac: Math.max(0, Math.min(1, (view.sim.time - cap.startedAt) / dur)),
+            }
+          : null,
+      };
+    }
+    if (view.config?.supplyEnabled === false) return null;
+    return { owner: null, capture: null };
+  }
+
   function drawShieldIcon(x, y, s, color) {
     ctx.beginPath();
     ctx.moveTo(x, y - s);
@@ -669,6 +850,37 @@ export function createRenderer(canvas, map) {
     }
   }
 
+  // Strahlenkranz des mächtigen Verbündeten: kreisender Lichtkranz plus
+  // pulsierender Schein in der Fraktionsfarbe. Wird hinter dem Token gezeichnet,
+  // damit die Sonderfigur auch im Getümmel sofort heraussticht.
+  function drawAllyAura(x, y, r, c) {
+    const pulse = 0.5 + 0.5 * Math.sin(anim * 2.6);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const glow = ctx.createRadialGradient(x, y, r * 0.5, x, y, r * 2.1);
+    glow.addColorStop(0, `${c.color}00`);
+    glow.addColorStop(0.55, `${c.color}55`);
+    glow.addColorStop(1, `${c.color}00`);
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 2.1, 0, TAU);
+    ctx.fill();
+    // Acht Strahlen, langsam kreisend und im Takt des Scheins atmend.
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = `rgba(255,240,200,${0.35 + 0.35 * pulse})`;
+    for (let i = 0; i < 8; i++) {
+      const a = anim * 0.6 + (i * TAU) / 8;
+      const inner = r + 3;
+      const outer = r + 8 + pulse * 3;
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(a) * inner, y + Math.sin(a) * inner);
+      ctx.lineTo(x + Math.cos(a) * outer, y + Math.sin(a) * outer);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // Einheiten-Token: Größe und Kurzzeichen kommen aus der Typdefinition
   // (g.def), damit neue Einheitentypen ohne Renderer-Anpassung funktionieren.
   function drawToken(x, y, g, opts = {}) {
@@ -688,6 +900,8 @@ export function createRenderer(canvas, map) {
       ctx.lineWidth = 2;
       ctx.stroke();
     }
+    // Der beschworene Verbündete trägt seinen Strahlenkranz unter dem Token.
+    if (g.ally && !opts.ghost) drawAllyAura(x, yy, r, c);
     ctx.beginPath();
     ctx.arc(x, y + 3, r, 0, TAU);
     ctx.fillStyle = 'rgba(4,7,12,0.5)';
@@ -712,10 +926,19 @@ export function createRenderer(canvas, map) {
     ctx.strokeStyle = 'rgba(255,255,255,0.4)';
     ctx.lineWidth = 1.4;
     ctx.stroke();
+    // Goldener Rand: hebt den Verbündeten zusätzlich von der regulären Truppe ab.
+    if (g.ally) {
+      ctx.beginPath();
+      ctx.arc(x, yy, r + 2, 0, TAU);
+      ctx.strokeStyle = 'rgba(255,225,150,0.85)';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+    }
     // Simulations-Token tragen die römische Ziffer der Einheit (eindeutige
-    // Kennung, passend zur Planungsliste); Planungs-Platzhalter (Truppzahl / „?")
-    // behalten ihren Kurztext. Längere Ziffern werden kleiner gesetzt, damit sie
-    // im Kreis bleiben.
+    // Kennung, passend zur Planungsliste); der Verbündete hat keine Ziffer
+    // (`ordinal === null`) und fällt wie die Planungs-Platzhalter (Truppzahl /
+    // „?") auf sein Kurzzeichen aus `def.short` zurück. Längere Ziffern werden
+    // kleiner gesetzt, damit sie im Kreis bleiben.
     const centerText = g.ordinal != null ? toRoman(g.ordinal) : g.def?.short ?? '';
     let centerSize = r > 13 ? 13 : 11;
     if (centerText.length >= 4) centerSize = r > 13 ? 9 : 8;
@@ -738,10 +961,13 @@ export function createRenderer(canvas, map) {
   }
 
   // Vollständige Route eines Plans (Start → Ziele → ggf. Boss) als Punktliste.
-  function routePoints(nodeSeq) {
+  // `faction` muss durchgereicht werden, damit die Vorschau denselben Weg zeigt,
+  // den die Einheit später wirklich nimmt: Gleich lange Wege entscheidet die
+  // Wegsuche anhand der Flanke der Fraktion.
+  function routePoints(nodeSeq, faction = null) {
     const pts = [];
     for (let i = 0; i < nodeSeq.length - 1; i++) {
-      const seg = shortestPath(map, nodeSeq[i], nodeSeq[i + 1]);
+      const seg = shortestPath(map, nodeSeq[i], nodeSeq[i + 1], faction);
       if (!seg) continue;
       for (let s = 0; s < seg.length - 1; s++) {
         for (let t = 0; t <= 1.001; t += 0.1) {
@@ -804,7 +1030,11 @@ export function createRenderer(canvas, map) {
         }
       }
       const towerInfo = n.type === 'combat' ? towerInfoAt(n.id, view) : null;
+      // Vorratslager sind markierte Kampfpunkte ohne Turm – sie bekommen ihre
+      // eigene Darstellung, bevor der gewöhnliche Wegpunkt gezeichnet wird.
+      const supplyInfo = !towerInfo && n.supply ? supplyInfoAt(n.id, view) : null;
       if (towerInfo) drawTower(n, towerInfo, ring);
+      else if (supplyInfo) drawSupplyCamp(n, supplyInfo, ring);
       else if (n.type === 'combat') drawFlagNode(n, owner, ring);
       else if (n.type === 'graveyard') {
         // Besitz kommt im Gefecht aus der Simulation, sonst aus der
@@ -836,6 +1066,15 @@ export function createRenderer(canvas, map) {
   function bobPhase(g) {
     return (g.id.charCodeAt(0) * 7 + g.id.charCodeAt(1) * 13) % 7;
   }
+
+  // Der mächtige Verbündete ist größer als eine reguläre Einheit (def.radius 19
+  // statt 16). Damit sich Tokens und Lebensanzeigen auch dann nicht überlappen,
+  // wachsen Auffächerungsradius und Fahrspurabstand mit dem größten Token einer
+  // Gruppe; bei reinen Standardtrupps bleibt alles wie bisher.
+  const tokenRadius = (g) => g.def?.radius ?? 16;
+  const maxTokenRadius = (list) => list.reduce((m, g) => Math.max(m, tokenRadius(g)), 16);
+  const spreadRadius = (list, base) => base + (maxTokenRadius(list) - 16) * 2.2;
+  const laneGap = (list) => Math.max(18, maxTokenRadius(list) + 2);
 
   function drawSim(sim) {
     const byNode = new Map();
@@ -872,7 +1111,7 @@ export function createRenderer(canvas, map) {
         // Gegenverkehr weicht zur eigenen Seite aus, mehrere Gruppen fächern auf
         // (Abstand groß genug, damit sich die Lebensanzeigen nicht überlappen).
         const side = g.edgeFrom < g.edgeTo ? 1 : -1;
-        const off = side * 7 + (i - (list.length - 1) / 2) * 18;
+        const off = side * 7 + (i - (list.length - 1) / 2) * laneGap(list);
         const tx = p.x + (-dy / len) * off;
         const ty = p.y + (dx / len) * off;
         // Aufgewirbelter Schnee hinter marschierenden Trupps.
@@ -889,12 +1128,13 @@ export function createRenderer(canvas, map) {
       drawSwords(p.x, p.y, anim);
       const byFaction = { blue: [], red: [] };
       for (const g of list.sort((a, b) => (a.id < b.id ? -1 : 1))) byFaction[g.faction].push(g);
+      const rad = spreadRadius(list, 30);
       for (const fac of ['red', 'blue']) {
         const fl = byFaction[fac];
         const base = fac === 'red' ? -Math.PI / 2 : Math.PI / 2;
         fl.forEach((g, i) => {
           const ang = base + (i - (fl.length - 1) / 2) * 1.05;
-          drawToken(p.x + Math.cos(ang) * 30, p.y + Math.sin(ang) * 30, g);
+          drawToken(p.x + Math.cos(ang) * rad, p.y + Math.sin(ang) * rad, g);
         });
       }
     }
@@ -920,7 +1160,7 @@ export function createRenderer(canvas, map) {
             : Math.PI / 2;
         const spread = both || fl.length > 1;
         fl.forEach((g, i) => {
-          const rad = spread || isBossNode ? (isBossNode ? 48 : 32) : 0;
+          const rad = spread || isBossNode ? spreadRadius(list, isBossNode ? 48 : 32) : 0;
           const ang = base + (i - (fl.length - 1) / 2) * 1.05;
           drawToken(n.x + Math.cos(ang) * rad, n.y + Math.sin(ang) * rad, g);
         });
@@ -1004,7 +1244,7 @@ export function createRenderer(canvas, map) {
       if (seqStance === 'attack' && !endTowerTarget && seq[seq.length - 1] !== enemyBoss) {
         seq.push(enemyBoss);
       }
-      strokeRoute(routePoints(seq), c.color);
+      strokeRoute(routePoints(seq, faction), c.color);
       wp.forEach((t, i) => {
         const n = map.nodes[t];
         ctx.beginPath();
@@ -1033,7 +1273,7 @@ export function createRenderer(canvas, map) {
         ctx.save();
         ctx.setLineDash([9, 7]);
         ctx.lineDashOffset = -anim * 12;
-        strokeRoute(routePoints(rnodes), '#ffd76a');
+        strokeRoute(routePoints(rnodes, faction), '#ffd76a');
         ctx.restore();
       }
 

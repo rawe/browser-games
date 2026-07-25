@@ -820,6 +820,74 @@ html {
   color: #f0d489;
 }
 
+/* Vorratsanzeige: je Fraktion eine Zeile aus Name, Stand/Schwelle und einem
+   schmalen Balken. Hängt nur im Panel, wenn die Partie Vorratslager hat. Beide
+   Texte dürfen kürzen (Ellipsis), damit die Zeile auf schmalen Geräten nie
+   überläuft – der Balken darunter bleibt immer voll sichtbar. */
+.supply-board {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #2a3348;
+  border-radius: 0.6rem;
+  background: rgba(26, 32, 48, 0.6);
+}
+
+.supply-row {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.15rem 0.5rem;
+}
+
+.supply-fac,
+.supply-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.supply-fac {
+  font-weight: 700;
+  color: var(--fac, #e6ebf4);
+}
+
+.supply-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #cfd7e6;
+}
+
+.supply-bar {
+  grid-column: 1 / -1;
+  height: 0.28rem;
+  border-radius: 999px;
+  background: #232a3a;
+  overflow: hidden;
+}
+
+.supply-bar > i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--fac-dark, #2c5aa8), var(--fac, #5b9cff));
+  transition: width 0.2s linear;
+}
+
+/* Verbündeter erschienen: Zeile und Balken wechseln auf Gold. */
+.supply-row.summoned .supply-value {
+  color: #f0d489;
+  font-weight: 700;
+}
+
+.supply-row.summoned .supply-bar > i {
+  background: linear-gradient(90deg, #8a6a24, #f0d489);
+}
+
 .ticker {
   display: grid;
   gap: 0.15rem;

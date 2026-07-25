@@ -128,6 +128,37 @@ export function createEffects(map) {
     for (let i = 0; i < 7; i++) smoke(x + rand(-14, 14), y + rand(-12, 8));
   }
 
+  // Gesichertes Vorratslager: kräftiger Ausbruch in der Fraktionsfarbe mit
+  // Aufblitzen, doppeltem Ring und hochgewirbeltem Schnee – deutlich stärker
+  // als die Friedhofseinnahme, denn ab jetzt läuft der Nachschub.
+  function supplySecured(x, y, color) {
+    shake = Math.max(shake, 0.22);
+    push({ kind: 'flash', x, y, life: 0.35, size: 62 });
+    ring(x, y, color, 50, 0.65, 4);
+    ring(x, y, color, 80, 0.85, 2.5, 0.12);
+    sparks(x, y - 6, color, 22, 115);
+    for (let i = 0; i < 4; i++) snowKick(x + rand(-16, 16), y + rand(-2, 8));
+  }
+
+  // Beschwörung des mächtigen Verbündeten – der Höhepunkt der Vorrats-Mechanik:
+  // Erschütterung, gleißendes Aufblitzen, doppelte Lichtsäule und drei
+  // nachhallende Schockringe, abwechselnd Fraktionsfarbe und Gold.
+  function allySummon(x, y, color) {
+    shake = 1;
+    push({ kind: 'flash', x, y, life: 0.6, size: 150 });
+    push({ kind: 'flash', x, y, life: 0.5, size: 90, delay: 0.18 });
+    beam(x, y);
+    beam(x, y);
+    for (let i = 0; i < 3; i++) {
+      ring(x, y, i % 2 ? 'rgba(255,240,200,0.85)' : color, 66 + i * 42, 0.8 + i * 0.18, 5 - i, i * 0.14);
+    }
+    sparks(x, y, color, 40, 160);
+    sparks(x, y - 12, 'rgba(255,245,215,0.95)', 22, 95);
+    for (let i = 0; i < 4; i++) {
+      puff(x + rand(-18, 18), y + rand(-6, 8), 'rgba(226,238,252,0.35)', rand(5, 9), rand(0.8, 1.4));
+    }
+  }
+
   // Neue Sim-Ereignisse seit dem letzten Aufruf in Partikel übersetzen.
   // Ein Simulationswechsel (Revanche/Planung) setzt alles zurück.
   function consume(sim) {
@@ -171,6 +202,13 @@ export function createEffects(map) {
         ring(p.x, p.y, facColor(ev.faction), 44, 0.7, 4);
         sparks(p.x, p.y - 6, facColor(ev.faction), 16, 90);
         beam(p.x, p.y);
+      } else if (ev.type === 'supplyCaptureStart') {
+        // Beginnende Lagereinnahme: dezent wie beim Friedhof.
+        ring(p.x, p.y, facColor(ev.faction), 28, 0.6, 2.5);
+      } else if (ev.type === 'supplyCaptured') {
+        supplySecured(p.x, p.y, facColor(ev.faction));
+      } else if (ev.type === 'allySummoned') {
+        allySummon(p.x, p.y, facColor(ev.faction));
       } else if (ev.type === 'respawn') {
         beam(p.x, p.y);
       } else if (ev.type === 'bossDown') {

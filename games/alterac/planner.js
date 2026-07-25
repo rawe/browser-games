@@ -23,20 +23,28 @@ const circled = (n) => CIRCLED[n - 1] ?? `(${n})`;
 // Kurzbeschreibung eines einzelnen Auftrags für Chip und Auftragsliste. `towers`
 // ist die aktive Turmzuordnung { nodeId: faction }; endet der Angriffspfad auf
 // einem gegnerischen Turm, wird das ausdrückliche Turm-Ziel benannt.
-export function actionSummary(action, nodes, towers = {}, faction = null) {
+// `supplyCamps` sind die aktiven Vorratslager (Knoten-Ids): Endet ein Pfad dort,
+// nimmt die Einheit das Lager ein – das ist der Kern der Vorratsregel und wird
+// deshalb ebenso ausdrücklich benannt. Beide Zusatzangaben sind optional, damit
+// bestehende Aufrufe unverändert weiterlaufen.
+export function actionSummary(action, nodes, towers = {}, faction = null, supplyCamps = []) {
   const path = action.path ?? [];
   const names = path.map((id) => nodes[id].name);
   const endId = path.length ? path[path.length - 1] : null;
   const endTowerFaction = endId ? towers[endId] : undefined;
+  const endName = names.length ? names[names.length - 1] : null;
+  const endsAtCamp = endId ? supplyCamps.includes(endId) : false;
   if (action.stance === 'defend') {
     if (endTowerFaction && faction && endTowerFaction === faction) {
-      return `🛡 verteidigt Turm ${names[names.length - 1]}`;
+      return `🛡 verteidigt Turm ${endName}`;
     }
-    return `🛡 hält ${names.length ? names[names.length - 1] : 'die Basis'}`;
+    if (endsAtCamp) return `🛡 sichert Vorratslager ${endName}`;
+    return `🛡 hält ${endName ?? 'die Basis'}`;
   }
   if (endTowerFaction && faction && endTowerFaction !== faction) {
     return `⚔ ${names.join(' → ')} · greift Turm an`;
   }
+  if (endsAtCamp) return `⚔ ${names.join(' → ')} · sichert Vorratslager`;
   return names.length ? `⚔ ${names.join(' → ')}` : '⚔ direkt zum Boss';
 }
 
@@ -62,6 +70,8 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
   const towers = towerNodes(map, config?.towersPerFaction ?? 0);
   const isEnemyTower = (id) => towers[id] === enemyFaction;
   const hasEnemyTowers = Object.values(towers).some((f) => f === enemyFaction);
+  // Aktive Vorratslager dieser Partie (leer, wenn das System abgeschaltet ist).
+  const supplyCamps = config?.supplyEnabled ? map.supplyCamps ?? [] : [];
   // Effektive Einheitenwerte dieser Partie (Datei-Defaults ggf. überschrieben).
   const unitTypes = resolveUnitTypes(config);
   const byKey = resolveUnitTypeMap(config);
@@ -101,6 +111,15 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     'Pfadende. Türme werden nur angegriffen, wenn ein Angriffs-Auftrag ausdrücklich auf einem ' +
     'gegnerischen Turm endet.';
 
+  // Zusatzhinweis nur, wenn die Partie Vorratslager hat. Die Namen kommen aus der
+  // Karte, damit der Text bei geänderten Standorten nicht nachgezogen werden muss.
+  const SUPPLY_HINT = supplyCamps.length
+    ? ' Genauso bei den Vorratslagern (' +
+      supplyCamps.map((id) => map.nodes[id].name).join(', ') +
+      '): Eingenommen wird nur, wessen Auftrag ausdrücklich dort endet – ein Durchmarsch reicht nicht. ' +
+      'Danach liefert das Lager auch ohne Wache Nachschub für den mächtigen Verbündeten.'
+    : '';
+
   panel.innerHTML = `
     <div class="map-settings">
       <button class="btn ghost map-toggle active" id="btn-targets" type="button" aria-pressed="true">
@@ -113,7 +132,7 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
       <button class="btn ghost help-toggle" id="btn-help" type="button"
         title="Hilfe anzeigen" aria-expanded="false" aria-controls="help-text">?</button>
     </div>
-    <p class="help-text" id="help-text" hidden>${DEFAULT_HINT}</p>
+    <p class="help-text" id="help-text" hidden>${DEFAULT_HINT}${SUPPLY_HINT}</p>
     <div class="recruit-row">
       <span class="budget" id="budget"></span>
       ${unitTypes
@@ -182,7 +201,7 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
 
   // --- Chips (Einheitenliste, kompakt) -------------------------------------
   function unitSummary(u) {
-    const first = actionSummary(u.actions[0], map.nodes, towers, faction);
+    const first = actionSummary(u.actions[0], map.nodes, towers, faction, supplyCamps);
     const extra = u.actions.length - 1;
     return extra > 0 ? `${first} · +${extra} Auftrag${extra > 1 ? 'e' : ''}` : first;
   }
@@ -243,7 +262,7 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
       line.innerHTML =
         `<span class="action-num">${circled(idx + 1)}</span>` +
         trigTag +
-        `<span class="action-sum">${actionSummary(a, map.nodes, towers, faction)}</span>` +
+        `<span class="action-sum">${actionSummary(a, map.nodes, towers, faction, supplyCamps)}</span>` +
         (idx > 0 ? `<button class="mini del" data-delact="${idx}" title="Auftrag entfernen">✕</button>` : '');
       item.appendChild(line);
 

@@ -63,10 +63,22 @@ const EPS = 1e-9;
 // (etwa die Bosse, die eine Verlegung zwischen zwei Türmen nicht durchqueren
 // soll – dort begänne sofort ein aussichtsloser Boss-Kampf). Friedhöfe werden
 // wie in der Wegsuche der Karte nie durchquert, nur als Ziel betreten.
-// Deterministisch: bei gleicher Länge gewinnt der lexikografisch kleinere Pfad.
-// Die Rückgabe enthält den Startknoten.
-function pathAvoiding(map, from, to, blocked = new Set()) {
+// Deterministisch und spiegelsymmetrisch: Bei gleicher Länge entscheidet – exakt
+// wie in `shortestPath` – die Flanke der Fraktion, nicht die Knoten-Kennung.
+// Ein textlicher Vergleich würde beide Fraktionen durch denselben Korridor
+// schicken und damit eine Seite bevorzugen. Die Rückgabe enthält den Startknoten.
+function pathAvoiding(map, from, to, faction, blocked = new Set()) {
   if (from === to) return [from];
+  const flank = faction === 'blue' ? 1 : -1;
+  const better = (cand, ex) => {
+    if (!ex || cand.length < ex.length) return true;
+    if (cand.length > ex.length) return false;
+    for (let i = 0; i < cand.length; i++) {
+      const dx = map.nodes[cand[i]].x - map.nodes[ex[i]].x;
+      if (dx !== 0) return flank > 0 ? dx > 0 : dx < 0;
+    }
+    return false;
+  };
   const best = new Map([[from, [from]]]);
   const queue = [from];
   while (queue.length) {
@@ -75,17 +87,14 @@ function pathAvoiding(map, from, to, blocked = new Set()) {
     for (const nb of map.adjacency[cur]) {
       if (nb !== to && (blocked.has(nb) || map.nodes[nb].type === 'graveyard')) continue;
       const cand = [...curPath, nb];
-      const ex = best.get(nb);
-      const better =
-        !ex || cand.length < ex.length || (cand.length === ex.length && cand.join('/') < ex.join('/'));
-      if (better) {
+      if (better(cand, best.get(nb))) {
         best.set(nb, cand);
         queue.push(nb);
       }
     }
   }
   // Ohne Umweg-Lösung lieber den direkten Weg als gar keinen Befehl.
-  return best.get(to) ?? shortestPath(map, from, to) ?? [from];
+  return best.get(to) ?? shortestPath(map, from, to, faction) ?? [from];
 }
 
 // Beste Armee für ein Budget: exakte dynamische Programmierung über die
@@ -136,7 +145,21 @@ export function planHard(config, map, faction) {
     return p ? p.length - 1 : Infinity;
   };
   // Wegpunkte ab einem Startknoten (ohne ihn selbst – dort steht die Einheit schon).
-  const legFrom = (from, to) => pathAvoiding(map, from, to, noWalk).slice(1);
+  const legFrom = (from, to) => pathAvoiding(map, from, to, faction, noWalk).slice(1);
+  // Spiegelsymmetrischer Tiebreak für sonst gleichwertige Alternativen: Es
+  // gewinnt die auf der eigenen Flanke – Ost für die Südfraktion, West für die
+  // Nordfraktion. Ein Vergleich von Knoten-Kennungen oder Routennamen wäre
+  // asymmetrisch: Er ließe beide Fraktionen dieselbe absolute Flanke wählen,
+  // sodass ein Korridor zur Hauptachse und der andere zum toten Winkel würde.
+  const flankOf = faction === 'blue' ? 1 : -1;
+  const nodeFlank = (a, b) => flankOf * (map.nodes[b].x - map.nodes[a].x);
+  const pathFlank = (pa, pb) => {
+    for (let i = 0; i < pa.length && i < pb.length; i++) {
+      const d = nodeFlank(pa[i], pb[i]);
+      if (d !== 0) return d;
+    }
+    return pa.length - pb.length;
+  };
   // Wie stark wird ein Wegpunkt frequentiert? Gemessen an der Zahl der
   // Standardrouten, die über ihn führen: der meistbenutzte ist der Hauptzugang –
   // den bewacht man selbst am ehesten und dort erwartet man auch den Gegner.
@@ -180,7 +203,7 @@ export function planHard(config, map, faction) {
       (a, b) =>
         trafficOn(routes, a) - trafficOn(routes, b) ||
         stepsBetween(start, a) - stepsBetween(start, b) ||
-        (a < b ? -1 : 1)
+        nodeFlank(a, b)
     )
     .slice(0, MAX_ACTIONS);
 
@@ -224,7 +247,7 @@ export function planHard(config, map, faction) {
     (a, b) =>
       trafficOn(enemyRoutes, b) - trafficOn(enemyRoutes, a) ||
       stepsBetween(start, a) - stepsBetween(start, b) ||
-      (a < b ? -1 : 1)
+      nodeFlank(a, b)
   );
   guards.forEach((idx, k) => {
     const node = defendNodes[k % defendNodes.length];
@@ -248,7 +271,18 @@ export function planHard(config, map, faction) {
     // Anmarsch zum ersten Ziel über eine vorgesehene Route (sie beschreibt den
     // gedachten Zugang), Verlegungen danach auf kürzestem Weg. Jeder Abschnitt
     // endet exakt auf dem Turm – nur dann gilt er als ausdrücklicher Turmangriff.
-    const route = from === start ? routes.find((r) => r.path.includes(tower)) : null;
+    // Führen mehrere Routen zum Ziel, entscheidet auch hier die Flanke – die
+    // Reihenfolge der Routenliste ist je Fraktion frei gewählt und damit kein
+    // spiegelsymmetrisches Kriterium.
+    const route =
+      from === start
+        ? [...routes]
+            .filter((r) => r.path.includes(tower))
+            .sort(
+              (a, b) =>
+                a.path.indexOf(tower) - b.path.indexOf(tower) || pathFlank(a.path, b.path)
+            )[0] ?? null
+        : null;
     legs.push(route ? route.path.slice(0, route.path.indexOf(tower) + 1) : legFrom(from, tower));
     from = tower;
   }
@@ -256,8 +290,13 @@ export function planHard(config, map, faction) {
     // Kein Turmziel (Türme abgeschaltet oder schwacher Schild): geschlossen auf
     // der kürzesten Standardroute zum Boss. Turm-Wegpunkte auf dem Weg werden
     // dabei nur passiert – aktiv wird ein Turm nur bei ausdrücklichem Ziel.
+    // Bei gleich langen Routen entscheidet die Flanke, nicht der Routenname:
+    // Die Namen sind je Fraktion frei vergeben („Eisiger Grat" gegen
+    // „Schmugglerpfad") und ihre alphabetische Ordnung hat mit der Karte nichts
+    // zu tun – danach zu sortieren schickte die beiden Fraktionen auf
+    // unterschiedliche, nicht spiegelbildliche Bahnen.
     const route = [...routes].sort(
-      (a, b) => a.path.length - b.path.length || (a.name < b.name ? -1 : 1)
+      (a, b) => a.path.length - b.path.length || pathFlank(a.path, b.path)
     )[0];
     legs.push(route ? [...route.path] : legFrom(start, enemyBoss));
   }
