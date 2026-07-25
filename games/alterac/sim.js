@@ -166,14 +166,24 @@ export function createSim({ map, config, plans }) {
   const gyOwner = {};
   for (const id of map.graveyardIds) gyOwner[id] = map.graveyards[id].owner;
   const captures = {};
-  // Vorratslager (siehe design-vorratslager.md): markierte Wegpunkte, die wie
-  // Friedhöfe eingenommen werden und ihrem Besitzer im globalen Nachschub-Takt
-  // Vorrat liefern. Bei `allySupplyCost` erscheint der mächtige Verbündete –
-  // einmal je Fraktion. Ist das System abgeschaltet, bleibt die Lagerliste leer
-  // und keine der Vorratsfunktionen hat eine Wirkung.
-  const supplyCamps = supplyEnabled ? (map.supplyCamps ?? []) : [];
-  const supplyOwner = {};
-  for (const id of supplyCamps) supplyOwner[id] = null;
+  // Vorratslager (siehe design-vorratslager.md): Jede Fraktion hat genau ein
+  // fest zugeordnetes Lager an einem markierten Wegpunkt. Es wechselt nie den
+  // Besitzer; der Gegner kann es nur lahmlegen. Zustand je Lager:
+  //   inaktiv      – noch nicht in Betrieb genommen (Ausgangslage)
+  //   aktiv        – liefert Nachschub, auch ohne eigene Einheit vor Ort
+  //   blockiert    – eine gegnerische Einheit besetzt es ausdrücklich; die
+  //                  Lieferung stockt, die Inbetriebnahme bleibt aber erhalten
+  // Ist das System abgeschaltet, bleibt die Lagerliste leer und keine der
+  // Vorratsfunktionen hat eine Wirkung.
+  const supplyCampIds = supplyEnabled ? (map.supplyCampIds ?? []) : [];
+  const supplyOwner = supplyEnabled ? (map.supplyCamps ?? {}) : {}; // nodeId → Fraktion (fest)
+  const supplyActive = {};
+  const supplyBlocked = {};
+  for (const id of supplyCampIds) {
+    supplyActive[id] = false;
+    supplyBlocked[id] = false;
+  }
+  // Laufende Inbetriebnahmen: { faction, startedAt } je Lager.
   const supplyCaptures = {};
   // Vorrat je Fraktion: `supply` ist der zum Zeitpunkt `supplySince` verbuchte
   // Stand, der Rest läuft stetig mit der aktuellen Rate auf (siehe supplyNow).
@@ -210,7 +220,7 @@ export function createSim({ map, config, plans }) {
       action.stance === 'attack' && lastNode && towers[lastNode] && towers[lastNode].faction !== faction
         ? lastNode
         : null;
-    const supplyTarget = lastNode && supplyCamps.includes(lastNode) ? lastNode : null;
+    const supplyTarget = lastNode && supplyCampIds.includes(lastNode) ? lastNode : null;
     return { orders, towerTarget, supplyTarget };
   }
 
@@ -317,8 +327,18 @@ export function createSim({ map, config, plans }) {
   function actionExhausted(g) {
     if (g.orderIndex < g.orders.length) return false;
     if (g.towerTarget && towers[g.towerTarget]?.alive) return false;
-    if (g.supplyTarget && supplyOwner[g.supplyTarget] !== g.faction) return false;
+    if (!supplyDone(g)) return false;
     return true;
+  }
+
+  // Ist der Lager-Auftrag einer Einheit erledigt? Das eigene Lager gilt als
+  // erledigt, sobald es in Betrieb ist – die Einheit wird dann wieder frei.
+  // Ein gegnerisches Lager wird dagegen nie „erledigt": Wer es besetzt, hält die
+  // Stellung und legt es damit dauerhaft lahm, bis er fällt oder umgeplant wird.
+  function supplyDone(g) {
+    if (!g.supplyTarget) return true;
+    if (supplyOwner[g.supplyTarget] !== g.faction) return false;
+    return supplyActive[g.supplyTarget];
   }
 
   // Nächsten sequenziellen Auftrag laden. Rückgabe true, wenn ein neuer Auftrag
@@ -390,7 +410,7 @@ export function createSim({ map, config, plans }) {
     if (g.towerTarget && towers[g.towerTarget]?.alive) {
       return { type: 'tower', node: g.towerTarget };
     }
-    if (g.supplyTarget && supplyOwner[g.supplyTarget] !== g.faction) {
+    if (!supplyDone(g)) {
       return { type: 'supply', node: g.supplyTarget };
     }
     return { type: 'attack', node: map.bosses[enemyOf(g.faction)] };
@@ -502,11 +522,16 @@ export function createSim({ map, config, plans }) {
   // (`supplyTarget` – der Pfad endet dort). Ein bloßer Durchmarsch stört zwar die
   // Einnahme des Gegners, treibt aber keine eigene voran.
 
-  const ownedCamps = (faction) => supplyCamps.filter((id) => supplyOwner[id] === faction);
+  // Lager, die einer Fraktion gerade tatsächlich Nachschub liefern: in Betrieb
+  // genommen und nicht vom Gegner besetzt.
+  const deliveringCamps = (faction) =>
+    supplyCampIds.filter(
+      (id) => supplyOwner[id] === faction && supplyActive[id] && !supplyBlocked[id]
+    );
 
-  // Nachschubrate einer Fraktion in Vorrat je Sekunde: ein gehaltenes Lager
-  // liefert einen Vorratspunkt je `supplyTickTime`, zwei Lager doppelt so schnell.
-  const supplyRate = (faction) => ownedCamps(faction).length / supplyTickTime;
+  // Nachschubrate einer Fraktion in Vorrat je Sekunde: ein lieferndes Lager
+  // bringt einen Vorratspunkt je `supplyTickTime`.
+  const supplyRate = (faction) => deliveringCamps(faction).length / supplyTickTime;
 
   // Aufgelaufenen Vorrat bis zum Zeitpunkt t verbuchen. Muss vor jeder Änderung
   // der Rate (also vor jedem Besitzwechsel) aufgerufen werden, damit die neue
@@ -535,18 +560,18 @@ export function createSim({ map, config, plans }) {
     return supplySince[faction] + (allySupplyCost - supply[faction]) / rate;
   }
 
-  // Fällige Lager-Einnahmen abschließen: Das Lager wechselt den Besitzer und
-  // erhöht ab diesem Moment die Nachschubrate. Wartende Einheiten werden frei
-  // und setzen im selben Batch ihre Befehle fort.
+  // Fällige Inbetriebnahmen abschließen: Das Lager liefert ab sofort dauerhaft,
+  // auch wenn die Einheit weiterzieht. Wartende Einheiten werden frei und setzen
+  // im selben Batch ihre Befehle fort.
   function completeSupplyCaptures(t) {
-    for (const campId of supplyCamps) {
+    for (const campId of supplyCampIds) {
       const cap = supplyCaptures[campId];
       if (!cap || cap.startedAt + supplyCaptureTime > t + EPS) continue;
-      // Vor dem Besitzwechsel abrechnen – die neue Rate gilt erst ab jetzt.
+      // Vor der Ratenänderung abrechnen – die neue Rate gilt erst ab jetzt.
       settleSupply(t);
       delete supplyCaptures[campId];
-      supplyOwner[campId] = cap.faction;
-      addLog(`${FACTIONS[cap.faction].name} sichert das Vorratslager ${nodeName(campId)}!`);
+      supplyActive[campId] = true;
+      addLog(`${FACTIONS[cap.faction].name} nimmt das Vorratslager ${nodeName(campId)} in Betrieb!`);
       addEvent({ type: 'supplyCaptured', faction: cap.faction, where: { node: campId } });
       for (const g of groups) {
         if (g.state === 'capturing' && g.node === campId) g.state = 'atNode';
@@ -554,31 +579,63 @@ export function createSim({ map, config, plans }) {
     }
   }
 
-  // Einnahme-Zustand aller Lager aktualisieren (Vorbild: updateGraveyards).
+  // Zustand aller Lager aktualisieren: laufende Inbetriebnahme und Blockade.
+  // Eine Inbetriebnahme verlangt – wie die Friedhofseinnahme – ununterbrochene
+  // Präsenz der Besitzerfraktion allein vor Ort, zusätzlich muss das Lager
+  // ausdrücklich als Ziel geplant sein. Eine Blockade dagegen entsteht nur durch
+  // eine gegnerische Einheit, die das Lager ausdrücklich besetzt: Wer bloß
+  // durchmarschiert, legt es nicht lahm – sonst wäre es dauernd gestört, denn
+  // der Anmarschweg des Gegners führt ohnehin daran vorbei.
   function updateSupplyCamps(t) {
-    for (const campId of supplyCamps) {
+    for (const campId of supplyCampIds) {
+      const owner = supplyOwner[campId];
+      const foe = enemyOf(owner);
       const present = { blue: false, red: false };
-      let claimant = null; // Fraktion, die das Lager ausdrücklich einnehmen will
+      let claimant = false; // eigene Einheit will das Lager ausdrücklich in Betrieb nehmen
+      let besieger = false; // gegnerische Einheit besetzt es ausdrücklich
       for (const g of combatants(campId)) {
         present[g.faction] = true;
-        if (g.supplyTarget === campId) claimant = g.faction;
+        if (g.supplyTarget !== campId) continue;
+        if (g.faction === owner) claimant = true;
+        else besieger = true;
       }
-      const alone = present.blue !== present.red ? (present.blue ? 'blue' : 'red') : null;
-      const fac = alone && alone === claimant ? alone : null;
+
+      // --- Blockade (nur im Betrieb relevant) ---
+      const blocked = besieger;
+      if (blocked !== supplyBlocked[campId]) {
+        settleSupply(t); // Ratenwechsel: vorher abrechnen
+        supplyBlocked[campId] = blocked;
+        if (supplyActive[campId]) {
+          addLog(
+            blocked
+              ? `${FACTIONS[foe].name} besetzt das Vorratslager ${nodeName(campId)} – der Nachschub stockt.`
+              : `Das Vorratslager ${nodeName(campId)} liefert wieder.`
+          );
+          addEvent({
+            type: blocked ? 'supplyBlocked' : 'supplyResumed',
+            faction: owner,
+            where: { node: campId },
+          });
+        }
+      }
+
+      // --- Inbetriebnahme ---
+      if (supplyActive[campId]) continue;
+      const alone = present[owner] && !present[foe];
       const cap = supplyCaptures[campId] ?? null;
-      if (!fac || fac === supplyOwner[campId]) {
+      if (!alone || !claimant) {
         if (cap) {
           delete supplyCaptures[campId];
           addLog(
-            `Die Einnahme des Vorratslagers ${nodeName(campId)} wird unterbrochen – der Fortschritt verfällt.`
+            `Die Inbetriebnahme des Vorratslagers ${nodeName(campId)} wird unterbrochen – der Fortschritt verfällt.`
           );
         }
         continue;
       }
-      if (!cap || cap.faction !== fac) {
-        supplyCaptures[campId] = { faction: fac, startedAt: t };
-        addLog(`${FACTIONS[fac].name} beginnt die Einnahme des Vorratslagers ${nodeName(campId)}.`);
-        addEvent({ type: 'supplyCaptureStart', faction: fac, where: { node: campId } });
+      if (!cap) {
+        supplyCaptures[campId] = { faction: owner, startedAt: t };
+        addLog(`${FACTIONS[owner].name} beginnt die Inbetriebnahme des Vorratslagers ${nodeName(campId)}.`);
+        addEvent({ type: 'supplyCaptureStart', faction: owner, where: { node: campId } });
       }
     }
   }
@@ -606,7 +663,7 @@ export function createSim({ map, config, plans }) {
 
   // Vorrat abrechnen und – bei erreichter Schwelle – den Verbündeten rufen.
   function checkAllySummon(t) {
-    if (!supplyCamps.length) return;
+    if (!supplyCampIds.length) return;
     settleSupply(t);
     for (const faction of ['blue', 'red']) {
       if (allySummoned[faction] || supply[faction] < allySupplyCost - EPS) continue;
@@ -804,9 +861,10 @@ export function createSim({ map, config, plans }) {
           return;
         }
         if (obj.type === 'supply') {
-          // Am Ziel-Vorratslager angekommen: warten, bis die eigene Fraktion es
-          // eingenommen hat (die Einnahme selbst verwaltet updateSupplyCamps).
-          // Danach greift der reguläre Fallback – die Einheit ist wieder frei.
+          // Am Ziel-Vorratslager angekommen. Beim eigenen Lager wartet die
+          // Einheit, bis es in Betrieb ist, und wird danach wieder frei; am
+          // gegnerischen hält sie die Stellung und legt es damit lahm. Beides
+          // verwaltet updateSupplyCamps.
           g.state = 'capturing';
           return;
         }
@@ -1219,7 +1277,7 @@ export function createSim({ map, config, plans }) {
       const cap = captures[gyId];
       if (cap) t = Math.min(t, cap.startedAt + graveyardCaptureTime);
     }
-    for (const campId of supplyCamps) {
+    for (const campId of supplyCampIds) {
       const cap = supplyCaptures[campId];
       if (cap) t = Math.min(t, cap.startedAt + supplyCaptureTime);
     }
@@ -1284,9 +1342,11 @@ export function createSim({ map, config, plans }) {
     // Einnahmen, Vorratsstand je Fraktion, Schwelle und ob der Verbündete einer
     // Fraktion bereits erschienen ist.
     supplyState: {
-      camps: supplyCamps,
-      owner: supplyOwner,
-      captures: supplyCaptures,
+      camps: supplyCampIds, // Kennungen in fester Reihenfolge
+      owner: supplyOwner, // feste Zuordnung nodeId → Fraktion
+      active: supplyActive, // in Betrieb genommen?
+      blocked: supplyBlocked, // vom Gegner besetzt und dadurch stillgelegt?
+      captures: supplyCaptures, // laufende Inbetriebnahme { faction, startedAt }
       cost: allySupplyCost,
       allySummoned,
       captureTime: supplyCaptureTime,

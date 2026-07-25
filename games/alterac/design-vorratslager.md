@@ -30,10 +30,16 @@ Ziele:
 
 ## 2. Die Lager: Standort und Symmetrie
 
-Zwei bestehende Kampfpunkte tragen ein **Vorratslager**: der **Steinbruch**
-(`en`, Norden) und die **Wolfsschlucht** (`ws`, Süden). Markiert wird das – wie
-bei den Türmen – direkt am Wegpunkt in `NODES` (`supply: true`); ein neuer
-Knotentyp entsteht nicht. Beide Lager starten **neutral**.
+Jede Fraktion hat **genau ein fest zugeordnetes Vorratslager** an einem
+bestehenden Kampfpunkt: der **Steinbruch** (`en`, Norden) gehört dem Frostwolf,
+die **Wolfsschlucht** (`ws`, Süden) der Sturmlanze. Markiert wird das – wie bei
+den Türmen – direkt am Wegpunkt in `NODES` (`supply: 'red' | 'blue'`); ein neuer
+Knotentyp entsteht nicht.
+
+Ein Lager **wechselt nie den Besitzer**. Der Gegner kann es besetzen und damit
+lahmlegen, aber niemals selbst nutzen. Das ist der wesentliche Unterschied zum
+Friedhofssystem und hält die Mechanik symmetrisch: Es gibt keinen Wettlauf um
+einen neutralen Punkt, den eine Seite dauerhaft für sich vereinnahmen könnte.
 
 Der Kartengraph ist unter der Spiegelung
 
@@ -52,44 +58,71 @@ ist die Symmetrie auch zeitlich exakt:
 | Frostwolf-Basis (`rboss`) | **2 Wegstücke** | 3 Wegstücke |
 | Sturmlanzen-Basis (`bboss`) | 3 Wegstücke | **2 Wegstücke** |
 
-Jede Fraktion hat also ein **nahes Heimlager** (billig zu sichern) und ein
-**fernes Lager** im Vorfeld des Gegners (teurer, exponierter). Das ist dieselbe
-Risiko/Ertrag-Spannung wie bei den Minen des Originals – aber ohne deren
-berüchtigten Geometriefehler, bei dem eine Fraktion deutlich weiter laufen
-musste als die andere.
+Jede Fraktion erreicht ihr **eigenes** Lager also in zwei Wegstücken und das
+**gegnerische** in drei. Verteidigen ist billig, den Gegner stören ist teuer –
+dieselbe Risiko/Ertrag-Spannung wie bei den Minen des Originals, aber ohne
+dessen berüchtigten Geometriefehler, bei dem eine Fraktion deutlich weiter
+laufen musste als die andere.
+
+Hinzu kommt eine Eigenschaft, die sich aus der Flankenregel der Wegsuche ergibt
+(`pathLess` in `map.js`): Der automatische Marsch zum gegnerischen Boss führt
+**jede Fraktion am Lager des Gegners vorbei** – Blau über den Steinbruch, Rot
+über die Wolfsschlucht. Das Lager liegt damit von selbst dort, wo der Feind
+ohnehin durchkommt, und ist verteidigungswürdig, ohne dass es künstlich
+aufgewertet werden müsste. Weil beide Seiten dasselbe erleben, bleibt es fair.
 
 **Warum bestehende Kampfpunkte und keine Sackgassen?** Weil genau die
-Durchgangsknoten den Eigenwert brauchen. Ein Lager auf dem Hauptweg heißt: Wer
-es hält, hält zugleich einen Korridor – und wer durchmarschiert, unterbricht
-nebenbei eine fremde Einnahme. Friedhöfe bleiben bewusst Sackgassen; die beiden
-Systeme sollen sich unterscheiden.
+Durchgangsknoten den Eigenwert brauchen. Friedhöfe bleiben bewusst Sackgassen;
+die beiden Systeme sollen sich unterscheiden.
 
-## 3. Einnahme
+## 3. Inbetriebnahme, Betrieb und Blockade
 
-Identisch zur Friedhofseinnahme, damit der Spieler keine zweite Regel lernen muss:
+Ein Lager kennt drei Zustände: **inaktiv** (Ausgangslage), **in Betrieb** und
+**blockiert**.
 
-- Eine Einheit erreicht das Lager und wartet; die Einnahme beginnt, sobald ihre
-  Fraktion **allein vor Ort** ist.
-- Sie verlangt **ununterbrochene Präsenz** über `supplyCaptureTime`; mehrere
-  eigene Einheiten verkürzen nichts.
+**Inbetriebnahme** – nach dem Vorbild der Friedhofseinnahme, damit der Spieler
+keine zweite Regel lernen muss:
+
+- Eine Einheit der **Besitzerfraktion** muss das Lager **ausdrücklich als Ziel**
+  geplant haben (ihr Pfad endet dort).
+- Sie verlangt **ununterbrochene Präsenz** über `supplyCaptureTime`, während die
+  eigene Fraktion **allein vor Ort** ist; mehrere eigene Einheiten verkürzen nichts.
 - Jede Unterbrechung – Kampf, Verlust der Präsenz – setzt den Fortschritt
   **vollständig auf 0**.
-- Nach der Einnahme gehört das Lager der Fraktion, **auch wenn sie abzieht**.
-  Die Einheit ist wieder frei; sie muss nicht Wache stehen.
-- Rückeroberung ist jederzeit und beliebig oft möglich. Eine Schutzregel wie
-  beim Heimatfriedhof gibt es **nicht** – beide Lager sind immer angreifbar.
+- Danach liefert das Lager **dauerhaft**, auch wenn die Einheit weiterzieht. Sie
+  ist wieder frei und muss keine Wache stehen.
 
-Der zweite Punkt ist die zentrale Balance-Entscheidung: Ein gehaltenes Lager
-kostet **einmalig** Zeit, nicht dauerhaft eine Einheit. Bei vier Einheiten je
-Seite wäre ein dauerhaft abgestellter Sammler zu teuer – der Abstecher würde
-sich nie lohnen, genau wie heute der Friedhofsläufer.
+Das ist die zentrale Balance-Entscheidung: Ein Lager kostet **einmalig** Zeit,
+nicht dauerhaft eine Einheit. Bei vier Einheiten je Seite wäre ein dauerhaft
+abgestellter Sammler zu teuer – der Abstecher würde sich nie lohnen, genau wie
+heute der Friedhofsläufer.
+
+**Blockade** – der einzige Hebel des Gegners:
+
+- Solange eine **gegnerische** Einheit das Lager **ausdrücklich besetzt** (auch
+  ihr Pfad endet dort), liefert es nichts.
+- Zieht sie ab oder fällt sie, liefert es **sofort wieder** – die einmal
+  erfolgte Inbetriebnahme geht nie verloren.
+- Ein bloßer **Durchmarsch blockiert nicht**. Das ist wichtig, weil der
+  Anmarschweg des Gegners ohnehin am Lager vorbeiführt: Ohne diese Regel wäre
+  der Nachschub permanent durch Zufallsverkehr zerrissen, ohne dass irgendwer
+  es beabsichtigt. Dieselbe Unterscheidung gilt schon bei den Türmen, wo bloßes
+  Durchqueren keinen Turmkampf auslöst.
+- Wer ein gegnerisches Lager besetzt, **hält die Stellung**: Sein Auftrag gilt
+  nie als erledigt, er marschiert also nicht von selbst weiter.
+
+Der Unterschied zwischen „ausdrücklich" und „im Vorbeigehen" wirkt genau dort,
+wo er soll. Während der Inbetriebnahme steht ohnehin eine eigene Einheit am
+Lager – ein ankommender Feind löst dann automatisch einen Kampf aus und
+unterbricht, ganz gleich was er vorhatte. Erst im laufenden Betrieb, wenn das
+Lager unbewacht ist, entscheidet die Absicht des Gegners.
 
 ## 4. Vorrat: stetiger Nachschub
 
 Jede Fraktion führt einen Zähler `supply`, Startwert 0:
 
-> Ein gehaltenes Lager liefert **einen Vorratspunkt je `supplyTickTime`**. Zwei
-> Lager verdoppeln die Rate, kein Lager heißt kein Nachschub.
+> Das eigene Lager liefert **einen Vorratspunkt je `supplyTickTime`**, solange
+> es in Betrieb und nicht blockiert ist. Sonst fließt nichts.
 
 Der Vorrat läuft **stetig** auf, nicht in Takten. Verbucht wird nur bei
 Besitzwechseln (`settleSupply`), und weil die Rate zwischen zwei Besitzwechseln
@@ -144,9 +177,9 @@ dafür, dass der Gegner ihn kommen sieht und abfangen kann.
 
 | Wert | Schlüssel | Start | Begründung |
 | --- | --- | --- | --- |
-| Einnahmedauer | `supplyCaptureTime` | 8 s | Etwas kürzer als beim Friedhof (10 s): Das Lager liegt auf dem Hauptweg und ist deutlich schwerer ungestört zu halten. |
-| Takt | `supplyTickTime` | 5 s | Ein Lager liefert 12 Vorrat in 60 s, beide in 30 s. |
-| Schwelle | `allySupplyCost` | 12 | Mit einem Heimlager erscheint der Verbündete nach ≈ 70 s inkl. Anmarsch – spät genug, dass die Turmoffensive nicht ausgestochen wird. |
+| Inbetriebnahme | `supplyCaptureTime` | 8 s | Etwas kürzer als die Friedhofseinnahme (10 s): Das Lager liegt auf dem Hauptweg und ist deutlich schwerer ungestört zu halten. |
+| Rate | `supplyTickTime` | 5 s | Ein laufendes Lager liefert 12 Vorrat in 60 s. |
+| Schwelle | `allySupplyCost` | 12 | Der Verbündete erscheint nach ≈ 70 s inklusive Anmarsch und Inbetriebnahme – spät genug, dass die Turmoffensive nicht ausgestochen wird. |
 | Verbündeter | `allyHp` / `allyDamage` / `allyAttackInterval` / `allySpeed` | 60 / 20 / 1,5 s / 1,0 | Kampfwert 800 ≈ 2,4 schwere Einheiten, also ungefähr +50 % auf eine Armee aus vier schweren Einheiten. |
 
 Alle Werte stehen in `config.js` und sind im Erweitert-Menü feinjustierbar; der
@@ -162,13 +195,15 @@ deutlich, ist er sinnlos. Gemessen wird headless über `createSim`.
 
 Das ereignisbasierte Zeitmodell bleibt vollständig intakt:
 
-1. **Einnahmen** verhalten sich exakt wie Friedhofseinnahmen: Ihr
+1. **Inbetriebnahmen** verhalten sich exakt wie Friedhofseinnahmen: Ihr
    Abschlusszeitpunkt (`startedAt + supplyCaptureTime`) fließt in
    `nextEventTime` ein, Start und Abbruch werden am Ende eines Batches
-   ausgewertet.
+   ausgewertet. Eine **Blockade** ändert nur die Rate und erzeugt keinen neuen
+   Zeitpunkt – der Vorrat wird beim Zustandswechsel abgerechnet
+   (`settleSupply`), bevor die neue Rate gilt.
 2. **Der Schwellenzeitpunkt** ist pro Fraktion genau ein Ereignis
-   (`allyDueAt`), berechnet aus verbuchtem Stand und aktueller Rate. Hält eine
-   Fraktion kein Lager oder ist ihr Verbündeter bereits erschienen, ist er
+   (`allyDueAt`), berechnet aus verbuchtem Stand und aktueller Rate. Liefert das
+   Lager gerade nicht oder ist der Verbündete bereits erschienen, ist er
    `Infinity` – die Patt-Erkennung („keine Einheit mehr in Bewegung") bleibt
    dadurch voll funktionsfähig und wird nicht von einem endlos tickenden Timer
    ausgehebelt.
