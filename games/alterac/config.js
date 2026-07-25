@@ -62,6 +62,40 @@ export const UNIT_TYPES = [
 
 export const UNIT_TYPE_BY_KEY = Object.fromEntries(UNIT_TYPES.map((t) => [t.key, t]));
 
+// ------------------------------------------------------------ Verbündeter
+// Der mächtige Verbündete ist bewusst KEIN Eintrag in UNIT_TYPES: Er lässt sich
+// nicht anwerben, sondern erscheint, sobald der Vorrat einer Fraktion die
+// Schwelle `allySupplyCost` erreicht (siehe design-vorratslager.md). Seine
+// Zahlenwerte stehen – wie die Boss- und Turmwerte – in DEFAULT_CONFIG und sind
+// im Erweitert-Menü feinjustierbar; hier stehen nur die festen Identitätsfelder.
+// Beide Fraktionen erhalten dieselben Werte, nur Name und Sinnbild unterscheiden
+// sich (im Original sind Ivus und Lokholar unterschiedlich stark – genau diese
+// Asymmetrie wird hier bewusst nicht übernommen).
+export const ALLY_TYPE = {
+  key: 'ally',
+  short: '✦',
+  radius: 19,
+  names: { blue: 'Ivus der Waldlord', red: 'Lokholar der Eislord' },
+  icons: { blue: '🌲', red: '❄' },
+};
+
+// Effektive Werte des Verbündeten einer Fraktion – gebaut wie `resolveUnitTypes`
+// für die anwerbbaren Typen: feste Identitätsfelder plus die Zahlenwerte aus der
+// Partie-Konfiguration. Einziger Abrufpunkt für Sim, KI und Rendering.
+export function resolveAllyType(config, faction) {
+  return {
+    key: ALLY_TYPE.key,
+    name: ALLY_TYPE.names[faction],
+    short: ALLY_TYPE.short,
+    icon: ALLY_TYPE.icons[faction],
+    radius: ALLY_TYPE.radius,
+    hp: config?.allyHp ?? DEFAULT_CONFIG.allyHp,
+    damage: config?.allyDamage ?? DEFAULT_CONFIG.allyDamage,
+    attackInterval: config?.allyAttackInterval ?? DEFAULT_CONFIG.allyAttackInterval,
+    speed: config?.allySpeed ?? DEFAULT_CONFIG.allySpeed,
+  };
+}
+
 // Im Setup feinjustierbare Zahlenwerte jedes Einheitentyps. Aufbau wie die
 // Felder in CONFIG_SECTIONS (min/max/step/kind/unit) – die UI (main.js) baut
 // daraus je Typ eine Gruppe von Zahlenfeldern, klemmt jeden Wert auf [min,max]
@@ -136,6 +170,22 @@ export const DEFAULT_CONFIG = {
   // verhindert das direkte Niederrennen des Bosses – erst nach dem Fall aller
   // Türme wird er verwundbar (siehe Balancing-Notiz im README).
   bossTowerShield: 0.95,
+
+  // --------------------------------------------------------- Vorratslager
+  // Zwei markierte Wegpunkte (`supply` in map.js) sind Vorratslager. Sie starten
+  // neutral, werden wie Friedhöfe eingenommen und bleiben danach im Besitz –
+  // eine Wache ist nicht nötig. Alle `supplyTickTime` Sekunden erhält jede
+  // Fraktion +1 Vorrat je Lager, das sie in diesem Moment hält (globaler Takt,
+  // wie die Respawn-Wellen). Bei `allySupplyCost` wird der Vorrat verbraucht und
+  // der mächtige Verbündete erscheint – einmal je Fraktion und Partie.
+  supplyEnabled: true, // Vorratslager aktiv (Setup-Schalter; aus = System komplett inaktiv)
+  supplyCaptureTime: 8, // Sekunden ununterbrochener Präsenz bis zur Einnahme eines Lagers
+  supplyTickTime: 5, // Sekunden zwischen zwei Nachschub-Takten
+  allySupplyCost: 12, // Vorrat, der den Verbündeten herbeiruft
+  allyHp: 60, // maximale Hitpoints des Verbündeten
+  allyDamage: 20, // Schaden pro Angriff
+  allyAttackInterval: 1.5, // Sekunden zwischen zwei Angriffen
+  allySpeed: 1, // Bewegungstempo (fester Datei-Default wie edgeTime)
 };
 
 // ------------------------------------------------------- Erweitertes Konfig-Menü
@@ -170,6 +220,19 @@ export const CONFIG_SECTIONS = [
       { key: 'towerAttackInterval', label: 'Turm-Angriffsintervall', min: 0.2, max: 5, step: 0.1, kind: 'float', unit: 's' },
       { key: 'towerDamageReduction', label: 'Debuff je Turm', min: 0, max: 50, step: 5, kind: 'percent', unit: '%' },
       { key: 'bossDamageFloor', label: 'Boss-Mindestschaden', min: 0, max: 100, step: 5, kind: 'percent', unit: '%' },
+    ],
+  },
+  {
+    key: 'supply',
+    label: 'Vorratslager',
+    gate: 'supply',
+    fields: [
+      { key: 'supplyCaptureTime', label: 'Einnahmedauer Lager', min: 3, max: 30, step: 1, kind: 'int', unit: 's' },
+      { key: 'supplyTickTime', label: 'Nachschub-Takt', min: 1, max: 20, step: 1, kind: 'int', unit: 's' },
+      { key: 'allySupplyCost', label: 'Vorrat für Verbündeten', min: 2, max: 60, step: 1, kind: 'int' },
+      { key: 'allyHp', label: 'Verbündeter: LP', min: 10, max: 300, step: 5, kind: 'int' },
+      { key: 'allyDamage', label: 'Verbündeter: Schaden', min: 1, max: 80, step: 1, kind: 'int' },
+      { key: 'allyAttackInterval', label: 'Verbündeter: Angriffsintervall', min: 0.2, max: 5, step: 0.1, kind: 'float', unit: 's' },
     ],
   },
   {

@@ -24,18 +24,25 @@ export function enemyOf(faction) {
 // dass an diesem bestehenden Knoten ein Turm der genannten Fraktion steht. Wie
 // viele der markierten Kandidaten je Fraktion aktiv sind, steuert
 // `towersPerFaction` in config.js (Reihenfolge = Reihenfolge dieser Liste).
+// Vorratslager werden genauso markiert: `supply: true` an einem bestehenden
+// Kampfpunkt. Sie starten neutral, sind beliebig oft einnehmbar und liefern
+// ihrem Besitzer den Nachschub für den mächtigen Verbündeten (siehe
+// design-vorratslager.md). Die beiden Standorte müssen unter der Spiegelung
+// der Karte aufeinander abgebildet werden – Steinbruch (`en`) und
+// Wolfsschlucht (`ws`) erfüllen das: jede Fraktion erreicht ihr Heimlager in
+// zwei, das gegnerische in drei Wegstücken.
 const NODES = [
   { id: 'rboss', type: 'boss', faction: 'red', x: 240, y: 78, name: 'Kriegsherr Eiszahn', labelDy: 46 },
   { id: 'rgy', type: 'graveyard', x: 96, y: 150, name: 'Nordfriedhof', labelDy: 30 },
   { id: 'rgate', type: 'combat', tower: 'red', x: 240, y: 214, name: 'Nordtor', labelDx: 52, labelDy: 4 },
   { id: 'reast', type: 'combat', tower: 'red', x: 404, y: 178, name: 'Eisiger Grat', labelDx: 12, labelDy: 26 },
   { id: 'wn', type: 'combat', x: 112, y: 356, name: 'Eisfelsklamm', labelDy: 32 },
-  { id: 'en', type: 'combat', x: 368, y: 356, name: 'Steinbruch', labelDy: 32 },
+  { id: 'en', type: 'combat', supply: true, x: 368, y: 356, name: 'Steinbruch', labelDy: 32 },
   { id: 'gyw', type: 'graveyard', x: 48, y: 452, name: 'Klammfriedhof', labelDy: 32 },
   { id: 'mid', type: 'combat', x: 240, y: 488, name: 'Feldmitte', labelDx: 56, labelDy: 4 },
   { id: 'gye', type: 'graveyard', x: 432, y: 524, name: 'Hangfriedhof', labelDy: 32 },
   { id: 'gym', type: 'graveyard', x: 240, y: 554, name: 'Talfriedhof', labelDy: 32 },
-  { id: 'ws', type: 'combat', x: 112, y: 620, name: 'Wolfsschlucht', labelDy: 32 },
+  { id: 'ws', type: 'combat', supply: true, x: 112, y: 620, name: 'Wolfsschlucht', labelDy: 32 },
   { id: 'es', type: 'combat', x: 368, y: 620, name: 'Kiefernhang', labelDy: 32 },
   { id: 'sgate', type: 'combat', tower: 'blue', x: 240, y: 760, name: 'Südtor', labelDx: 48, labelDy: 4 },
   { id: 'swest', type: 'combat', tower: 'blue', x: 84, y: 788, name: 'Schmugglerpfad', labelDy: 30 },
@@ -150,6 +157,10 @@ export function createMap() {
     if (n.tower) towerSites[n.tower].push(n.id);
   }
 
+  // Vorratslager-Standorte aus den `supply`-Markierungen der Wegpunkte
+  // (sortiert für eine deterministische Reihenfolge in Simulation und KI).
+  const supplyCamps = NODES.filter((n) => n.supply).map((n) => n.id).sort();
+
   return {
     width: 480,
     height: 960,
@@ -167,6 +178,9 @@ export function createMap() {
     // Markierte Turm-Standorte je Fraktion (aus den `tower`-Markierungen der
     // Wegpunkte); wie viele davon aktiv sind, entscheidet config.towersPerFaction.
     towerSites,
+    // Vorratslager (aus den `supply`-Markierungen der Wegpunkte). Alle starten
+    // neutral; der laufende Besitzstand lebt – wie bei den Friedhöfen – in sim.js.
+    supplyCamps,
     edgeBetween(a, b) {
       return edges.find((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a)) ?? null;
     },
