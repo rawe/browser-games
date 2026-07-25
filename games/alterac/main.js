@@ -41,6 +41,10 @@ let speed = 1;
 let paused = false;
 let resultShown = false;
 let lastLogCount = 0;
+// Geteilter Aufmarsch aus der Adresszeile (?plan=…). Er gilt für die erste
+// Planung dieser Sitzung und wird dabei verbraucht – danach plant jeder wieder
+// von Hand oder aus der Bibliothek.
+let pendingPlanCode = null;
 
 const view = { phase: 'setup', planning: null, sim: null, config };
 
@@ -261,6 +265,8 @@ function startPlanning(faction) {
   view.sim = null;
   sim = null;
   renderer.resize();
+  const initialCode = pendingPlanCode;
+  pendingPlanCode = null;
   planner = createPlanner({
     map,
     faction,
@@ -269,6 +275,7 @@ function startPlanning(faction) {
     panel: panelEl,
     canvas,
     renderer,
+    initialCode,
     onConfirm: (units) => {
       plans[faction] = units;
       planner = null;
@@ -525,6 +532,11 @@ window.addEventListener('resize', () => {
 // Mit `&ai=<stufe>` bzw. `&ai=<blau>,<rot>` lassen sich die KI-Stufen der beiden
 // Seiten gezielt gegeneinander antreten lassen (z. B. ?test=sim&ai=hard,easy).
 const params = new URLSearchParams(location.search);
+// Geteilter Aufmarsch (?plan=…): Er wird erst in der Planungsphase eingelöst –
+// die Partie-Einstellungen wählt weiterhin das Setup, ein Link überschreibt sie
+// nie. Passt der Plan nicht zu den gewählten Einstellungen, kürzt ihn der Planer
+// beim Übernehmen und sagt es.
+pendingPlanCode = params.get('plan');
 if (params.get('test') === 'sim') {
   mode = 'cpu';
   const [blueLevel, redLevel = blueLevel] = (params.get('ai') ?? DEFAULT_AI_LEVEL).split(',');

@@ -15,6 +15,14 @@ import {
   describeCondition,
   toRoman,
 } from './config.js';
+import {
+  planStore,
+  encodePlan,
+  decodePlan,
+  validatePlan,
+  describeMeta,
+  MAX_NAME_LENGTH,
+} from './plans.js';
 
 // Kreis-Ziffern für die Auftragsnummer (1-basiert).
 const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥'];
@@ -62,7 +70,22 @@ export function actionSummary(action, nodes, towers = {}, faction = null, supply
 
 const fmt = (n) => String(n).replace('.', ',');
 
-export function createPlanner({ map, faction, budget, config, panel, canvas, renderer, onConfirm }) {
+// Zeichen, die in gespeicherten Plannamen vorkommen dürfen, sicher für innerHTML.
+const esc = (s) =>
+  String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+export function createPlanner({
+  map,
+  faction,
+  budget,
+  config,
+  panel,
+  canvas,
+  renderer,
+  onConfirm,
+  // Teilen-Code aus der Adresszeile (?plan=…), einmalig beim Öffnen übernommen.
+  initialCode = null,
+}) {
   const state = {
     faction,
     budget,
@@ -120,6 +143,8 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
   }
 
   const DEFAULT_HINT =
+    'Über 💾 lassen sich Aufmärsche speichern, wieder laden und als Link teilen – der zuletzt ' +
+    'gespielte steht dort immer bereit. ' +
     'Einheiten anwerben, dann den Pfad des gewählten Auftrags Wegpunkt für Wegpunkt antippen ' +
     '(nur benachbarte Punkte). Mit „➕ Auftrag" hängst du weitere Aufträge an – so greift eine Einheit ' +
     'z. B. erst Turm A, dann Turm B an. Ein Zusatz-Auftrag startet „Dann" (nach dem vorigen) oder „Sobald" ' +
@@ -149,8 +174,12 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     </div>
     <div class="panel-head">
       <span class="plan-title" style="--fac:${fac.color}">${fac.name} · ${fac.player} plant</span>
-      <button class="btn ghost help-toggle" id="btn-help" type="button"
-        title="Hilfe anzeigen" aria-expanded="false" aria-controls="help-text">?</button>
+      <div class="panel-tools">
+        <button class="btn ghost help-toggle" id="btn-store" type="button"
+          title="Pläne speichern, laden und teilen" aria-expanded="false" aria-controls="plan-store">💾</button>
+        <button class="btn ghost help-toggle" id="btn-help" type="button"
+          title="Hilfe anzeigen" aria-expanded="false" aria-controls="help-text">?</button>
+      </div>
     </div>
     <p class="help-text" id="help-text" hidden>${DEFAULT_HINT}${SUPPLY_HINT}</p>
     <div class="recruit-row">
@@ -218,6 +247,255 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
     targetsToggle.classList.toggle('active', state.showTargets);
     targetsToggle.setAttribute('aria-pressed', String(state.showTargets));
   });
+
+  // --- Plan-Bibliothek (speichern, laden, teilen) --------------------------
+  // Sie liegt als eigener Layer über der Planung statt als Abschnitt im Panel:
+  // Panel und Karte teilen sich eine Bildschirmhöhe, und eine gefüllte Liste
+  // hatte dort keinen Platz, ohne die Einheitenliste zu verdrängen. Im Layer
+  // bekommt die Liste den ganzen Raum und scrollt für sich.
+  //
+  // Gezeigt werden NUR Pläne der gerade planenden Fraktion – aus zwei Gründen.
+  // Erstens ist ein Aufmarsch der anderen Fraktion hier gar nicht spielbar:
+  // Seine Pfade beginnen an der gegnerischen Basis. Zweitens sitzen im Hotseat
+  // beide Spieler am selben Gerät, und der zuletzt gespielte Aufmarsch des
+  // Gegners liegt im selben Speicher – eine gemischte Liste wäre ein Blick in
+  // die geheime Planung der Gegenseite.
+  const storeToggle = panel.querySelector('#btn-store');
+  const overlayEl = document.getElementById('plan-overlay');
+  const cardEl = document.getElementById('plan-card');
+  // Einstufiges Rückgängig: Laden ersetzt die ganze Aufstellung, deshalb bleibt
+  // die vorherige bis zur nächsten Aktion greifbar.
+  let undoUnits = null;
+
+  cardEl.innerHTML = `
+    <div class="plan-card-head">
+      <h2>💾 Aufmärsche</h2>
+      <button class="btn ghost plan-close" id="btn-plan-close" type="button" aria-label="Schließen">✕</button>
+    </div>
+    <p class="plan-sub">Ein Aufmarsch gehört zu genau einer Fraktion – hier stehen die
+      der <strong style="color:${fac.color}">${fac.name}</strong>.</p>
+    ${
+      planStore.available
+        ? `<div class="plan-row">
+      <input class="plan-input" id="plan-name" type="text" maxlength="${MAX_NAME_LENGTH}"
+        autocomplete="off" placeholder="Name des Aufmarschs">
+      <button class="btn ghost plan-act" id="btn-plan-save" type="button">💾 Speichern</button>
+    </div>
+    <div class="plan-list" id="plan-list"></div>`
+        : ''
+    }
+    <div class="plan-share">
+      <div class="plan-row">
+        <input class="plan-input" id="plan-code" type="text" spellcheck="false"
+          autocomplete="off" placeholder="Teilen-Link oder Code einfügen">
+        <button class="btn ghost plan-act" id="btn-plan-apply" type="button">Laden</button>
+      </div>
+      <button class="btn ghost plan-act plan-share-btn" id="btn-plan-share" type="button">
+        🔗 Eigenen Aufmarsch als Link kopieren
+      </button>
+    </div>
+    <p class="plan-note" id="plan-note"></p>
+  `;
+
+  const planListEl = cardEl.querySelector('#plan-list');
+  const planNameEl = cardEl.querySelector('#plan-name');
+  const planCodeEl = cardEl.querySelector('#plan-code');
+  const planNoteEl = cardEl.querySelector('#plan-note');
+
+  // Meldezeile im Layer – für alles, was den Layer offen lässt.
+  function setNote(text, { warn = false } = {}) {
+    planNoteEl.className = 'plan-note' + (warn ? ' warn' : '');
+    planNoteEl.textContent = text;
+  }
+
+  // Meldezeile im Panel – für alles, was bei geschlossenem Layer passiert
+  // (Laden schließt ihn, ein Link löst ihn gleich beim Öffnen ein).
+  function setPanelNote(text, { undo = false, warn = false } = {}) {
+    clearTimeout(hintTimer);
+    hintEl.classList.toggle('warn', warn);
+    hintEl.innerHTML =
+      esc(text) +
+      (undo ? ' <button class="btn ghost plan-undo" id="btn-plan-undo" type="button">↩ Zurück</button>' : '');
+  }
+
+  // Meldung dorthin, wo der Spieler gerade hinsieht.
+  function noteHere(text, warn = false) {
+    if (overlayEl.hidden) setPanelNote(text, { warn });
+    else setNote(text, { warn });
+  }
+
+  function openStore(show) {
+    overlayEl.hidden = !show;
+    storeToggle.classList.toggle('active', show);
+    storeToggle.setAttribute('aria-expanded', String(show));
+    if (show) {
+      setNote('');
+      // Der Hinweis auf die Bibliothek hat sich erledigt, sobald sie offen war.
+      if (!hintEl.classList.contains('warn')) hintEl.textContent = '';
+    }
+  }
+
+  storeToggle.addEventListener('click', () => openStore(overlayEl.hidden));
+
+  function onKeyDown(ev) {
+    if (ev.key === 'Escape' && !overlayEl.hidden) openStore(false);
+  }
+  document.addEventListener('keydown', onKeyDown);
+
+  // Einträge der eigenen Fraktion: der zuletzt gespielte Aufmarsch zuerst
+  // (er entsteht ohne Zutun), darunter die benannten Einträge.
+  function storeEntries() {
+    const entries = [];
+    const last = planStore.last(faction);
+    if (last) entries.push({ id: 'last', name: 'Zuletzt gespielt', ...last, faction, fixed: true });
+    for (const s of planStore.list()) if (s.faction === faction) entries.push(s);
+    return entries;
+  }
+
+  function renderStore() {
+    if (!planListEl) return;
+    const entries = storeEntries();
+    if (!entries.length) {
+      planListEl.innerHTML = '<p class="plan-empty">Noch nichts gespeichert.</p>';
+      return;
+    }
+    planListEl.innerHTML = entries
+      .map(
+        (e) => `
+      <div class="plan-slot">
+        <button class="plan-slot-main" type="button" data-load="${e.id}">
+          <span class="plan-slot-name">${esc(e.name)}</span>
+          <span class="plan-slot-meta">${e.units.length} Einheiten · ${describeMeta(e.meta)}</span>
+        </button>
+        ${
+          e.fixed
+            ? '<span class="plan-slot-spacer" aria-hidden="true"></span>'
+            : `<button class="mini del" data-drop="${e.id}" title="Eintrag löschen">✕</button>`
+        }
+      </div>`
+      )
+      .join('');
+  }
+
+  // Geladene Plandaten übernehmen: gegen diese Partie prüfen und erst dann
+  // einsetzen. Was wegfällt, steht in der Meldezeile. Ein Plan der anderen
+  // Fraktion wird abgelehnt – seine Pfade beginnen an der gegnerischen Basis
+  // und zielen auf die dortigen Türme; er ist hier schlicht nicht spielbar.
+  function applyUnits(units, sourceFaction, label) {
+    if (sourceFaction && sourceFaction !== faction) {
+      noteHere(`Dieser Aufmarsch gehört zu ${FACTIONS[sourceFaction].name} und ist nur dort spielbar.`, true);
+      return;
+    }
+    const { units: clean, issues } = validatePlan(units, { map, config, faction });
+    if (!clean.length) {
+      noteHere('Von diesem Plan bleibt hier nichts übrig – Budget oder Karte passen nicht.', true);
+      return;
+    }
+    undoUnits = state.units;
+    state.units = clean;
+    state.selected = clean.length - 1;
+    state.selectedAction = clean[clean.length - 1].actions.length - 1;
+    state.pickTower = false;
+    refresh();
+    // Geladen wird, um weiterzuplanen: Layer zu, Meldung ans Panel.
+    openStore(false);
+    setPanelNote([label, ...issues].join(' '), { undo: true });
+  }
+
+  function shareLink() {
+    const code = encodePlan(state.units, { map, faction });
+    if (!code) {
+      setNote('Dieser Aufmarsch lässt sich nicht als Code darstellen.', { warn: true });
+      return;
+    }
+    const url = `${location.href.split('#')[0].split('?')[0]}?plan=${code}`;
+    planCodeEl.value = url;
+    // Ohne sicheren Kontext (z. B. per file:// geöffnet) gibt es keine
+    // Zwischenablage-API – dann bleibt der Link markiert im Feld stehen.
+    const manual = () => {
+      planCodeEl.focus();
+      planCodeEl.select();
+      setNote('Link steht im Feld – bitte von Hand kopieren.');
+    };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(url)
+        .then(() => setNote('Link kopiert – er enthält den kompletten Aufmarsch.'), manual);
+    } else {
+      manual();
+    }
+  }
+
+  overlayEl.addEventListener('click', (ev) => {
+    const t = ev.target;
+    // Klick neben die Karte (auf den abgedunkelten Hintergrund) schließt.
+    if (t === overlayEl || t.closest('#btn-plan-close')) {
+      openStore(false);
+      return;
+    }
+    const load = t.closest('[data-load]');
+    if (load) {
+      const entry = storeEntries().find((e) => e.id === load.dataset.load);
+      if (entry) applyUnits(entry.units, entry.faction, `„${entry.name}" geladen.`);
+      return;
+    }
+    const drop = t.closest('[data-drop]');
+    if (drop) {
+      planStore.remove(drop.dataset.drop);
+      renderStore();
+      setNote('Eintrag gelöscht.');
+      return;
+    }
+    if (t.closest('#btn-plan-save')) {
+      if (!state.units.length) {
+        setNote('Erst eine Aufstellung planen, dann speichern.', { warn: true });
+        return;
+      }
+      const res = planStore.save({ name: planNameEl.value.trim(), faction, units: state.units, config });
+      if (!res.ok) {
+        setNote(res.error, { warn: true });
+        return;
+      }
+      planNameEl.value = '';
+      renderStore();
+      setNote(`„${res.entry.name}" gespeichert.`);
+      return;
+    }
+    if (t.closest('#btn-plan-apply')) {
+      const res = decodePlan(planCodeEl.value, { map });
+      if (!res.ok) {
+        setNote(res.error, { warn: true });
+        return;
+      }
+      applyUnits(res.units, res.faction, 'Aufmarsch aus dem Code übernommen.');
+      return;
+    }
+    if (t.closest('#btn-plan-share')) {
+      if (!state.units.length) {
+        setNote('Erst eine Aufstellung planen, dann teilen.', { warn: true });
+        return;
+      }
+      shareLink();
+      return;
+    }
+  });
+
+  // „↩ Zurück" steht in der Panel-Meldung, nicht im Layer – der ist beim Laden
+  // bereits zu.
+  hintEl.addEventListener('click', (ev) => {
+    if (!ev.target.closest('#btn-plan-undo') || !undoUnits) return;
+    state.units = undoUnits;
+    undoUnits = null;
+    state.selected = state.units.length - 1;
+    state.selectedAction = 0;
+    state.pickTower = false;
+    refresh();
+    setPanelNote('Zurückgenommen.');
+  });
+
+  if (!planStore.available) {
+    setNote('Dieser Browser speichert nichts (privater Modus?) – Teilen-Links funktionieren trotzdem.');
+  }
 
   // --- Chips (Einheitenliste, kompakt) -------------------------------------
   function unitSummary(u) {
@@ -540,16 +818,18 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
   function commit() {
     destroy();
     // Nur die reinen Plandaten übergeben (tiefe Kopie der Aufträge).
-    onConfirm(
-      state.units.map((u) => ({
-        type: u.type,
-        actions: u.actions.map((a) => ({
-          path: [...a.path],
-          stance: a.stance,
-          trigger: a.trigger ? JSON.parse(JSON.stringify(a.trigger)) : null,
-        })),
-      }))
-    );
+    const units = state.units.map((u) => ({
+      type: u.type,
+      actions: u.actions.map((a) => ({
+        path: [...a.path],
+        stance: a.stance,
+        trigger: a.trigger ? JSON.parse(JSON.stringify(a.trigger)) : null,
+      })),
+    }));
+    // Der zuletzt gespielte Aufmarsch wird immer gemerkt – eine Revanche soll
+    // nie bei null anfangen, auch wenn niemand ans Speichern gedacht hat.
+    planStore.rememberLast(faction, units, config);
+    onConfirm(units);
   }
 
   panel.querySelector('#btn-confirm').addEventListener('click', () => {
@@ -575,8 +855,30 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
 
   function destroy() {
     canvas.removeEventListener('click', onCanvasClick);
+    document.removeEventListener('keydown', onKeyDown);
+    // Der Layer lebt außerhalb des Panels und würde sonst über der nächsten
+    // Phase stehen bleiben.
+    overlayEl.hidden = true;
+    cardEl.innerHTML = '';
   }
 
   refresh();
+  renderStore();
+
+  // Ein Plan aus der Adresszeile wird sofort eingelöst – die Aufstellung steht
+  // dann schon da. Nur wenn der Code nicht taugt, öffnet sich die Bibliothek:
+  // dort lässt sich ein anderer einfügen.
+  if (initialCode) {
+    const res = decodePlan(initialCode, { map });
+    if (res.ok) {
+      applyUnits(res.units, res.faction, 'Aufmarsch aus dem Link übernommen.');
+    } else {
+      openStore(true);
+      setNote(res.error, { warn: true });
+    }
+  } else if (planStore.last(faction)) {
+    hintEl.textContent = 'Gespeicherte Aufmärsche liegen bereit – 💾 öffnet sie.';
+  }
+
   return { state, destroy };
 }
