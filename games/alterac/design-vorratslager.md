@@ -139,8 +139,8 @@ Beide Korrekturen zusammen drehen das um:
 Das Gegenmittel bleibt erhalten und ist sogar das naheliegendste: **Wer den
 Läufer erschlägt, hält die Inbetriebnahme an.** Sie verliert nur nichts mehr.
 
-Gemessen nach der Änderung (`tools/allyab.mjs`, gleiche Armee mit und ohne
-Lagerlauf): Das Lager geht in **100 %** der Partien in Betrieb – vorher 0 %.
+Gemessen nach der Änderung (headless über `createSim`, gleiche Armee mit und
+ohne Lagerlauf): Das Lager geht in **100 %** der Partien in Betrieb – vorher 0 %.
 
 Das ist auch die zentrale Balance-Entscheidung: Ein Lager kostet **einmalig**
 Zeit, nicht dauerhaft eine Einheit. Bei vier Einheiten je Seite wäre ein
@@ -214,7 +214,9 @@ dafür, dass der Gegner ihn kommen sieht und abfangen kann.
 
 Der eigentliche Hebel ist die **Gesamtdauer** `supplyCaptureTime +
 allySupplyCost × supplyTickTime`. Sie entscheidet, ob der Verbündete die Partie
-überhaupt noch erreicht. Gemessen (`tools/allyab.mjs`, gemittelt über alle
+überhaupt noch erreicht. Gemessen headless über `createSim` – beide Varianten
+mit demselben KI-Plan als Basis, verändert wird nur die Route einer einzigen
+Einheit, damit der Vergleich nicht die Aufstellung misst (gemittelt über alle
 Budgets, je 16 Partien):
 
 | Gesamtdauer | Lager läuft | Verbündeter erscheint | Ø Ruf |
