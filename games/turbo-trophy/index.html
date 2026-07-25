@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c1020" />
+  <title>Turbo Trophy</title>
+  <link rel="stylesheet" href="./style.css" />
+  <script type="module" src="./main.js"></script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene"></canvas>
+
+    <div id="hud">
+      <div class="hud-row">
+        <span class="tag">POS <b id="hud-pos">–</b></span>
+        <span class="tag">RUNDE <b id="hud-lap">–</b></span>
+      </div>
+      <div class="hud-row">
+        <div id="hud-health"><div id="hud-health-fill"></div></div>
+      </div>
+    </div>
+
+    <canvas id="minimap" width="192" height="192"></canvas>
+
+    <div id="message"></div>
+    <div id="submessage"></div>
+
+    <div id="touch-controls">
+      <div class="tc-group" id="tc-steer">
+        <button class="tc-btn steer" id="btn-left" aria-label="Links lenken">&#9664;</button>
+        <button class="tc-btn steer" id="btn-right" aria-label="Rechts lenken">&#9654;</button>
+      </div>
+      <div class="tc-group" id="tc-actions">
+        <div class="tc-row">
+          <button class="tc-btn rocket" id="btn-fire-front" aria-label="Rakete nach vorn">
+            &#9650; RAKETE<small id="ammo-front">0</small>
+          </button>
+          <button class="tc-btn rocket" id="btn-fire-rear" aria-label="Rakete nach hinten">
+            &#9660; RAKETE<small id="ammo-rear">0</small>
+          </button>
+        </div>
+        <button class="tc-btn gas" id="btn-gas" aria-label="Gas geben">GAS</button>
+      </div>
+    </div>
+
+    <div id="overlay"></div>
+  </div>
+</body>
+</html>

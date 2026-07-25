@@ -18,4 +18,10 @@ export const games = [
     description: 'Arcade-Rennen mit Raketen, Tuning-Shop und Meisterschaft – 3D von schräg hinten.',
     emoji: '🏎️',
   },
+  {
+    slug: 'turbo-trophy',
+    title: 'Turbo Trophy',
+    description: 'Arcade-Rennen mit Raketen, Werkstatt und Meisterschaft – 2D von oben im Amiga-Stil.',
+    emoji: '🏁',
+  },
 ];
