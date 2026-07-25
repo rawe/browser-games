@@ -367,8 +367,11 @@ export function planHard(config, map, faction) {
   // --- Vorratslager: lohnt der Abstecher? ------------------------------------
   // Jede Fraktion hat genau EIN fest zugeordnetes Lager (`map.supplyCampOf`).
   // Es startet inaktiv; eine eigene Einheit muss es ausdrücklich als Pfadziel
-  // haben (der Pfad endet dort) und `supplyCaptureTime` ununterbrochen allein
-  // dort stehen. Danach liefert es dauerhaft: nach `allySupplyCost ×
+  // haben (der Pfad endet dort) und `supplyCaptureTime` Sekunden daran arbeiten.
+  // Aufhalten kann sie dabei nur ein Gegner, der das Lager seinerseits
+  // ausdrücklich besetzt – Durchmarsch stört nicht. Der Fortschritt verfällt
+  // dabei nie, er ruht: Fällt der Läufer, setzt der nächste dort fort, wo er
+  // aufgehört hat. Danach liefert das Lager dauerhaft: nach `allySupplyCost ×
   // supplyTickTime` Sekunden erscheint der mächtige Verbündete am eigenen
   // Fürsten und marschiert selbstständig los. Der Abstecher kostet also
   // einmalig Zeit, nicht dauerhaft eine Einheit.
@@ -457,9 +460,10 @@ export function planHard(config, map, faction) {
         const allyReady =
           reach + setupTime + fillTime + travelTime(ownBoss, enemyBoss, ally.speed);
         if (powerOf(ally) * (horizon - allyReady) > EPS) {
-          // Bleiben oder weiterziehen? Der Nachschub muss `fillTime` Sekunden
-          // am Stück fließen, eine gegnerische Einheit steht aber viel früher
-          // am Lager und legt es durch bloßes Besetzen lahm. Ist sie schneller
+          // Bleiben oder weiterziehen? Der Nachschub braucht `fillTime`
+          // Sekunden LIEFERZEIT; eine gegnerische Einheit, die sich ans Lager
+          // stellt, hält die Uhr so lange an, wie sie dort steht (der Vorrat
+          // bleibt erhalten, er wächst nur nicht). Ist sie schneller
           // da, als der Vorrat voll wird, ist die Lieferung ohne Wache nur
           // geliehen: Dann bleibt die Einheit in Haltung „Halten" stehen
           // (eingegraben hält sie am längsten) und zieht sich später wie jede

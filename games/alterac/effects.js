@@ -220,9 +220,11 @@ export function createEffects(map) {
         ring(p.x, p.y, facColor(ev.faction), 44, 0.7, 4);
         sparks(p.x, p.y - 6, facColor(ev.faction), 16, 90);
         beam(p.x, p.y);
-      } else if (ev.type === 'supplyCaptureStart') {
-        // Beginnende Inbetriebnahme: dezent wie beim Friedhof. `ev.faction` ist
-        // der Besitzer des Lagers – ein anderer kann es nie in Betrieb nehmen.
+      } else if (ev.type === 'supplyCaptureStart' || ev.type === 'supplyCaptureResumed') {
+        // Beginnende oder fortgesetzte Inbetriebnahme: dezent wie beim Friedhof.
+        // `ev.faction` ist der Besitzer des Lagers – ein anderer kann es nie in
+        // Betrieb nehmen. Fortsetzen sieht aus wie Anfangen, weil es für den
+        // Spieler dasselbe bedeutet: Hier arbeitet gerade jemand.
         ring(p.x, p.y, facColor(ev.faction), 28, 0.6, 2.5);
       } else if (ev.type === 'supplyCaptured') {
         supplySecured(p.x, p.y, facColor(ev.faction));

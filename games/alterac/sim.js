@@ -170,6 +170,9 @@ export function createSim({ map, config, plans }) {
   // fest zugeordnetes Lager an einem markierten Wegpunkt. Es wechselt nie den
   // Besitzer; der Gegner kann es nur lahmlegen. Zustand je Lager:
   //   inaktiv      – noch nicht in Betrieb genommen (Ausgangslage)
+  //   in Arbeit    – eine eigene Einheit nimmt es gerade in Betrieb
+  //   pausiert     – Inbetriebnahme angefangen, aber gerade niemand dabei; der
+  //                  erreichte Fortschritt bleibt erhalten
   //   aktiv        – liefert Nachschub, auch ohne eigene Einheit vor Ort
   //   blockiert    – eine gegnerische Einheit besetzt es ausdrücklich; die
   //                  Lieferung stockt, die Inbetriebnahme bleibt aber erhalten
@@ -183,7 +186,11 @@ export function createSim({ map, config, plans }) {
     supplyActive[id] = false;
     supplyBlocked[id] = false;
   }
-  // Laufende Inbetriebnahmen: { faction, startedAt } je Lager.
+  // Laufende Inbetriebnahmen je Lager: { faction, since, progress }.
+  //   progress  bereits geleistete Sekunden aus abgeschlossenen Abschnitten
+  //   since     Beginn des laufenden Abschnitts, oder null wenn gerade pausiert
+  // Der Fortschritt VERFÄLLT NICHT: Wird er unterbrochen, wird er verbucht und
+  // ruht, bis wieder eine eigene Einheit vor Ort ist (siehe updateSupplyCamps).
   const supplyCaptures = {};
   // Vorrat je Fraktion: `supply` ist der zum Zeitpunkt `supplySince` verbuchte
   // Stand, der Rest läuft stetig mit der aktuellen Rate auf (siehe supplyNow).
@@ -560,13 +567,32 @@ export function createSim({ map, config, plans }) {
     return supplySince[faction] + (allySupplyCost - supply[faction]) / rate;
   }
 
+  // Bis zum Zeitpunkt `t` geleistete Sekunden einer laufenden Inbetriebnahme –
+  // verbuchter Fortschritt plus der Anteil des gerade laufenden Abschnitts.
+  // Einziger Abrufpunkt für Sim, Anzeige und Auswertung.
+  function supplyCaptureProgress(campId, t = time) {
+    const cap = supplyCaptures[campId];
+    if (!cap) return 0;
+    return cap.progress + (cap.since === null ? 0 : t - cap.since);
+  }
+
+  // Zeitpunkt, zu dem eine Inbetriebnahme fertig wird (Infinity, wenn keine
+  // läuft oder sie gerade ruht). Weil der Fortschritt zwischen zwei
+  // Zustandswechseln linear in der Zeit läuft, ist der Moment exakt berechenbar
+  // und wird – wie die Vorratsschwelle – als reguläres Ereignis eingeplant.
+  function supplyCaptureDueAt(campId) {
+    const cap = supplyCaptures[campId];
+    if (!cap || cap.since === null) return Infinity;
+    return cap.since + (supplyCaptureTime - cap.progress);
+  }
+
   // Fällige Inbetriebnahmen abschließen: Das Lager liefert ab sofort dauerhaft,
   // auch wenn die Einheit weiterzieht. Wartende Einheiten werden frei und setzen
   // im selben Batch ihre Befehle fort.
   function completeSupplyCaptures(t) {
     for (const campId of supplyCampIds) {
       const cap = supplyCaptures[campId];
-      if (!cap || cap.startedAt + supplyCaptureTime > t + EPS) continue;
+      if (!cap || supplyCaptureDueAt(campId) > t + EPS) continue;
       // Vor der Ratenänderung abrechnen – die neue Rate gilt erst ab jetzt.
       settleSupply(t);
       delete supplyCaptures[campId];
@@ -580,21 +606,26 @@ export function createSim({ map, config, plans }) {
   }
 
   // Zustand aller Lager aktualisieren: laufende Inbetriebnahme und Blockade.
-  // Eine Inbetriebnahme verlangt – wie die Friedhofseinnahme – ununterbrochene
-  // Präsenz der Besitzerfraktion allein vor Ort, zusätzlich muss das Lager
-  // ausdrücklich als Ziel geplant sein. Eine Blockade dagegen entsteht nur durch
-  // eine gegnerische Einheit, die das Lager ausdrücklich besetzt: Wer bloß
-  // durchmarschiert, legt es nicht lahm – sonst wäre es dauernd gestört, denn
-  // der Anmarschweg des Gegners führt ohnehin daran vorbei.
+  // Für BEIDE gilt dieselbe Bedingung – das ist die tragende Vereinfachung
+  // gegenüber der Friedhofsregel: Nur wer ein Lager ausdrücklich als Ziel plant
+  // (`supplyTarget`, der Pfad endet dort), wirkt darauf ein. Wer bloß
+  // durchmarschiert, treibt weder eine eigene Inbetriebnahme voran noch stört er
+  // eine fremde.
+  //
+  // Der Grund ist die Kartenstruktur: Ein Lager liegt auf einem Hauptweg, der
+  // Anmarsch des Gegners führt ohnehin daran vorbei. Zählte bloße Anwesenheit,
+  // wäre jede Inbetriebnahme durch reinen Zufallsverkehr zerstört, ohne dass der
+  // Gegner es beabsichtigt oder etwas dafür bezahlt hätte. Störung soll eine
+  // Entscheidung sein, die eine Einheit bindet – kein Nebeneffekt des Vorbeigehens.
+  // Das Gegenmittel gegen einen Läufer bleibt trotzdem erhalten: Wer ihn
+  // erschlägt, hält die Inbetriebnahme an (dann fehlt der `claimant`).
   function updateSupplyCamps(t) {
     for (const campId of supplyCampIds) {
       const owner = supplyOwner[campId];
       const foe = enemyOf(owner);
-      const present = { blue: false, red: false };
       let claimant = false; // eigene Einheit will das Lager ausdrücklich in Betrieb nehmen
       let besieger = false; // gegnerische Einheit besetzt es ausdrücklich
       for (const g of combatants(campId)) {
-        present[g.faction] = true;
         if (g.supplyTarget !== campId) continue;
         if (g.faction === owner) claimant = true;
         else besieger = true;
@@ -620,22 +651,33 @@ export function createSim({ map, config, plans }) {
       }
 
       // --- Inbetriebnahme ---
+      // Sie schreitet voran, solange eine eigene Einheit sie ausdrücklich
+      // betreibt und kein Gegner das Lager besetzt. Andernfalls ruht sie: Der
+      // bis dahin erreichte Fortschritt wird verbucht und bleibt erhalten, bis
+      // jemand weitermacht. Ein Läufer darf also fallen, ohne dass seine Arbeit
+      // verloren ist – der nächste setzt sie fort.
       if (supplyActive[campId]) continue;
-      const alone = present[owner] && !present[foe];
       const cap = supplyCaptures[campId] ?? null;
-      if (!alone || !claimant) {
-        if (cap) {
-          delete supplyCaptures[campId];
+      const working = claimant && !besieger;
+      if (!working) {
+        if (cap && cap.since !== null) {
+          cap.progress += t - cap.since;
+          cap.since = null;
           addLog(
-            `Die Inbetriebnahme des Vorratslagers ${nodeName(campId)} wird unterbrochen – der Fortschritt verfällt.`
+            `Die Inbetriebnahme des Vorratslagers ${nodeName(campId)} ruht – der Fortschritt bleibt erhalten.`
           );
+          addEvent({ type: 'supplyCapturePaused', faction: owner, where: { node: campId } });
         }
         continue;
       }
       if (!cap) {
-        supplyCaptures[campId] = { faction: owner, startedAt: t };
+        supplyCaptures[campId] = { faction: owner, since: t, progress: 0 };
         addLog(`${FACTIONS[owner].name} beginnt die Inbetriebnahme des Vorratslagers ${nodeName(campId)}.`);
         addEvent({ type: 'supplyCaptureStart', faction: owner, where: { node: campId } });
+      } else if (cap.since === null) {
+        cap.since = t;
+        addLog(`${FACTIONS[owner].name} setzt die Inbetriebnahme des Vorratslagers ${nodeName(campId)} fort.`);
+        addEvent({ type: 'supplyCaptureResumed', faction: owner, where: { node: campId } });
       }
     }
   }
@@ -1277,10 +1319,7 @@ export function createSim({ map, config, plans }) {
       const cap = captures[gyId];
       if (cap) t = Math.min(t, cap.startedAt + graveyardCaptureTime);
     }
-    for (const campId of supplyCampIds) {
-      const cap = supplyCaptures[campId];
-      if (cap) t = Math.min(t, cap.startedAt + supplyCaptureTime);
-    }
+    for (const campId of supplyCampIds) t = Math.min(t, supplyCaptureDueAt(campId));
     // Genau ein Zeitpunkt je Fraktion: der Moment, in dem ihr Vorrat die
     // Schwelle erreicht. Ohne gehaltenes Lager (oder nach dem Erscheinen des
     // Verbündeten) ist er Infinity – die Patt-Erkennung bleibt damit intakt.
@@ -1346,7 +1385,11 @@ export function createSim({ map, config, plans }) {
       owner: supplyOwner, // feste Zuordnung nodeId → Fraktion
       active: supplyActive, // in Betrieb genommen?
       blocked: supplyBlocked, // vom Gegner besetzt und dadurch stillgelegt?
-      captures: supplyCaptures, // laufende Inbetriebnahme { faction, startedAt }
+      captures: supplyCaptures, // angefangene Inbetriebnahme { faction, since, progress }
+      // Geleistete Sekunden einer angefangenen Inbetriebnahme (0 = keine).
+      // Schließt den ruhenden Fortschritt ein – die Anzeige braucht die
+      // Zerlegung in `since`/`progress` damit nicht selbst nachzurechnen.
+      captureProgress: (nodeId) => supplyCaptureProgress(nodeId),
       cost: allySupplyCost,
       allySummoned,
       captureTime: supplyCaptureTime,

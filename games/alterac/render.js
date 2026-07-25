@@ -391,17 +391,24 @@ export function createRenderer(canvas, map) {
     ctx.stroke();
     ctx.restore();
     if (info.capture) {
+      ctx.save();
       ctx.beginPath();
       ctx.arc(n.x, n.y + 2, 25, 0, TAU);
       ctx.lineWidth = 3.5;
       ctx.strokeStyle = 'rgba(226,238,252,0.18)';
       ctx.stroke();
+      // Ruhender Fortschritt bleibt stehen, wird aber blass und gestrichelt:
+      // angefangene Arbeit, an der gerade niemand ist.
+      if (info.capture.paused) {
+        ctx.globalAlpha = 0.45;
+        ctx.setLineDash([4, 4]);
+      }
       ctx.beginPath();
       ctx.arc(n.x, n.y + 2, 25, -Math.PI / 2, -Math.PI / 2 + TAU * info.capture.frac);
       ctx.lineCap = 'round';
       ctx.strokeStyle = info.capture.color;
       ctx.stroke();
-      ctx.lineCap = 'butt';
+      ctx.restore();
     }
     if (ring) {
       ctx.beginPath();
@@ -853,11 +860,16 @@ export function createRenderer(canvas, map) {
   }
 
   // Lagerinfo eines Knotens: im Gefecht aus der Simulation (Betriebszustand und
-  // laufende Inbetriebnahme), in der Planung aus der Karte – der Besitzer steht
-  // von Anfang an fest, gibt es keine Simulation, ist das Lager schlicht noch
-  // inaktiv und ohne Fortschritt (dasselbe Muster wie `towerInfoAt`).
+  // angefangene Inbetriebnahme), in der Planung aus der Karte – der Besitzer
+  // steht von Anfang an fest, gibt es keine Simulation, ist das Lager schlicht
+  // noch inaktiv und ohne Fortschritt (dasselbe Muster wie `towerInfoAt`).
   // `null` heißt „hier ist kein Lager", etwa weil das System im Setup
   // abgeschaltet wurde.
+  //
+  // Der Fortschritt einer Inbetriebnahme verfällt nicht, sondern ruht, wenn
+  // gerade niemand daran arbeitet (`cap.since === null`). Er bleibt deshalb
+  // sichtbar – nur gedämpft, damit „hier arbeitet jemand" und „hier liegt
+  // angefangene Arbeit" unterscheidbar sind.
   function supplyInfoAt(nodeId, view) {
     const st = view.sim?.supplyState;
     if (st) {
@@ -871,7 +883,8 @@ export function createRenderer(canvas, map) {
         capture: cap
           ? {
               color: FACTIONS[cap.faction].color,
-              frac: Math.max(0, Math.min(1, (view.sim.time - cap.startedAt) / dur)),
+              frac: Math.max(0, Math.min(1, (st.captureProgress?.(nodeId) ?? 0) / dur)),
+              paused: cap.since === null,
             }
           : null,
       };
