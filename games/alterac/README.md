@@ -273,8 +273,7 @@ Drei Punkte, die den Umgang damit bestimmen:
 
 Die WebP ist verlustlos (`VP8L`) und damit selbst das Original – ein PNG
 daneben wäre dieselbe Pixelmenge in größer. Die hochauflösenden Ausgangsblätter
-liegen bewusst nicht im Repo; wie die Grafiken entstanden sind und wie man
-Nachschub erzeugt, steht in `prompt-einheiten-sprites.md`.
+liegen bewusst nicht im Repo.
 
 Jede angeworbene Einheit trägt eine fortlaufende **römische Ziffer** (in der
 Reihenfolge des Anwerbens je Fraktion). Sie erscheint als Kennzeichen in der
