@@ -322,25 +322,48 @@ function startSim() {
   });
 }
 
-// Vorratsanzeige der Schlacht: je Fraktion Stand, Schwelle und ein schmaler
-// Balken. Das Markup entsteht nur, wenn die Partie überhaupt Lager hat – ist das
-// System abgeschaltet, bleibt `camps` leer und der ganze Block entfällt. Die UI
-// wertet nichts aus, sie zeigt nur `sim.supplyState`.
+// ------------------------------------------------------------- Vorratsanzeige
+// Je Fraktion Stand, Schwelle und ein schmaler Balken, dazu der Zustand des
+// eigenen Lagers. Jede Fraktion hat genau ein fest zugeordnetes Lager – der
+// Besitz wechselt nie, der Gegner kann es nur blockieren. Die UI wertet nichts
+// aus, sie zeigt nur `sim.supplyState`.
+
+// Die drei Zustände eines Lagers als kurzer Text. Eine Blockade zählt erst im
+// Betrieb: Ein noch nicht in Betrieb genommenes Lager bleibt „inaktiv", ganz
+// gleich wer davorsteht.
+const SUPPLY_CAMP_STATES = {
+  idle: { icon: '⬡', text: 'inaktiv' },
+  running: { icon: '⬢', text: 'liefert' },
+  blocked: { icon: '⚠', text: 'blockiert' },
+};
+
+const campStateKey = (st, campId) =>
+  !st.active?.[campId] ? 'idle' : st.blocked?.[campId] ? 'blocked' : 'running';
+
+// Das fest zugeordnete Lager einer Fraktion aus dem Simulationszustand ablesen.
+const ownCampOf = (st, faction) =>
+  (st?.camps ?? []).find((id) => st.owner?.[id] === faction) ?? null;
+
+// Das Markup entsteht nur, wenn die Partie überhaupt Lager hat – ist das System
+// abgeschaltet, bleibt `camps` leer und der ganze Block entfällt.
 function supplyBoardMarkup() {
-  const camps = sim.supplyState?.camps ?? [];
-  if (!camps.length) return '';
+  const st = sim.supplyState;
+  if (!(st?.camps ?? []).length) return '';
   const rows = ['blue', 'red']
     .map((f) => {
       const fac = FACTIONS[f];
+      const campId = ownCampOf(st, f);
       return `
       <div class="supply-row" data-supply-row="${f}" style="--fac:${fac.color};--fac-dark:${fac.dark}">
         <span class="supply-fac">${fac.name}</span>
         <span class="supply-value" data-supply-value="${f}"></span>
         <div class="supply-bar"><i data-supply-bar="${f}"></i></div>
+        ${campId ? `<span class="supply-camp" data-supply-camp="${f}"></span>` : ''}
       </div>`;
     })
     .join('');
-  return `<div class="supply-board" id="supply-board" role="group" aria-label="Vorrat je Fraktion">${rows}</div>`;
+  return `<div class="supply-board" id="supply-board" role="group"
+    aria-label="Vorrat und Vorratslager je Fraktion">${rows}</div>`;
 }
 
 // Referenzen der Vorratszeilen (je Fraktion), damit die Render-Schleife nicht
@@ -348,12 +371,15 @@ function supplyBoardMarkup() {
 let supplyRows = [];
 
 function collectSupplyRows() {
+  const st = sim.supplyState;
   supplyRows = ['blue', 'red']
     .map((faction) => ({
       faction,
+      campId: ownCampOf(st, faction),
       row: panelEl.querySelector(`[data-supply-row="${faction}"]`),
       value: panelEl.querySelector(`[data-supply-value="${faction}"]`),
       bar: panelEl.querySelector(`[data-supply-bar="${faction}"]`),
+      camp: panelEl.querySelector(`[data-supply-camp="${faction}"]`),
     }))
     .filter((r) => r.row);
 }
@@ -362,7 +388,8 @@ function updateSupplyBoard() {
   if (!supplyRows.length) return;
   const st = sim.supplyState;
   const cost = st.cost;
-  for (const { faction, row, value, bar } of supplyRows) {
+  const supply = st.supply;
+  for (const { faction, row, value, bar, camp, campId } of supplyRows) {
     const summoned = st.allySummoned?.[faction];
     // Nach der Beschwörung steht in der Zeile der Verbündete statt des Vorrats –
     // ob er noch lebt, verrät die Karte, nicht diese Anzeige.
@@ -371,13 +398,21 @@ function updateSupplyBoard() {
       const ally = resolveAllyType(config, faction);
       text = `${ally.icon} ${ally.name} · erschienen`;
     } else {
-      text = `⬢ ${Math.floor(st.supply[faction] ?? 0)} / ${cost}`;
+      text = `⬢ ${Math.floor(supply[faction] ?? 0)} / ${cost}`;
     }
     if (value.textContent !== text) value.textContent = text;
-    const fill = summoned ? 1 : Math.min(1, (st.supply[faction] ?? 0) / cost);
+    const fill = summoned ? 1 : Math.min(1, (supply[faction] ?? 0) / cost);
     const width = `${(fill * 100).toFixed(1)}%`;
     if (bar.style.width !== width) bar.style.width = width;
     row.classList.toggle('summoned', !!summoned);
+    // Lagerzeile nur bei echtem Zustandswechsel anfassen (läuft je Bild).
+    if (!camp || !campId) continue;
+    const key = campStateKey(st, campId);
+    if (camp.dataset.state === key) continue;
+    const state = SUPPLY_CAMP_STATES[key];
+    camp.dataset.state = key;
+    camp.className = `supply-camp ${key}`;
+    camp.textContent = `${state.icon} ${map.nodes[campId].name} · ${state.text}`;
   }
 }
 

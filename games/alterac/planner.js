@@ -23,28 +23,40 @@ const circled = (n) => CIRCLED[n - 1] ?? `(${n})`;
 // Kurzbeschreibung eines einzelnen Auftrags für Chip und Auftragsliste. `towers`
 // ist die aktive Turmzuordnung { nodeId: faction }; endet der Angriffspfad auf
 // einem gegnerischen Turm, wird das ausdrückliche Turm-Ziel benannt.
-// `supplyCamps` sind die aktiven Vorratslager (Knoten-Ids): Endet ein Pfad dort,
-// nimmt die Einheit das Lager ein – das ist der Kern der Vorratsregel und wird
-// deshalb ebenso ausdrücklich benannt. Beide Zusatzangaben sind optional, damit
+// `supplyCamps` ist die feste Lagerzuordnung { nodeId: faction }: Endet ein Pfad
+// dort, löst das die Vorratsregel aus und wird deshalb ebenso ausdrücklich
+// benannt – am eigenen Lager als Inbetriebnahme, am gegnerischen als Blockade,
+// denn übernehmen lässt es sich nie. Beide Zusatzangaben sind optional, damit
 // bestehende Aufrufe unverändert weiterlaufen.
-export function actionSummary(action, nodes, towers = {}, faction = null, supplyCamps = []) {
+export function actionSummary(action, nodes, towers = {}, faction = null, supplyCamps = {}) {
   const path = action.path ?? [];
   const names = path.map((id) => nodes[id].name);
   const endId = path.length ? path[path.length - 1] : null;
   const endTowerFaction = endId ? towers[endId] : undefined;
   const endName = names.length ? names[names.length - 1] : null;
-  const endsAtCamp = endId ? supplyCamps.includes(endId) : false;
+  // Lager-Ziel: `long` benennt das Lager (dort steht kein Pfad daneben), `short`
+  // hängt hinter der Wegliste, die auf den Lagernamen ohnehin schon endet.
+  const campOwner = endId ? (supplyCamps[endId] ?? null) : null;
+  let camp = null;
+  if (campOwner && faction) {
+    camp =
+      campOwner === faction
+        ? { long: `nimmt Vorratslager ${endName} in Betrieb`, short: 'nimmt Vorratslager in Betrieb' }
+        : { long: `besetzt Vorratslager ${endName}`, short: 'besetzt Vorratslager' };
+  } else if (campOwner) {
+    camp = { long: `am Vorratslager ${endName}`, short: 'Ziel: Vorratslager' };
+  }
   if (action.stance === 'defend') {
     if (endTowerFaction && faction && endTowerFaction === faction) {
       return `🛡 verteidigt Turm ${endName}`;
     }
-    if (endsAtCamp) return `🛡 sichert Vorratslager ${endName}`;
+    if (camp) return `🛡 ${camp.long}`;
     return `🛡 hält ${endName ?? 'die Basis'}`;
   }
   if (endTowerFaction && faction && endTowerFaction !== faction) {
     return `⚔ ${names.join(' → ')} · greift Turm an`;
   }
-  if (endsAtCamp) return `⚔ ${names.join(' → ')} · sichert Vorratslager`;
+  if (camp) return `⚔ ${names.join(' → ')} · ${camp.short}`;
   return names.length ? `⚔ ${names.join(' → ')}` : '⚔ direkt zum Boss';
 }
 
@@ -70,8 +82,13 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
   const towers = towerNodes(map, config?.towersPerFaction ?? 0);
   const isEnemyTower = (id) => towers[id] === enemyFaction;
   const hasEnemyTowers = Object.values(towers).some((f) => f === enemyFaction);
-  // Aktive Vorratslager dieser Partie (leer, wenn das System abgeschaltet ist).
-  const supplyCamps = config?.supplyEnabled ? map.supplyCamps ?? [] : [];
+  // Feste Lagerzuordnung { nodeId: faction } dieser Partie – leer, wenn das
+  // System abgeschaltet ist. Ein Lager wechselt nie den Besitzer, deshalb stehen
+  // eigenes und gegnerisches Lager schon zur Planungszeit fest.
+  const supplyCamps = config?.supplyEnabled ? (map.supplyCamps ?? {}) : {};
+  const campOf = (f) => Object.keys(supplyCamps).find((id) => supplyCamps[id] === f) ?? null;
+  const ownCamp = campOf(faction);
+  const enemyCamp = campOf(enemyFaction);
   // Effektive Einheitenwerte dieser Partie (Datei-Defaults ggf. überschrieben).
   const unitTypes = resolveUnitTypes(config);
   const byKey = resolveUnitTypeMap(config);
@@ -113,11 +130,14 @@ export function createPlanner({ map, faction, budget, config, panel, canvas, ren
 
   // Zusatzhinweis nur, wenn die Partie Vorratslager hat. Die Namen kommen aus der
   // Karte, damit der Text bei geänderten Standorten nicht nachgezogen werden muss.
-  const SUPPLY_HINT = supplyCamps.length
-    ? ' Genauso bei den Vorratslagern (' +
-      supplyCamps.map((id) => map.nodes[id].name).join(', ') +
-      '): Eingenommen wird nur, wessen Auftrag ausdrücklich dort endet – ein Durchmarsch reicht nicht. ' +
-      'Danach liefert das Lager auch ohne Wache Nachschub für den mächtigen Verbündeten.'
+  const SUPPLY_HINT = ownCamp
+    ? ` Genauso beim eigenen Vorratslager (${map.nodes[ownCamp].name}): In Betrieb nimmt es nur, ` +
+      'wessen Auftrag ausdrücklich dort endet – ein Durchmarsch reicht nicht. Danach liefert es ' +
+      'dauerhaft Nachschub für den mächtigen Verbündeten, auch ohne Wache.' +
+      (enemyCamp
+        ? ` Das gegnerische Lager (${map.nodes[enemyCamp].name}) lässt sich nie übernehmen, nur ` +
+          'blockieren: solange eine eigene Einheit ausdrücklich dort steht.'
+        : '')
     : '';
 
   panel.innerHTML = `

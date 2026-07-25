@@ -820,10 +820,11 @@ html {
   color: #f0d489;
 }
 
-/* Vorratsanzeige: je Fraktion eine Zeile aus Name, Stand/Schwelle und einem
-   schmalen Balken. Hängt nur im Panel, wenn die Partie Vorratslager hat. Beide
-   Texte dürfen kürzen (Ellipsis), damit die Zeile auf schmalen Geräten nie
-   überläuft – der Balken darunter bleibt immer voll sichtbar. */
+/* Vorratsanzeige: je Fraktion eine Zeile aus Name, Stand/Schwelle, einem
+   schmalen Balken und dem Zustand des fest zugeordneten Lagers. Hängt nur im
+   Panel, wenn die Partie Vorratslager hat. Alle Texte dürfen kürzen (Ellipsis),
+   damit die Zeile auf schmalen Geräten nie überläuft – der Balken darunter
+   bleibt immer voll sichtbar. */
 .supply-board {
   display: grid;
   gap: 0.35rem;
@@ -841,7 +842,8 @@ html {
 }
 
 .supply-fac,
-.supply-value {
+.supply-value,
+.supply-camp {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -876,6 +878,24 @@ html {
   border-radius: inherit;
   background: linear-gradient(90deg, var(--fac-dark, #2c5aa8), var(--fac, #5b9cff));
   transition: width 0.2s linear;
+}
+
+/* Zustandszeile des eigenen Lagers: „inaktiv" tritt zurück, „liefert" ist die
+   ruhige Normallage, „blockiert" ist die Warnung an den Spieler und darf als
+   Einziges auffallen. */
+.supply-camp {
+  grid-column: 1 / -1;
+  font-size: 0.72rem;
+  color: #8c97ad;
+}
+
+.supply-camp.running {
+  color: #9fd6a6;
+}
+
+.supply-camp.blocked {
+  font-weight: 700;
+  color: #ffb15c;
 }
 
 /* Verbündeter erschienen: Zeile und Balken wechseln auf Gold. */
