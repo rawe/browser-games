@@ -9,6 +9,7 @@ import {
   RESOURCE_OPTIONS,
   CONFIG_SECTIONS,
   TOWERS_ON_COUNT,
+  resolveAllyType,
 } from './config.js';
 import { createSim } from './sim.js';
 import { createRenderer } from './render.js';
@@ -84,11 +85,21 @@ applyModeGate();
 
 // ---------------------------------------------- Erweiterte Einstellungen (Zahlenfelder)
 // Die Felder werden datengetrieben erzeugt: je Einheitentyp eine Gruppe aus
-// UNIT_STAT_FIELDS (schreibt nach config.unitStats), dazu die Boss-/Turm-Gruppen
-// aus CONFIG_SECTIONS (schreiben direkt in config[key]). Prozent-Felder zeigen
-// im Menü ganze Prozent, intern bleibt der Anteil (0–1) erhalten.
-const towersToggle = document.getElementById('opt-towers');
+// UNIT_STAT_FIELDS (schreibt nach config.unitStats), dazu je eine Gruppe pro
+// Sektion aus CONFIG_SECTIONS (schreiben direkt in config[key]). Prozent-Felder
+// zeigen im Menü ganze Prozent, intern bleibt der Anteil (0–1) erhalten.
 const advancedGroups = document.getElementById('advanced-groups');
+
+// Setup-Schalter, die ein ganzes Teilsystem abschalten (Türme, Vorratslager …).
+// Datengetrieben aus den `gate`-Kennungen von CONFIG_SECTIONS: zu jedem Gate
+// gehört ein Schalter mit der id `opt-<gate>`; ein neues Gate braucht also nur
+// den Eintrag in config.js und einen Schalter im Formular – hier ist nichts
+// nachzuziehen. Fehlt der Schalter, gilt das Teilsystem als eingeschaltet.
+const GATES = [...new Set(CONFIG_SECTIONS.map((s) => s.gate).filter(Boolean))];
+const gateToggles = Object.fromEntries(
+  GATES.map((gate) => [gate, document.getElementById(`opt-${gate}`)])
+);
+const gateOn = (gate) => gateToggles[gate]?.checked ?? true;
 
 function fieldToDisplay(field, value) {
   return field.kind === 'percent' ? Math.round(value * 100) : value;
@@ -154,7 +165,9 @@ function buildAdvanced() {
     }
     advancedGroups.appendChild(group);
   }
-  // Danach die Boss-/Turm-Gruppen aus CONFIG_SECTIONS.
+  // Danach die übrigen Gruppen aus CONFIG_SECTIONS (Zeiten, Türme, Vorratslager,
+  // Verbündeter, Boss) – rein datengetrieben: Eine neue Sektion dort erscheint
+  // hier ohne Zutun, samt Gate.
   for (const section of CONFIG_SECTIONS) {
     const group = document.createElement('fieldset');
     group.className = 'advanced-group';
@@ -185,18 +198,20 @@ function readUnitStats() {
   return unitStats;
 }
 
-// Turm-Gruppen ausgrauen und deaktivieren, solange der Türme-Schalter aus ist.
-function applyTowerGate() {
-  const on = towersToggle.checked;
-  for (const group of advancedGroups.querySelectorAll('.advanced-group[data-gate="towers"]')) {
-    group.classList.toggle('disabled', !on);
-    for (const input of group.querySelectorAll('input')) input.disabled = !on;
+// Feld-Gruppen eines abgeschalteten Teilsystems ausgrauen und deaktivieren.
+function applyGates() {
+  for (const gate of GATES) {
+    const on = gateOn(gate);
+    for (const group of advancedGroups.querySelectorAll(`.advanced-group[data-gate="${gate}"]`)) {
+      group.classList.toggle('disabled', !on);
+      for (const input of group.querySelectorAll('input')) input.disabled = !on;
+    }
   }
 }
 
 buildAdvanced();
-applyTowerGate();
-towersToggle.addEventListener('change', applyTowerGate);
+applyGates();
+for (const toggle of Object.values(gateToggles)) toggle?.addEventListener('change', applyGates);
 
 // Einheitentypen-Übersicht in den Spielregeln aus den zentralen Definitionen füllen.
 {
@@ -216,13 +231,15 @@ document.getElementById('setup-form').addEventListener('submit', (ev) => {
   config = {
     ...DEFAULT_CONFIG,
     resources: Number(document.getElementById('opt-resources').value),
-    towersPerFaction: towersToggle.checked ? TOWERS_ON_COUNT : 0,
+    towersPerFaction: gateOn('towers') ? TOWERS_ON_COUNT : 0,
+    // Vorratslager samt mächtigem Verbündeten (aus = System komplett inaktiv).
+    supplyEnabled: gateOn('supply'),
     // Stärke des Computergegners dieser Partie (nur im CPU-Modus wirksam).
     aiLevel: aiLevelSelect.value,
     // Einheitenwerte aus dem Erweitert-Bereich (zentral via resolveUnitTypes gelesen).
     unitStats: readUnitStats(),
   };
-  // Feinwerte aus dem Erweitert-Bereich übernehmen (bossHp, Boss- und Turmwerte).
+  // Feinwerte aller Sektionen aus dem Erweitert-Bereich übernehmen.
   for (const section of CONFIG_SECTIONS) {
     for (const field of section.fields) config[field.key] = readNumberField(field, `adv-${field.key}`, DEFAULT_CONFIG[field.key]);
   }
@@ -307,6 +324,100 @@ function startSim() {
   });
 }
 
+// ------------------------------------------------------------- Vorratsanzeige
+// Je Fraktion Stand, Schwelle und ein schmaler Balken, dazu der Zustand des
+// eigenen Lagers. Jede Fraktion hat genau ein fest zugeordnetes Lager – der
+// Besitz wechselt nie, der Gegner kann es nur blockieren. Die UI wertet nichts
+// aus, sie zeigt nur `sim.supplyState`.
+
+// Die drei Zustände eines Lagers als kurzer Text. Eine Blockade zählt erst im
+// Betrieb: Ein noch nicht in Betrieb genommenes Lager bleibt „inaktiv", ganz
+// gleich wer davorsteht.
+const SUPPLY_CAMP_STATES = {
+  idle: { icon: '⬡', text: 'inaktiv' },
+  running: { icon: '⬢', text: 'liefert' },
+  blocked: { icon: '⚠', text: 'blockiert' },
+};
+
+const campStateKey = (st, campId) =>
+  !st.active?.[campId] ? 'idle' : st.blocked?.[campId] ? 'blocked' : 'running';
+
+// Das fest zugeordnete Lager einer Fraktion aus dem Simulationszustand ablesen.
+const ownCampOf = (st, faction) =>
+  (st?.camps ?? []).find((id) => st.owner?.[id] === faction) ?? null;
+
+// Das Markup entsteht nur, wenn die Partie überhaupt Lager hat – ist das System
+// abgeschaltet, bleibt `camps` leer und der ganze Block entfällt.
+function supplyBoardMarkup() {
+  const st = sim.supplyState;
+  if (!(st?.camps ?? []).length) return '';
+  const rows = ['blue', 'red']
+    .map((f) => {
+      const fac = FACTIONS[f];
+      const campId = ownCampOf(st, f);
+      return `
+      <div class="supply-row" data-supply-row="${f}" style="--fac:${fac.color};--fac-dark:${fac.dark}">
+        <span class="supply-fac">${fac.name}</span>
+        <span class="supply-value" data-supply-value="${f}"></span>
+        <div class="supply-bar"><i data-supply-bar="${f}"></i></div>
+        ${campId ? `<span class="supply-camp" data-supply-camp="${f}"></span>` : ''}
+      </div>`;
+    })
+    .join('');
+  return `<div class="supply-board" id="supply-board" role="group"
+    aria-label="Vorrat und Vorratslager je Fraktion">${rows}</div>`;
+}
+
+// Referenzen der Vorratszeilen (je Fraktion), damit die Render-Schleife nicht
+// bei jedem Bild neu im DOM suchen muss. Leer, wenn es keine Lager gibt.
+let supplyRows = [];
+
+function collectSupplyRows() {
+  const st = sim.supplyState;
+  supplyRows = ['blue', 'red']
+    .map((faction) => ({
+      faction,
+      campId: ownCampOf(st, faction),
+      row: panelEl.querySelector(`[data-supply-row="${faction}"]`),
+      value: panelEl.querySelector(`[data-supply-value="${faction}"]`),
+      bar: panelEl.querySelector(`[data-supply-bar="${faction}"]`),
+      camp: panelEl.querySelector(`[data-supply-camp="${faction}"]`),
+    }))
+    .filter((r) => r.row);
+}
+
+function updateSupplyBoard() {
+  if (!supplyRows.length) return;
+  const st = sim.supplyState;
+  const cost = st.cost;
+  const supply = st.supply;
+  for (const { faction, row, value, bar, camp, campId } of supplyRows) {
+    const summoned = st.allySummoned?.[faction];
+    // Nach der Beschwörung steht in der Zeile der Verbündete statt des Vorrats –
+    // ob er noch lebt, verrät die Karte, nicht diese Anzeige.
+    let text;
+    if (summoned) {
+      const ally = resolveAllyType(config, faction);
+      text = `${ally.icon} ${ally.name} · erschienen`;
+    } else {
+      text = `⬢ ${Math.floor(supply[faction] ?? 0)} / ${cost}`;
+    }
+    if (value.textContent !== text) value.textContent = text;
+    const fill = summoned ? 1 : Math.min(1, (supply[faction] ?? 0) / cost);
+    const width = `${(fill * 100).toFixed(1)}%`;
+    if (bar.style.width !== width) bar.style.width = width;
+    row.classList.toggle('summoned', !!summoned);
+    // Lagerzeile nur bei echtem Zustandswechsel anfassen (läuft je Bild).
+    if (!camp || !campId) continue;
+    const key = campStateKey(st, campId);
+    if (camp.dataset.state === key) continue;
+    const state = SUPPLY_CAMP_STATES[key];
+    camp.dataset.state = key;
+    camp.className = `supply-camp ${key}`;
+    camp.textContent = `${state.icon} ${map.nodes[campId].name} · ${state.text}`;
+  }
+}
+
 function buildSimPanel() {
   panelEl.innerHTML = `
     <div class="sim-controls">
@@ -318,8 +429,11 @@ function buildSimPanel() {
       </div>
       <span class="sim-clock" id="sim-clock">0:00</span>
     </div>
+    ${supplyBoardMarkup()}
     <div class="ticker" id="ticker"><p class="muted">Die Schlacht beginnt …</p></div>
   `;
+  collectSupplyRows();
+  updateSupplyBoard();
   document.getElementById('btn-pause').addEventListener('click', (ev) => {
     paused = !paused;
     ev.currentTarget.textContent = paused ? '▶' : '⏸';
@@ -340,6 +454,7 @@ function fmtTime(t) {
 function updateSimPanel() {
   const clock = document.getElementById('sim-clock');
   if (clock) clock.textContent = fmtTime(sim.time);
+  updateSupplyBoard();
   if (sim.log.length !== lastLogCount) {
     lastLogCount = sim.log.length;
     const ticker = document.getElementById('ticker');

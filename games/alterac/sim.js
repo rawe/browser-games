@@ -44,6 +44,20 @@
 // Friedhof – bestimmt erst im Moment des Respawns; ohne eigenen Friedhof ist
 // kein Respawn mehr möglich (Zustand 'gone').
 //
+// Vorratslager: Zwei markierte Wegpunkte (`supply` in map.js) liefern ihrem
+// Besitzer Nachschub. Sie werden wie Friedhöfe eingenommen – mit dem
+// Unterschied, dass nur einnimmt, wer das Lager ausdrücklich als Ziel geplant
+// hat (der Pfad endet dort); ein Durchmarsch stört die Einnahme des Gegners,
+// treibt aber keine eigene voran. Denn anders als Friedhöfe liegen Lager auf
+// Hauptwegen. Ein gehaltenes Lager liefert einen Vorratspunkt je
+// `supplyTickTime`; erreicht der Vorrat `allySupplyCost`, wird er verbraucht und
+// der mächtige Verbündete der Fraktion erscheint an ihrem Boss-Wegpunkt, um von
+// dort selbstständig zum gegnerischen Boss zu marschieren – einmal je Fraktion
+// und Partie, ohne Respawn. Der Vorrat läuft stetig auf und wird nur bei
+// Besitzwechseln verbucht; der Zeitpunkt des Schwellenübertritts ist daraus
+// exakt berechenbar und wird als reguläres Ereignis eingeplant. Regeln und
+// Begründungen: siehe design-vorratslager.md.
+//
 // Respawn-Wellen: Der Respawn läuft auf einem globalen Takt statt pro Einheit.
 // `respawnTime` ist das Intervall zwischen zwei Wellen (an Spielbeginn
 // verankerte Vielfache); jede Gefallene wartet bis zur nächsten Welle und
@@ -51,7 +65,7 @@
 // ballen sich Respawns automatisch zu Wellen.
 
 import { FACTIONS, enemyOf, shortestPath, nearestGraveyard, towerNodes } from './map.js';
-import { resolveUnitTypeMap } from './config.js';
+import { resolveUnitTypeMap, resolveAllyType } from './config.js';
 
 const EPS = 1e-6;
 
@@ -94,6 +108,10 @@ export function createSim({ map, config, plans }) {
     towerDamageReduction,
     bossDamageFloor,
     bossTowerShield = 0,
+    supplyEnabled = false,
+    supplyCaptureTime,
+    supplyTickTime,
+    allySupplyCost,
   } = config;
   // Effektive Einheitenwerte dieser Partie (Datei-Defaults ggf. überschrieben).
   const unitTypes = resolveUnitTypeMap(config);
@@ -148,6 +166,37 @@ export function createSim({ map, config, plans }) {
   const gyOwner = {};
   for (const id of map.graveyardIds) gyOwner[id] = map.graveyards[id].owner;
   const captures = {};
+  // Vorratslager (siehe design-vorratslager.md): Jede Fraktion hat genau ein
+  // fest zugeordnetes Lager an einem markierten Wegpunkt. Es wechselt nie den
+  // Besitzer; der Gegner kann es nur lahmlegen. Zustand je Lager:
+  //   inaktiv      – noch nicht in Betrieb genommen (Ausgangslage)
+  //   in Arbeit    – eine eigene Einheit nimmt es gerade in Betrieb
+  //   pausiert     – Inbetriebnahme angefangen, aber gerade niemand dabei; der
+  //                  erreichte Fortschritt bleibt erhalten
+  //   aktiv        – liefert Nachschub, auch ohne eigene Einheit vor Ort
+  //   blockiert    – eine gegnerische Einheit besetzt es ausdrücklich; die
+  //                  Lieferung stockt, die Inbetriebnahme bleibt aber erhalten
+  // Ist das System abgeschaltet, bleibt die Lagerliste leer und keine der
+  // Vorratsfunktionen hat eine Wirkung.
+  const supplyCampIds = supplyEnabled ? (map.supplyCampIds ?? []) : [];
+  const supplyOwner = supplyEnabled ? (map.supplyCamps ?? {}) : {}; // nodeId → Fraktion (fest)
+  const supplyActive = {};
+  const supplyBlocked = {};
+  for (const id of supplyCampIds) {
+    supplyActive[id] = false;
+    supplyBlocked[id] = false;
+  }
+  // Laufende Inbetriebnahmen je Lager: { faction, since, progress }.
+  //   progress  bereits geleistete Sekunden aus abgeschlossenen Abschnitten
+  //   since     Beginn des laufenden Abschnitts, oder null wenn gerade pausiert
+  // Der Fortschritt VERFÄLLT NICHT: Wird er unterbrochen, wird er verbucht und
+  // ruht, bis wieder eine eigene Einheit vor Ort ist (siehe updateSupplyCamps).
+  const supplyCaptures = {};
+  // Vorrat je Fraktion: `supply` ist der zum Zeitpunkt `supplySince` verbuchte
+  // Stand, der Rest läuft stetig mit der aktuellen Rate auf (siehe supplyNow).
+  const supply = { blue: 0, red: 0 };
+  const supplySince = { blue: 0, red: 0 };
+  const allySummoned = { blue: false, red: false };
   let time = 0;
   let result = null;
 
@@ -160,6 +209,12 @@ export function createSim({ map, config, plans }) {
   // übersetzen: die Befehlsliste `orders` und – bei einem Angriffspfad, der auf
   // einem gegnerischen Turm endet – das ausdrückliche `towerTarget`. Ein bloßes
   // Durchqueren eines Turmknotens als Zwischenwegpunkt aktiviert den Turm nicht.
+  // Nach derselben Regel gilt ein **Vorratslager** als Ziel, wenn der Pfad dort
+  // endet (`supplyTarget`) – bei beiden Haltungen, denn ein Lager wird sowohl
+  // im Vorbeigehen genommen („Angriff", danach greift der Boss-Fallback) als
+  // auch gehalten („Halten"). Weil die Lager auf Hauptwegen liegen, ist diese
+  // Ausdrücklichkeit entscheidend: Sonst bliebe jede durchmarschierende Einheit
+  // dort hängen.
   function buildAction(faction, action) {
     const path = action.path ?? [];
     let orders = path.map((node) => ({ type: 'attack', node }));
@@ -172,71 +227,93 @@ export function createSim({ map, config, plans }) {
       action.stance === 'attack' && lastNode && towers[lastNode] && towers[lastNode].faction !== faction
         ? lastNode
         : null;
-    return { orders, towerTarget };
+    const supplyTarget = lastNode && supplyCampIds.includes(lastNode) ? lastNode : null;
+    return { orders, towerTarget, supplyTarget };
+  }
+
+  // Eine einsatzbereite Gruppe bauen. Wird beim Aufbau der Startaufstellung für
+  // jede geplante Einheit aufgerufen – und während der Schlacht ein weiteres Mal
+  // für den mächtigen Verbündeten, der nicht aus einem Plan stammt.
+  function makeGroup({ faction, def, id, ordinal, actions, ally = false, noRespawn = false }) {
+    // Sequenzielle Aufträge (Rückgrat) und Reaktionen trennen. Der erste
+    // Auftrag ist stets sequenziell; alle weiteren mit trigger.kind === 'when'
+    // sind Reaktionen, der Rest gehört zur Sequenz.
+    const seq = [];
+    const reactions = [];
+    actions.forEach((a, idx) => {
+      const trig = a.trigger ?? (idx === 0 ? null : { kind: 'then' });
+      if (idx !== 0 && trig && trig.kind === 'when' && trig.cond) {
+        reactions.push({ cond: trig.cond, built: buildAction(faction, a), fired: false });
+      } else {
+        seq.push(buildAction(faction, a));
+      }
+    });
+    if (!seq.length) seq.push(buildAction(faction, { path: [], stance: 'attack' }));
+    const first = seq[0];
+    return {
+      id,
+      // 1-basierte Nummer der Einheit in der Plan-Reihenfolge ihrer Fraktion –
+      // als römische Ziffer auf dem Token und in der Planungsliste dargestellt.
+      // Der Verbündete stammt aus keinem Plan und trägt daher keine Ziffer.
+      ordinal,
+      // Mächtiger Verbündeter statt angeworbener Einheit: eigene Darstellung,
+      // kein Respawn (siehe `noRespawn`).
+      ally,
+      noRespawn,
+      faction,
+      def,
+      maxHp: def.hp,
+      hp: def.hp,
+      damage: def.damage,
+      attackInterval: def.attackInterval,
+      edgeTime: edgeTime / (def.speed ?? 1), // Reisezeit pro Wegstück
+      // Auftragskette: `seq` ist das sequenzielle Rückgrat, `reactions` die
+      // „Sobald"-Aufträge. Der aktive Auftrag lebt im Ausführungs-Slot
+      // (orders/orderIndex/towerTarget); `seqIndex` zeigt auf den aktiven
+      // sequenziellen Auftrag, `inReaction` markiert eine laufende Reaktion.
+      seq,
+      seqIndex: 0,
+      reactions,
+      inReaction: false,
+      pendingReaction: null, // gelatchte Reaktion, wird am nächsten freien Knoten angewandt
+      orders: first.orders,
+      orderIndex: 0,
+      // 'atNode' | 'moving' | 'edgeFight' | 'defending' | 'capturing' |
+      // 'dead' | 'gone' (endgültig gefallen – kein Friedhof für den Respawn)
+      state: 'atNode',
+      node: map.start[faction],
+      towerTarget: first.towerTarget, // Knoten des gegnerischen Ziel-Turms (oder null)
+      supplyTarget: first.supplyTarget, // Knoten des Ziel-Vorratslagers (oder null)
+      fighting: false,
+      entrenched: false,
+      nextAttackAt: Infinity,
+      edgeFrom: null,
+      edgeTo: null,
+      edgeFrac: 0, // im Begegnungskampf: zurückgelegter Anteil des Wegstücks
+      edgeCombat: null, // Referenz auf den aktiven Wegstück-Kampf
+      departT: 0,
+      arriveT: 0,
+      respawnAt: Infinity,
+      graveyardNode: null,
+      deathNode: null,
+    };
   }
 
   // --- Gruppen aus den Plänen bauen: jede Einheit ist eine eigene Gruppe ---
   for (const faction of ['blue', 'red']) {
     plans[faction].forEach((u, i) => {
-      const def = unitTypes[u.type];
-      // Plan normalisieren: Legacy (path/stance) → Ein-Auftrag-Kette.
-      const actions = u.actions ?? [{ path: u.path ?? [], stance: u.stance ?? 'attack', trigger: null }];
-      // Sequenzielle Aufträge (Rückgrat) und Reaktionen trennen. Der erste
-      // Auftrag ist stets sequenziell; alle weiteren mit trigger.kind === 'when'
-      // sind Reaktionen, der Rest gehört zur Sequenz.
-      const seq = [];
-      const reactions = [];
-      actions.forEach((a, idx) => {
-        const trig = a.trigger ?? (idx === 0 ? null : { kind: 'then' });
-        if (idx !== 0 && trig && trig.kind === 'when' && trig.cond) {
-          reactions.push({ cond: trig.cond, built: buildAction(faction, a), fired: false });
-        } else {
-          seq.push(buildAction(faction, a));
-        }
-      });
-      if (!seq.length) seq.push(buildAction(faction, { path: [], stance: 'attack' }));
-      const first = seq[0];
-      groups.push({
-        id: `${faction === 'blue' ? 'S' : 'F'}${i + 1}`,
-        // 1-basierte Nummer der Einheit in der Plan-Reihenfolge ihrer Fraktion –
-        // als römische Ziffer auf dem Token und in der Planungsliste dargestellt.
-        ordinal: i + 1,
-        faction,
-        def,
-        maxHp: def.hp,
-        hp: def.hp,
-        damage: def.damage,
-        attackInterval: def.attackInterval,
-        edgeTime: edgeTime / (def.speed ?? 1), // Reisezeit pro Wegstück
-        // Auftragskette: `seq` ist das sequenzielle Rückgrat, `reactions` die
-        // „Sobald"-Aufträge. Der aktive Auftrag lebt im Ausführungs-Slot
-        // (orders/orderIndex/towerTarget); `seqIndex` zeigt auf den aktiven
-        // sequenziellen Auftrag, `inReaction` markiert eine laufende Reaktion.
-        seq,
-        seqIndex: 0,
-        reactions,
-        inReaction: false,
-        pendingReaction: null, // gelatchte Reaktion, wird am nächsten freien Knoten angewandt
-        orders: first.orders,
-        orderIndex: 0,
-        // 'atNode' | 'moving' | 'edgeFight' | 'defending' | 'capturing' |
-        // 'dead' | 'gone' (endgültig gefallen – kein Friedhof für den Respawn)
-        state: 'atNode',
-        node: map.start[faction],
-        towerTarget: first.towerTarget, // Knoten des gegnerischen Ziel-Turms (oder null)
-        fighting: false,
-        entrenched: false,
-        nextAttackAt: Infinity,
-        edgeFrom: null,
-        edgeTo: null,
-        edgeFrac: 0, // im Begegnungskampf: zurückgelegter Anteil des Wegstücks
-        edgeCombat: null, // Referenz auf den aktiven Wegstück-Kampf
-        departT: 0,
-        arriveT: 0,
-        respawnAt: Infinity,
-        graveyardNode: null,
-        deathNode: null,
-      });
+      groups.push(
+        makeGroup({
+          faction,
+          def: unitTypes[u.type],
+          id: `${faction === 'blue' ? 'S' : 'F'}${i + 1}`,
+          ordinal: i + 1,
+          // Plan normalisieren: Legacy (path/stance) → Ein-Auftrag-Kette.
+          actions: u.actions ?? [
+            { path: u.path ?? [], stance: u.stance ?? 'attack', trigger: null },
+          ],
+        })
+      );
     });
   }
 
@@ -247,13 +324,28 @@ export function createSim({ map, config, plans }) {
     g.orders = built.orders;
     g.orderIndex = 0;
     g.towerTarget = built.towerTarget;
+    g.supplyTarget = built.supplyTarget;
   }
 
-  // Ist der aktuelle Auftrag abgearbeitet? Pfad vollständig abgelaufen und kein
-  // lebender Ziel-Turm mehr. (Der Marsch zum Boss ist kein eigener Auftrag,
-  // sondern der Fallback – er zählt nicht als „noch offener" Auftrag.)
+  // Ist der aktuelle Auftrag abgearbeitet? Pfad vollständig abgelaufen, kein
+  // lebender Ziel-Turm und kein noch fremdes Ziel-Vorratslager mehr. (Der Marsch
+  // zum Boss ist kein eigener Auftrag, sondern der Fallback – er zählt nicht als
+  // „noch offener" Auftrag.)
   function actionExhausted(g) {
-    return g.orderIndex >= g.orders.length && !(g.towerTarget && towers[g.towerTarget]?.alive);
+    if (g.orderIndex < g.orders.length) return false;
+    if (g.towerTarget && towers[g.towerTarget]?.alive) return false;
+    if (!supplyDone(g)) return false;
+    return true;
+  }
+
+  // Ist der Lager-Auftrag einer Einheit erledigt? Das eigene Lager gilt als
+  // erledigt, sobald es in Betrieb ist – die Einheit wird dann wieder frei.
+  // Ein gegnerisches Lager wird dagegen nie „erledigt": Wer es besetzt, hält die
+  // Stellung und legt es damit dauerhaft lahm, bis er fällt oder umgeplant wird.
+  function supplyDone(g) {
+    if (!g.supplyTarget) return true;
+    if (supplyOwner[g.supplyTarget] !== g.faction) return false;
+    return supplyActive[g.supplyTarget];
   }
 
   // Nächsten sequenziellen Auftrag laden. Rückgabe true, wenn ein neuer Auftrag
@@ -320,9 +412,13 @@ export function createSim({ map, config, plans }) {
   function currentObjective(g) {
     if (g.orderIndex < g.orders.length) return g.orders[g.orderIndex];
     // Pfad abgearbeitet: steht ein lebender Ziel-Turm am Pfadende, wird dieser
-    // angegriffen; sonst automatisch weiter zum gegnerischen Endboss.
+    // angegriffen; ist am Pfadende ein noch fremdes Vorratslager, wird es
+    // eingenommen; sonst automatisch weiter zum gegnerischen Endboss.
     if (g.towerTarget && towers[g.towerTarget]?.alive) {
       return { type: 'tower', node: g.towerTarget };
+    }
+    if (!supplyDone(g)) {
+      return { type: 'supply', node: g.supplyTarget };
     }
     return { type: 'attack', node: map.bosses[enemyOf(g.faction)] };
   }
@@ -422,6 +518,199 @@ export function createSim({ map, config, plans }) {
         addLog(`${FACTIONS[fac].name} beginnt die Einnahme von ${nodeName(gyId)}.`);
         addEvent({ type: 'captureStart', faction: fac, where: { node: gyId } });
       }
+    }
+  }
+
+  // --- Vorratslager: Einnahme, Nachschub und der mächtige Verbündete ---------
+  // Ablauf und Begründung stehen in design-vorratslager.md. Die Einnahme folgt
+  // exakt der Friedhofsregel (Alleinsein, ununterbrochene Präsenz, Abbruch setzt
+  // auf 0 zurück) mit einem entscheidenden Unterschied: Ein Lager liegt auf einem
+  // Hauptweg, deshalb nimmt es nur ein, wer es ausdrücklich als Ziel geplant hat
+  // (`supplyTarget` – der Pfad endet dort). Ein bloßer Durchmarsch stört zwar die
+  // Einnahme des Gegners, treibt aber keine eigene voran.
+
+  // Lager, die einer Fraktion gerade tatsächlich Nachschub liefern: in Betrieb
+  // genommen und nicht vom Gegner besetzt.
+  const deliveringCamps = (faction) =>
+    supplyCampIds.filter(
+      (id) => supplyOwner[id] === faction && supplyActive[id] && !supplyBlocked[id]
+    );
+
+  // Nachschubrate einer Fraktion in Vorrat je Sekunde: ein lieferndes Lager
+  // bringt einen Vorratspunkt je `supplyTickTime`.
+  const supplyRate = (faction) => deliveringCamps(faction).length / supplyTickTime;
+
+  // Aufgelaufenen Vorrat bis zum Zeitpunkt t verbuchen. Muss vor jeder Änderung
+  // der Rate (also vor jedem Besitzwechsel) aufgerufen werden, damit die neue
+  // Rate nicht rückwirkend gilt.
+  function settleSupply(t) {
+    for (const faction of ['blue', 'red']) {
+      supply[faction] += (t - supplySince[faction]) * supplyRate(faction);
+      supplySince[faction] = t;
+    }
+  }
+
+  // Aktueller Vorratsstand inklusive des seit der letzten Verbuchung
+  // aufgelaufenen Anteils – für Anzeige und Auswertung.
+  const supplyNow = (faction) =>
+    supply[faction] + (time - supplySince[faction]) * supplyRate(faction);
+
+  // Zeitpunkt, zu dem eine Fraktion die Schwelle erreicht (Infinity, wenn sie
+  // kein Lager hält oder ihr Verbündeter schon erschienen ist). Weil die Rate
+  // zwischen zwei Besitzwechseln konstant ist, ist dieser Zeitpunkt exakt
+  // berechenbar und wird als reguläres Ereignis eingeplant – der Vorratsfluss
+  // hängt dadurch nicht davon ab, wann anderswo auf der Karte etwas passiert.
+  function allyDueAt(faction) {
+    if (allySummoned[faction]) return Infinity;
+    const rate = supplyRate(faction);
+    if (rate <= 0) return Infinity;
+    return supplySince[faction] + (allySupplyCost - supply[faction]) / rate;
+  }
+
+  // Bis zum Zeitpunkt `t` geleistete Sekunden einer laufenden Inbetriebnahme –
+  // verbuchter Fortschritt plus der Anteil des gerade laufenden Abschnitts.
+  // Einziger Abrufpunkt für Sim, Anzeige und Auswertung.
+  function supplyCaptureProgress(campId, t = time) {
+    const cap = supplyCaptures[campId];
+    if (!cap) return 0;
+    return cap.progress + (cap.since === null ? 0 : t - cap.since);
+  }
+
+  // Zeitpunkt, zu dem eine Inbetriebnahme fertig wird (Infinity, wenn keine
+  // läuft oder sie gerade ruht). Weil der Fortschritt zwischen zwei
+  // Zustandswechseln linear in der Zeit läuft, ist der Moment exakt berechenbar
+  // und wird – wie die Vorratsschwelle – als reguläres Ereignis eingeplant.
+  function supplyCaptureDueAt(campId) {
+    const cap = supplyCaptures[campId];
+    if (!cap || cap.since === null) return Infinity;
+    return cap.since + (supplyCaptureTime - cap.progress);
+  }
+
+  // Fällige Inbetriebnahmen abschließen: Das Lager liefert ab sofort dauerhaft,
+  // auch wenn die Einheit weiterzieht. Wartende Einheiten werden frei und setzen
+  // im selben Batch ihre Befehle fort.
+  function completeSupplyCaptures(t) {
+    for (const campId of supplyCampIds) {
+      const cap = supplyCaptures[campId];
+      if (!cap || supplyCaptureDueAt(campId) > t + EPS) continue;
+      // Vor der Ratenänderung abrechnen – die neue Rate gilt erst ab jetzt.
+      settleSupply(t);
+      delete supplyCaptures[campId];
+      supplyActive[campId] = true;
+      addLog(`${FACTIONS[cap.faction].name} nimmt das Vorratslager ${nodeName(campId)} in Betrieb!`);
+      addEvent({ type: 'supplyCaptured', faction: cap.faction, where: { node: campId } });
+      for (const g of groups) {
+        if (g.state === 'capturing' && g.node === campId) g.state = 'atNode';
+      }
+    }
+  }
+
+  // Zustand aller Lager aktualisieren: laufende Inbetriebnahme und Blockade.
+  // Für BEIDE gilt dieselbe Bedingung – das ist die tragende Vereinfachung
+  // gegenüber der Friedhofsregel: Nur wer ein Lager ausdrücklich als Ziel plant
+  // (`supplyTarget`, der Pfad endet dort), wirkt darauf ein. Wer bloß
+  // durchmarschiert, treibt weder eine eigene Inbetriebnahme voran noch stört er
+  // eine fremde.
+  //
+  // Der Grund ist die Kartenstruktur: Ein Lager liegt auf einem Hauptweg, der
+  // Anmarsch des Gegners führt ohnehin daran vorbei. Zählte bloße Anwesenheit,
+  // wäre jede Inbetriebnahme durch reinen Zufallsverkehr zerstört, ohne dass der
+  // Gegner es beabsichtigt oder etwas dafür bezahlt hätte. Störung soll eine
+  // Entscheidung sein, die eine Einheit bindet – kein Nebeneffekt des Vorbeigehens.
+  // Das Gegenmittel gegen einen Läufer bleibt trotzdem erhalten: Wer ihn
+  // erschlägt, hält die Inbetriebnahme an (dann fehlt der `claimant`).
+  function updateSupplyCamps(t) {
+    for (const campId of supplyCampIds) {
+      const owner = supplyOwner[campId];
+      const foe = enemyOf(owner);
+      let claimant = false; // eigene Einheit will das Lager ausdrücklich in Betrieb nehmen
+      let besieger = false; // gegnerische Einheit besetzt es ausdrücklich
+      for (const g of combatants(campId)) {
+        if (g.supplyTarget !== campId) continue;
+        if (g.faction === owner) claimant = true;
+        else besieger = true;
+      }
+
+      // --- Blockade (nur im Betrieb relevant) ---
+      const blocked = besieger;
+      if (blocked !== supplyBlocked[campId]) {
+        settleSupply(t); // Ratenwechsel: vorher abrechnen
+        supplyBlocked[campId] = blocked;
+        if (supplyActive[campId]) {
+          addLog(
+            blocked
+              ? `${FACTIONS[foe].name} besetzt das Vorratslager ${nodeName(campId)} – der Nachschub stockt.`
+              : `Das Vorratslager ${nodeName(campId)} liefert wieder.`
+          );
+          addEvent({
+            type: blocked ? 'supplyBlocked' : 'supplyResumed',
+            faction: owner,
+            where: { node: campId },
+          });
+        }
+      }
+
+      // --- Inbetriebnahme ---
+      // Sie schreitet voran, solange eine eigene Einheit sie ausdrücklich
+      // betreibt und kein Gegner das Lager besetzt. Andernfalls ruht sie: Der
+      // bis dahin erreichte Fortschritt wird verbucht und bleibt erhalten, bis
+      // jemand weitermacht. Ein Läufer darf also fallen, ohne dass seine Arbeit
+      // verloren ist – der nächste setzt sie fort.
+      if (supplyActive[campId]) continue;
+      const cap = supplyCaptures[campId] ?? null;
+      const working = claimant && !besieger;
+      if (!working) {
+        if (cap && cap.since !== null) {
+          cap.progress += t - cap.since;
+          cap.since = null;
+          addLog(
+            `Die Inbetriebnahme des Vorratslagers ${nodeName(campId)} ruht – der Fortschritt bleibt erhalten.`
+          );
+          addEvent({ type: 'supplyCapturePaused', faction: owner, where: { node: campId } });
+        }
+        continue;
+      }
+      if (!cap) {
+        supplyCaptures[campId] = { faction: owner, since: t, progress: 0 };
+        addLog(`${FACTIONS[owner].name} beginnt die Inbetriebnahme des Vorratslagers ${nodeName(campId)}.`);
+        addEvent({ type: 'supplyCaptureStart', faction: owner, where: { node: campId } });
+      } else if (cap.since === null) {
+        cap.since = t;
+        addLog(`${FACTIONS[owner].name} setzt die Inbetriebnahme des Vorratslagers ${nodeName(campId)} fort.`);
+        addEvent({ type: 'supplyCaptureResumed', faction: owner, where: { node: campId } });
+      }
+    }
+  }
+
+  // Den mächtigen Verbündeten einer Fraktion herbeirufen: Er erscheint am
+  // eigenen Boss-Wegpunkt und marschiert über den regulären Fallback (leerer
+  // Pfad, Haltung „Angriff") selbstständig zum gegnerischen Boss.
+  function summonAlly(faction, t) {
+    allySummoned[faction] = true;
+    const def = resolveAllyType(config, faction);
+    const g = makeGroup({
+      faction,
+      def,
+      id: `${faction === 'blue' ? 'S' : 'F'}A`,
+      ordinal: null,
+      actions: [{ path: [], stance: 'attack', trigger: null }],
+      ally: true,
+      noRespawn: true,
+    });
+    groups.push(g);
+    addLog(`${def.name} erhebt sich für ${FACTIONS[faction].name}!`);
+    addEvent({ type: 'allySummoned', faction, where: { node: g.node } });
+    continueOrders(g, t);
+  }
+
+  // Vorrat abrechnen und – bei erreichter Schwelle – den Verbündeten rufen.
+  function checkAllySummon(t) {
+    if (!supplyCampIds.length) return;
+    settleSupply(t);
+    for (const faction of ['blue', 'red']) {
+      if (allySummoned[faction] || supply[faction] < allySupplyCost - EPS) continue;
+      supply[faction] -= allySupplyCost;
+      summonAlly(faction, t);
     }
   }
 
@@ -613,6 +902,14 @@ export function createSim({ map, config, plans }) {
           g.state = 'atNode';
           return;
         }
+        if (obj.type === 'supply') {
+          // Am Ziel-Vorratslager angekommen. Beim eigenen Lager wartet die
+          // Einheit, bis es in Betrieb ist, und wird danach wieder frei; am
+          // gegnerischen hält sie die Stellung und legt es damit lahm. Beides
+          // verwaltet updateSupplyCamps.
+          g.state = 'capturing';
+          return;
+        }
         if (g.orderIndex < g.orders.length) {
           g.orderIndex += 1;
           continue; // Wegpunkt war frei → passieren, Pfad fortsetzen
@@ -621,7 +918,8 @@ export function createSim({ map, config, plans }) {
       }
       // Benachbarte Pfad-Wegpunkte ergeben hier genau die geplante Kante;
       // die Wegsuche greift nur als Rückfalllösung (Respawn, Marsch zum Boss).
-      const path = shortestPath(map, g.node, obj.node);
+      // Die Fraktion entscheidet dabei gleich lange Wege über ihre Flanke.
+      const path = shortestPath(map, g.node, obj.node, g.faction);
       if (!path || path.length < 2) return;
       g.state = 'moving';
       g.edgeFrom = g.node;
@@ -664,6 +962,14 @@ export function createSim({ map, config, plans }) {
       where: { node: g.deathNode },
       graveyard: g.graveyardNode,
     });
+    // Der mächtige Verbündete kehrt nicht zurück: Er fällt endgültig, egal wie
+    // viele Friedhöfe seine Fraktion hält.
+    if (g.noRespawn) {
+      g.state = 'gone';
+      g.respawnAt = Infinity;
+      g.graveyardNode = null;
+      addLog(`${g.def.name} ist gefallen und kehrt nicht zurück.`);
+    }
   }
 
   // Alle zum Zeitpunkt t fälligen Angriffe ausführen. Jeder Angreifer trifft
@@ -962,6 +1268,11 @@ export function createSim({ map, config, plans }) {
     }
     processEncounters(t);
     completeCaptures(t);
+    completeSupplyCaptures(t);
+    // Vorratsschwelle vor den Angriffen prüfen: Ein hier erscheinender
+    // Verbündeter startet noch im selben Zeitpunkt seinen Marsch (er steht am
+    // eigenen Boss und kämpft in diesem Batch ohnehin nicht).
+    checkAllySummon(t);
     const defeated = [];
     processAttacks(t, defeated);
     if (defeated.length) {
@@ -989,6 +1300,7 @@ export function createSim({ map, config, plans }) {
       if (g.state === 'atNode' && !g.fighting) continueOrders(g, t);
     }
     updateGraveyards(t);
+    updateSupplyCamps(t);
   }
 
   function nextEventTime() {
@@ -1007,6 +1319,11 @@ export function createSim({ map, config, plans }) {
       const cap = captures[gyId];
       if (cap) t = Math.min(t, cap.startedAt + graveyardCaptureTime);
     }
+    for (const campId of supplyCampIds) t = Math.min(t, supplyCaptureDueAt(campId));
+    // Genau ein Zeitpunkt je Fraktion: der Moment, in dem ihr Vorrat die
+    // Schwelle erreicht. Ohne gehaltenes Lager (oder nach dem Erscheinen des
+    // Verbündeten) ist er Infinity – die Patt-Erkennung bleibt damit intakt.
+    t = Math.min(t, allyDueAt('blue'), allyDueAt('red'));
     t = Math.min(t, earliestEncounterTime());
     return t;
   }
@@ -1041,6 +1358,7 @@ export function createSim({ map, config, plans }) {
   for (const g of groups) continueOrders(g, 0);
   updateCombatState(0);
   updateGraveyards(0);
+  updateSupplyCamps(0);
 
   return {
     groups,
@@ -1059,6 +1377,27 @@ export function createSim({ map, config, plans }) {
     },
     // Aktueller Friedhofszustand für Renderer/UI (Besitz + laufende Einnahmen).
     graveyards: { owner: gyOwner, captures },
+    // Aktueller Vorratszustand für Renderer/UI: Lagerliste, Besitz, laufende
+    // Einnahmen, Vorratsstand je Fraktion, Schwelle und ob der Verbündete einer
+    // Fraktion bereits erschienen ist.
+    supplyState: {
+      camps: supplyCampIds, // Kennungen in fester Reihenfolge
+      owner: supplyOwner, // feste Zuordnung nodeId → Fraktion
+      active: supplyActive, // in Betrieb genommen?
+      blocked: supplyBlocked, // vom Gegner besetzt und dadurch stillgelegt?
+      captures: supplyCaptures, // angefangene Inbetriebnahme { faction, since, progress }
+      // Geleistete Sekunden einer angefangenen Inbetriebnahme (0 = keine).
+      // Schließt den ruhenden Fortschritt ein – die Anzeige braucht die
+      // Zerlegung in `since`/`progress` damit nicht selbst nachzurechnen.
+      captureProgress: (nodeId) => supplyCaptureProgress(nodeId),
+      cost: allySupplyCost,
+      allySummoned,
+      captureTime: supplyCaptureTime,
+      // Stetig aufgelaufener Stand – nicht der zuletzt verbuchte Wert.
+      get supply() {
+        return { blue: supplyNow('blue'), red: supplyNow('red') };
+      },
+    },
     config,
     advance,
     get time() {
