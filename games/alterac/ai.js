@@ -23,8 +23,8 @@ export const AI_LEVELS = [
     label: 'Schwer',
     desc:
       'Wirbt die kampfstärkste Armee an, hält mit einer eingegrabenen Wache den eigenen ' +
-      'Boss-Schild, räumt die gegnerischen Türme konzentriert nacheinander und stürmt den Boss ' +
-      'erst, sobald dessen Schild gefallen ist.',
+      'Boss-Schild und räumt die gegnerischen Türme konzentriert nacheinander, bevor er den Boss ' +
+      'stürmt. Taugt der Schild wenig, geht er stattdessen sofort auf den Fürsten los.',
     plan: planHard,
   },
 ];

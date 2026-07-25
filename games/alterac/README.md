@@ -99,11 +99,21 @@ verdrahtete Knoten-, Typ- oder Fraktionsnamen:
 - **Armee:** exakte dynamische Programmierung über das Ressourcenbudget,
   maximiert die Summe der Kampfwerte (Lebenspunkte × Schaden pro Sekunde), bei
   Gleichstand gewinnt die Aufstellung mit mehr Einheiten.
+- **Doktrin (Türme oder direkt zum Boss?):** verglichen werden zwei
+  Zeitabschätzungen der Angriffsgruppe – der direkte Sturm
+  (`bossHp / (Schaden pro Sekunde × durchgelassener Anteil)`) gegen den Umweg
+  (Turm-LP je Turm + Umwegstrecke + `bossHp` bei vollem Schaden). Weil der Umweg
+  zusätzlich den Fürsten dauerhaft schwächt und der Kampf am ungeschützten Boss
+  billiger ist, gilt er bis zum Faktor `TOWER_DETOUR_TOLERANCE` (2, im Turnier
+  kalibriert) als lohnend. Beim Standard-Schild (95 %) fällt die Entscheidung
+  klar auf die Türme, bei schwach eingestelltem Schild auf den direkten Sturm.
 - **Wache:** je angefangene vier Einheiten eine – die zäheste – als eingegrabene
-  Wache auf dem eigenen Turm, über den die meisten gegnerischen Standardrouten
-  führen. Der Turm ist unverwundbar, solange sie steht, und ein stehender Turm
-  hält den Boss-Schild. Ohne Türme wird stattdessen der eigene Boss-Wegpunkt
-  gehalten, wo der Fürst samt Flächenschlag mitkämpft.
+  Wache. Steht der Schild (Doktrin „Türme"), bezieht sie den eigenen Turm, über
+  den die meisten gegnerischen Standardrouten führen: Der Turm ist unverwundbar,
+  solange sie lebt, und ein stehender Turm hält den Schild. Taugt der Schild
+  nichts (schwach eingestellt oder Türme aus), hält sie stattdessen den eigenen
+  Boss-Wegpunkt, wo der Fürst samt Flächenschlag mitkämpft. Mehr Wachen als
+  Posten stellen sich zusammen.
 - **Angriff:** der ganze Rest bleibt zusammen und arbeitet die gegnerischen
   Türme als Auftragskette („Dann") ab – zuerst den Nebenzugang (die wenigsten
   Routen führen dorthin: selten bewacht, und dem Gegner marschiert dort nicht
@@ -116,10 +126,22 @@ verdrahtete Knoten-, Typ- oder Fraktionsnamen:
   Einnahmedauer still und fehlt der Angriffsgruppe – im Turnier verlor diese
   Variante klar gegen die konzentrierte Aufstellung.
 
-Belastbarkeit: In einem Headless-Turnier (Hin- und Rückrunde über je 40
-Startwerte pro Einstellung) gewinnt „Schwer" gegen „Leicht" 95 % der Partien
-bei Standardeinstellungen, 100 % bei großen Budgets und 83 % im kleinsten
-Budget (Rest überwiegend Unentschieden durch das Zeitlimit).
+### Belastbarkeit (Headless-Turnier)
+
+Gemessen über 15 Einstellungen (Budgets, Türme an/aus, Boss- und Turmwerte,
+Respawn-Takt, Schildstärke), je 120 Partien in Hin- und Rückrunde – insgesamt
+1800 Partien je Paarung, gefahren direkt über `createSim` (ohne UI und Rendering):
+
+| Paarung | Siege | Niederlagen | Unentschieden | Ø Dauer |
+| --- | --- | --- | --- | --- |
+| Schwer gegen Leicht | **92 %** | 2 % | 6 % | 90 s |
+| Leicht gegen Leicht | 24 % | 24 % | 52 % | 217 s |
+| Schwer gegen Schwer | 3 % | 3 % | 93 % | 263 s |
+
+Keine Einstellung fällt unter 80 % Siege; im Schnitt behält „Schwer" dabei 88 %
+der eigenen Boss-Lebenspunkte und zerstört 1,9 der 2 gegnerischen Türme (die
+leichte Stufe 0,6). Das Spiegelduell endet fast immer unentschieden – zwei
+identische, deterministische Pläne heben sich gegenseitig auf.
 
 Für Entwicklung und Balancing lassen sich die Stufen direkt gegeneinander
 antreten lassen: `?test=sim&ai=hard,easy` (blau, rot) startet sofort eine
