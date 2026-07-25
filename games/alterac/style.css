@@ -89,6 +89,13 @@ html {
   font: inherit;
 }
 
+/* Erläuterung unter einem Auswahlfeld (z. B. Stärke des Computergegners). */
+.setup-card .field-hint {
+  color: #8a94a8;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
 .rules {
   background: #1a2030;
   border: 1px solid #3d3526;

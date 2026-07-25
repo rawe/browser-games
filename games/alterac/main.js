@@ -13,7 +13,7 @@ import {
 import { createSim } from './sim.js';
 import { createRenderer } from './render.js';
 import { createPlanner } from './planner.js';
-import { aiPlan } from './ai.js';
+import { aiPlan, AI_LEVELS, DEFAULT_AI_LEVEL } from './ai.js';
 import { lockZoomGestures } from './gestures.js';
 
 // Pinch-/Doppeltipp-Zoom auf Mobilgeräten (v. a. iOS) sperren – gilt für alle
@@ -56,6 +56,31 @@ function fillSelect(el, options, selectedValue) {
 }
 
 fillSelect(document.getElementById('opt-resources'), RESOURCE_OPTIONS, DEFAULT_CONFIG.resources);
+
+// ------------------------------------------------------- Stärke des Computergegners
+// Die Auswahl kommt datengetrieben aus AI_LEVELS (ai.js) und ist nur im Modus
+// „Gegen den Computer" sichtbar – im Hotseat gibt es keinen Computergegner.
+// Gewählt wird bei jedem Spielstart neu; das Ergebnis landet als `aiLevel` in
+// der Partie-Konfiguration, aus der `aiPlan` seinen Planer wählt.
+const modeSelect = document.getElementById('opt-mode');
+const aiLevelRow = document.getElementById('row-ai-level');
+const aiLevelSelect = document.getElementById('opt-ai-level');
+const aiLevelDesc = document.getElementById('ai-level-desc');
+
+fillSelect(
+  aiLevelSelect,
+  AI_LEVELS.map((l) => ({ value: l.key, label: l.label })),
+  DEFAULT_AI_LEVEL
+);
+
+function applyModeGate() {
+  aiLevelRow.hidden = modeSelect.value !== 'cpu';
+  aiLevelDesc.textContent = AI_LEVELS.find((l) => l.key === aiLevelSelect.value)?.desc ?? '';
+}
+
+modeSelect.addEventListener('change', applyModeGate);
+aiLevelSelect.addEventListener('change', applyModeGate);
+applyModeGate();
 
 // ---------------------------------------------- Erweiterte Einstellungen (Zahlenfelder)
 // Die Felder werden datengetrieben erzeugt: je Einheitentyp eine Gruppe aus
@@ -192,6 +217,8 @@ document.getElementById('setup-form').addEventListener('submit', (ev) => {
     ...DEFAULT_CONFIG,
     resources: Number(document.getElementById('opt-resources').value),
     towersPerFaction: towersToggle.checked ? TOWERS_ON_COUNT : 0,
+    // Stärke des Computergegners dieser Partie (nur im CPU-Modus wirksam).
+    aiLevel: aiLevelSelect.value,
     // Einheitenwerte aus dem Erweitert-Bereich (zentral via resolveUnitTypes gelesen).
     unitStats: readUnitStats(),
   };
@@ -200,7 +227,7 @@ document.getElementById('setup-form').addEventListener('submit', (ev) => {
     for (const field of section.fields) config[field.key] = readNumberField(field, `adv-${field.key}`, DEFAULT_CONFIG[field.key]);
   }
   view.config = config;
-  mode = document.getElementById('opt-mode').value;
+  mode = modeSelect.value;
   plans = { blue: null, red: null };
   startPlanning('blue');
 });
@@ -380,11 +407,14 @@ window.addEventListener('resize', () => {
 });
 
 // Testeinstieg für Entwicklung: ?test=sim startet direkt eine CPU-Schlacht.
+// Mit `&ai=<stufe>` bzw. `&ai=<blau>,<rot>` lassen sich die KI-Stufen der beiden
+// Seiten gezielt gegeneinander antreten lassen (z. B. ?test=sim&ai=hard,easy).
 const params = new URLSearchParams(location.search);
 if (params.get('test') === 'sim') {
   mode = 'cpu';
-  plans.blue = aiPlan(config, map, 'blue', () => 0.3);
-  plans.red = aiPlan(config, map, 'red', () => 0.8);
+  const [blueLevel, redLevel = blueLevel] = (params.get('ai') ?? DEFAULT_AI_LEVEL).split(',');
+  plans.blue = aiPlan(config, map, 'blue', () => 0.3, blueLevel);
+  plans.red = aiPlan(config, map, 'red', () => 0.8, redLevel);
   startSim();
 } else if (params.get('test') === 'plan') {
   startPlanning('blue');

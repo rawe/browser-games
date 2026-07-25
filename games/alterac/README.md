@@ -13,7 +13,9 @@ Eingriffe ab. Wer den gegnerischen Endboss fällt, gewinnt.
 | `sim.js`     | Simulationskern (DOM-frei, deterministisch, ereignisbasiert; liefert typisierte Ereignisse für Effekte); verwaltet auch Friedhofsbesitz, Einnahmen und Türme |
 | `map.js`     | Zentrale Kartenkonfiguration (Wegpunkte, Verbindungen, Friedhöfe samt Startbesitz und Heimat-Markierung, Routen, Wachposten, Turm-Standorte), Wegsuche, Friedhofswahl |
 | `planner.js` | Planungsphase (Rekrutierung aus dem Budget, Auftragskette je Einheit: Pfad, Haltung und Auslöser pro Auftrag) |
-| `ai.js`      | Computergegner (datengetrieben über Einheitentypen, Routen- und Turm-Konfiguration; greift gegnerische Türme an und verteidigt eigene) |
+| `ai.js`      | Computergegner: Stufenliste (`AI_LEVELS`) und Auswahl des Planers anhand von `config.aiLevel` |
+| `ai-easy.js` | Stufe „Leicht": zufällig gemischte Armee, grobe Marschbefehle |
+| `ai-hard.js` | Stufe „Schwer": kampfwertoptimierte Armee, Turmwache, konzentrierte Turmoffensive, Boss-Sturm per Event |
 | `render.js`  | Canvas-Rendering: Knoten, Token, Overlays, Wetter (keine Spiellogik) |
 | `terrain.js` | Vorgerenderter Landschafts-Hintergrund (Schneetal, Felswände, Wälder, Wege, Lager) |
 | `effects.js` | Partikeleffekte (Schadenszahlen, Funken, Geister, Respawn-Säulen, Boss-Sturz) |
@@ -75,6 +77,75 @@ sich Haltung und – ab dem zweiten – der Auslöser wählen. Braucht eine Bedi
 ein Subjekt („Gegnerischer Turm fällt"), tippt der Spieler den betreffenden
 gegnerischen Turm auf der Karte an; die Turm-Identität wird in die Bedingung
 eingefroren.
+
+## Computergegner: einstellbare Stärke
+
+Im Setup wird bei **jedem Spielstart** die Stärke des Computergegners gewählt –
+das Auswahlfeld erscheint nur im Modus „Gegen den Computer" (im Hotseat gibt es
+keinen). Die Auswahl landet als `aiLevel` in der Partie-Konfiguration; `aiPlan`
+(`ai.js`) wählt daraus den Planer. Die Stufenliste `AI_LEVELS` (Schlüssel,
+Anzeigename, Beschreibung, Planer) ist die einzige Stelle, an der eine neue
+Stufe ergänzt wird – die Setup-UI baut Auswahlfeld und Erläuterung daraus.
+
+| Stufe | Verhalten |
+| --- | --- |
+| **Leicht** (`ai-easy.js`) | Würfelt die Armee aus dem Budget zusammen, stellt ab mittlerer Größe ein bis zwei Wachen ab und schickt den Rest über zwei zufällig gewählte Standardrouten los. Ein Trupp nimmt einen zufälligen neutralen Friedhof, ein bis zwei nehmen gegnerische Türme ins Visier. Keine Auftragsketten, keine Events, keine Abstimmung. |
+| **Schwer** (`ai-hard.js`) | Spielt die Mechaniken gezielt aus (siehe unten). Deterministisch: gleiche Einstellungen ergeben denselben Aufmarsch. |
+
+Die harte Stufe leitet ihren Plan vollständig aus den Regeln und den
+Kartendaten ab (Wegenetz, Turm-Standorte, Routen, Einheitenwerte) – ohne fest
+verdrahtete Knoten-, Typ- oder Fraktionsnamen:
+
+- **Armee:** exakte dynamische Programmierung über das Ressourcenbudget,
+  maximiert die Summe der Kampfwerte (Lebenspunkte × Schaden pro Sekunde), bei
+  Gleichstand gewinnt die Aufstellung mit mehr Einheiten.
+- **Doktrin (Türme oder direkt zum Boss?):** verglichen werden zwei
+  Zeitabschätzungen der Angriffsgruppe – der direkte Sturm
+  (`bossHp / (Schaden pro Sekunde × durchgelassener Anteil)`) gegen den Umweg
+  (Turm-LP je Turm + Umwegstrecke + `bossHp` bei vollem Schaden). Weil der Umweg
+  zusätzlich den Fürsten dauerhaft schwächt und der Kampf am ungeschützten Boss
+  billiger ist, gilt er bis zum Faktor `TOWER_DETOUR_TOLERANCE` (2, im Turnier
+  kalibriert) als lohnend. Beim Standard-Schild (95 %) fällt die Entscheidung
+  klar auf die Türme, bei schwach eingestelltem Schild auf den direkten Sturm.
+- **Wache:** je angefangene vier Einheiten eine – die zäheste – als eingegrabene
+  Wache. Steht der Schild (Doktrin „Türme"), bezieht sie den eigenen Turm, über
+  den die meisten gegnerischen Standardrouten führen: Der Turm ist unverwundbar,
+  solange sie lebt, und ein stehender Turm hält den Schild. Taugt der Schild
+  nichts (schwach eingestellt oder Türme aus), hält sie stattdessen den eigenen
+  Boss-Wegpunkt, wo der Fürst samt Flächenschlag mitkämpft. Mehr Wachen als
+  Posten stellen sich zusammen.
+- **Angriff:** der ganze Rest bleibt zusammen und arbeitet die gegnerischen
+  Türme als Auftragskette („Dann") ab – zuerst den Nebenzugang (die wenigsten
+  Routen führen dorthin: selten bewacht, und dem Gegner marschiert dort nicht
+  seine ausrückende Armee zu Hilfe), danach den Hauptzugang. Nach dem letzten
+  Turm greift der reguläre Fallback: Marsch auf den Boss, der dann ungeschützt
+  und durch den Turm-Debuff geschwächt ist.
+- **Boss-Sturm:** die Wachen tragen einen „Sobald"-Auftrag auf die Bedingung
+  *Boss-Schild des Gegners fällt* und stoßen genau in diesem Moment nach.
+- **Bewusst weggelassen:** ein eigener Friedhofsläufer. Er steht die volle
+  Einnahmedauer still und fehlt der Angriffsgruppe – im Turnier verlor diese
+  Variante klar gegen die konzentrierte Aufstellung.
+
+### Belastbarkeit (Headless-Turnier)
+
+Gemessen über 15 Einstellungen (Budgets, Türme an/aus, Boss- und Turmwerte,
+Respawn-Takt, Schildstärke), je 120 Partien in Hin- und Rückrunde – insgesamt
+1800 Partien je Paarung, gefahren direkt über `createSim` (ohne UI und Rendering):
+
+| Paarung | Siege | Niederlagen | Unentschieden | Ø Dauer |
+| --- | --- | --- | --- | --- |
+| Schwer gegen Leicht | **92 %** | 2 % | 6 % | 90 s |
+| Leicht gegen Leicht | 24 % | 24 % | 52 % | 217 s |
+| Schwer gegen Schwer | 3 % | 3 % | 93 % | 263 s |
+
+Keine Einstellung fällt unter 80 % Siege; im Schnitt behält „Schwer" dabei 88 %
+der eigenen Boss-Lebenspunkte und zerstört 1,9 der 2 gegnerischen Türme (die
+leichte Stufe 0,6). Das Spiegelduell endet fast immer unentschieden – zwei
+identische, deterministische Pläne heben sich gegenseitig auf.
+
+Für Entwicklung und Balancing lassen sich die Stufen direkt gegeneinander
+antreten lassen: `?test=sim&ai=hard,easy` (blau, rot) startet sofort eine
+Schlacht ohne Planungsphase.
 
 ## Einheiten und Ressourcen
 
