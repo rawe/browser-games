@@ -172,20 +172,26 @@ export const DEFAULT_CONFIG = {
   bossTowerShield: 0.95,
 
   // --------------------------------------------------------- Vorratslager
-  // Zwei markierte Wegpunkte (`supply` in map.js) sind Vorratslager. Sie starten
-  // neutral, werden wie Friedhöfe eingenommen und bleiben danach im Besitz –
-  // eine Wache ist nicht nötig. Alle `supplyTickTime` Sekunden erhält jede
-  // Fraktion +1 Vorrat je Lager, das sie in diesem Moment hält (globaler Takt,
-  // wie die Respawn-Wellen). Bei `allySupplyCost` wird der Vorrat verbraucht und
-  // der mächtige Verbündete erscheint – einmal je Fraktion und Partie.
+  // Zwei markierte Wegpunkte (`supply` in map.js) sind Vorratslager, je eines
+  // fest je Fraktion – der Besitz wechselt nie. Ein Lager startet inaktiv und
+  // liefert erst, wenn eine eigene Einheit es `supplyCaptureTime` Sekunden lang
+  // in Betrieb genommen hat; danach dauerhaft, auch ohne Wache. Auf Einnahme wie
+  // Blockade wirkt nur, wer das Lager ausdrücklich als Pfadziel plant –
+  // Durchmarsch zählt nie. Der Fortschritt einer angefangenen Inbetriebnahme
+  // verfällt nicht, er ruht (siehe design-vorratslager.md).
+  //
+  // Zeitrechnung: `supplyCaptureTime` + `allySupplyCost × supplyTickTime` ist die
+  // Gesamtdauer vom Eintreffen des Läufers bis zum Verbündeten. Sie ist der
+  // eigentliche Balancing-Hebel – liegt sie zu nah an der Partiedauer, kommt der
+  // Verbündete zu spät, um noch etwas zu bedeuten.
   supplyEnabled: true, // Vorratslager aktiv (Setup-Schalter; aus = System komplett inaktiv)
-  supplyCaptureTime: 8, // Sekunden ununterbrochener Präsenz bis zur Einnahme eines Lagers
-  supplyTickTime: 5, // Sekunden zwischen zwei Nachschub-Takten
-  allySupplyCost: 12, // Vorrat, der den Verbündeten herbeiruft
+  supplyCaptureTime: 6, // Sekunden Arbeit bis zur Inbetriebnahme eines Lagers
+  supplyTickTime: 4, // Sekunden je Vorratspunkt eines liefernden Lagers
+  allySupplyCost: 10, // Vorrat, der den Verbündeten herbeiruft
   allyHp: 60, // maximale Hitpoints des Verbündeten
   allyDamage: 20, // Schaden pro Angriff
   allyAttackInterval: 1.5, // Sekunden zwischen zwei Angriffen
-  allySpeed: 1, // Bewegungstempo (fester Datei-Default wie edgeTime)
+  allySpeed: 1, // Bewegungstempo (1 = Basistempo, wie bei den Einheitentypen)
 };
 
 // ------------------------------------------------------- Erweitertes Konfig-Menü
@@ -222,17 +228,33 @@ export const CONFIG_SECTIONS = [
       { key: 'bossDamageFloor', label: 'Boss-Mindestschaden', min: 0, max: 100, step: 5, kind: 'percent', unit: '%' },
     ],
   },
+  // Die Vorratsmechanik belegt bewusst ZWEI Sektionen: Die erste stellt den Weg
+  // zum Verbündeten ein (wie lange dauert es?), die zweite den Verbündeten
+  // selbst (was kann er?). Sie hängen an demselben Gate `supply`, werden also
+  // gemeinsam mit dem Setup-Schalter ausgegraut.
   {
     key: 'supply',
     label: 'Vorratslager',
     gate: 'supply',
     fields: [
-      { key: 'supplyCaptureTime', label: 'Einnahmedauer Lager', min: 3, max: 30, step: 1, kind: 'int', unit: 's' },
-      { key: 'supplyTickTime', label: 'Nachschub-Takt', min: 1, max: 20, step: 1, kind: 'int', unit: 's' },
+      { key: 'supplyCaptureTime', label: 'Inbetriebnahme', min: 1, max: 30, step: 1, kind: 'int', unit: 's' },
+      { key: 'supplyTickTime', label: 'Nachschub je Vorrat', min: 1, max: 20, step: 1, kind: 'int', unit: 's' },
       { key: 'allySupplyCost', label: 'Vorrat für Verbündeten', min: 2, max: 60, step: 1, kind: 'int' },
-      { key: 'allyHp', label: 'Verbündeter: LP', min: 10, max: 300, step: 5, kind: 'int' },
-      { key: 'allyDamage', label: 'Verbündeter: Schaden', min: 1, max: 80, step: 1, kind: 'int' },
-      { key: 'allyAttackInterval', label: 'Verbündeter: Angriffsintervall', min: 0.2, max: 5, step: 0.1, kind: 'float', unit: 's' },
+    ],
+  },
+  // Zahlenwerte des Verbündeten – dieselben Größen und Grenzen wie in
+  // UNIT_STAT_FIELDS für die anwerbbaren Typen, nur ohne `cost`: Er wird nicht
+  // gekauft, sondern über den Vorrat verdient. Gelesen werden sie ausschließlich
+  // über resolveAllyType().
+  {
+    key: 'ally',
+    label: 'Mächtiger Verbündeter',
+    gate: 'supply',
+    fields: [
+      { key: 'allyHp', label: 'Lebenspunkte', min: 10, max: 300, step: 5, kind: 'int', unit: 'LP' },
+      { key: 'allyDamage', label: 'Schaden', min: 1, max: 80, step: 1, kind: 'int' },
+      { key: 'allyAttackInterval', label: 'Angriffsintervall', min: 0.2, max: 5, step: 0.1, kind: 'float', unit: 's' },
+      { key: 'allySpeed', label: 'Tempo', min: 0.3, max: 3, step: 0.05, kind: 'float', unit: '×' },
     ],
   },
   {

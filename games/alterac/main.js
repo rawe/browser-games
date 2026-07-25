@@ -85,9 +85,9 @@ applyModeGate();
 
 // ---------------------------------------------- Erweiterte Einstellungen (Zahlenfelder)
 // Die Felder werden datengetrieben erzeugt: je Einheitentyp eine Gruppe aus
-// UNIT_STAT_FIELDS (schreibt nach config.unitStats), dazu die Boss-/Turm-Gruppen
-// aus CONFIG_SECTIONS (schreiben direkt in config[key]). Prozent-Felder zeigen
-// im Menü ganze Prozent, intern bleibt der Anteil (0–1) erhalten.
+// UNIT_STAT_FIELDS (schreibt nach config.unitStats), dazu je eine Gruppe pro
+// Sektion aus CONFIG_SECTIONS (schreiben direkt in config[key]). Prozent-Felder
+// zeigen im Menü ganze Prozent, intern bleibt der Anteil (0–1) erhalten.
 const advancedGroups = document.getElementById('advanced-groups');
 
 // Setup-Schalter, die ein ganzes Teilsystem abschalten (Türme, Vorratslager …).
@@ -165,7 +165,9 @@ function buildAdvanced() {
     }
     advancedGroups.appendChild(group);
   }
-  // Danach die Boss-/Turm-Gruppen aus CONFIG_SECTIONS.
+  // Danach die übrigen Gruppen aus CONFIG_SECTIONS (Zeiten, Türme, Vorratslager,
+  // Verbündeter, Boss) – rein datengetrieben: Eine neue Sektion dort erscheint
+  // hier ohne Zutun, samt Gate.
   for (const section of CONFIG_SECTIONS) {
     const group = document.createElement('fieldset');
     group.className = 'advanced-group';
@@ -237,7 +239,7 @@ document.getElementById('setup-form').addEventListener('submit', (ev) => {
     // Einheitenwerte aus dem Erweitert-Bereich (zentral via resolveUnitTypes gelesen).
     unitStats: readUnitStats(),
   };
-  // Feinwerte aus dem Erweitert-Bereich übernehmen (bossHp, Boss- und Turmwerte).
+  // Feinwerte aller Sektionen aus dem Erweitert-Bereich übernehmen.
   for (const section of CONFIG_SECTIONS) {
     for (const field of section.fields) config[field.key] = readNumberField(field, `adv-${field.key}`, DEFAULT_CONFIG[field.key]);
   }

@@ -301,20 +301,31 @@ Jede Fraktion erreicht ihr eigenes Lager in zwei, das gegnerische in drei
 Wegstücken, und der automatische Marsch führt jede Seite am Lager der anderen
 vorbei.
 
+Die ganze Mechanik steht auf **einer** Regel: Auf ein Lager wirkt nur, wer es
+**ausdrücklich als Pfadziel** plant – für die Inbetriebnahme wie für die
+Blockade. Wer bloß durchmarschiert, tut beides nicht. Das ist entscheidend, weil
+der Anmarschweg ohnehin an den Lagern vorbeiführt: Zählte bloße Anwesenheit,
+zerstörte reiner Zufallsverkehr jede Inbetriebnahme, ohne dass der Gegner es
+beabsichtigt oder etwas dafür bezahlt hätte. Störung soll eine Entscheidung
+sein, die eine Einheit bindet. (Dieselbe Unterscheidung gilt bei den Türmen, wo
+bloßes Durchqueren keinen Turmkampf auslöst.)
+
 - **Inbetriebnahme:** Ein Lager startet inaktiv. Eine Einheit der Besitzer-
   fraktion muss es **ausdrücklich als Pfadziel** haben und `supplyCaptureTime`
-  Sekunden ununterbrochen dort stehen, während ihre Fraktion allein vor Ort ist –
-  dieselbe Regel wie bei der Friedhofseinnahme, jede Störung setzt den
-  Fortschritt auf 0. Danach liefert das Lager **dauerhaft**, auch wenn die
-  Einheit weiterzieht; eine Wache ist nicht nötig.
+  Sekunden daran arbeiten. Aufhalten kann sie nur ein Gegner, der das Lager
+  seinerseits ausdrücklich besetzt. **Der Fortschritt verfällt dabei nie** – er
+  ruht. Fällt der Läufer, setzt der nächste dort fort, wo dieser aufhörte;
+  `supplyCaptureTime` heißt „so viele Sekunden insgesamt", nicht „am Stück".
+  Danach liefert das Lager **dauerhaft**, auch wenn die Einheit weiterzieht;
+  eine Wache ist nicht nötig.
 - **Blockade:** Solange eine gegnerische Einheit das Lager **ausdrücklich
-  besetzt** (auch ihr Pfad endet dort), stockt der Nachschub. Zieht sie ab oder
-  fällt sie, liefert es sofort wieder – die Inbetriebnahme geht nie verloren.
-  Ein bloßer **Durchmarsch blockiert nicht**: Weil der Anmarschweg des Gegners
-  ohnehin am Lager vorbeiführt, würde sonst Zufallsverkehr den Nachschub
-  permanent zerreißen. Dieselbe Unterscheidung gilt bei den Türmen, wo bloßes
-  Durchqueren keinen Turmkampf auslöst. Wer ein gegnerisches Lager besetzt, hält
-  die Stellung – sein Auftrag gilt nie als erledigt.
+  besetzt**, stockt der Nachschub. Zieht sie ab oder fällt sie, liefert es
+  sofort wieder – die Inbetriebnahme geht nie verloren, der bereits gesammelte
+  Vorrat auch nicht. Wer ein gegnerisches Lager besetzt, hält die Stellung –
+  sein Auftrag gilt nie als erledigt.
+- **Das Gegenmittel:** Wer den Läufer erschlägt, hält die Inbetriebnahme an –
+  sie verliert nur nichts mehr. Ein laufendes Lager stillzulegen kostet dagegen
+  dauerhaft eine abgestellte Einheit. Beides ist eine Entscheidung mit Preis.
 - **Nachschub:** Ein lieferndes Lager bringt einen Vorratspunkt je
   `supplyTickTime`. Der Vorrat läuft **stetig** auf und wird nur bei
   Zustandswechseln verbucht; daraus ist der Moment des Schwellenübertritts exakt
@@ -333,10 +344,21 @@ Anders als im Original sind beide Verbündete **exakt gleich stark** – dort is
 Lokholar schwächer, wächst aber mit jedem Kill, während Ivus stark startet und
 nicht skaliert. Diese Asymmetrie ist bewusst nicht übernommen.
 
-Alle Werte (`supplyCaptureTime`, `supplyTickTime`, `allySupplyCost`, `allyHp`,
-`allyDamage`, `allyAttackInterval`) stehen in `config.js` und sind im
-Erweitert-Menü feinjustierbar; der Setup-Schalter **„Vorratslager aktiv"**
-schaltet das System ganz ab (`supplyEnabled: false`).
+**Zeitrechnung:** `supplyCaptureTime` + `allySupplyCost × supplyTickTime` ergibt
+die Gesamtdauer ab Eintreffen des Läufers – im Standard **6 s + 10 × 4 s = 46 s**.
+Sie ist der eigentliche Balancing-Hebel: Liegt sie zu nah an der Partiedauer,
+kommt der Verbündete zu spät, um noch etwas zu bedeuten.
+
+Alle Werte stehen in `config.js` und sind im Erweitert-Menü feinjustierbar,
+aufgeteilt auf zwei Sektionen:
+
+| Sektion | Werte |
+| --- | --- |
+| **Vorratslager** | `supplyCaptureTime` (Inbetriebnahme), `supplyTickTime` (Nachschub je Vorrat), `allySupplyCost` (Vorrat für Verbündeten) |
+| **Mächtiger Verbündeter** | `allyHp`, `allyDamage`, `allyAttackInterval`, `allySpeed` – dieselben Größen wie bei den anwerbbaren Einheitentypen, nur ohne Kosten: Er wird nicht gekauft, sondern über den Vorrat verdient. |
+
+Der Setup-Schalter **„Vorratslager aktiv"** schaltet das System ganz ab
+(`supplyEnabled: false`) und graut beide Sektionen aus.
 
 ## Türme
 

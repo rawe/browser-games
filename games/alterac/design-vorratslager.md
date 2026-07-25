@@ -77,45 +77,75 @@ die beiden Systeme sollen sich unterscheiden.
 
 ## 3. Inbetriebnahme, Betrieb und Blockade
 
-Ein Lager kennt drei Zustände: **inaktiv** (Ausgangslage), **in Betrieb** und
-**blockiert**.
+Ein Lager kennt vier Zustände: **inaktiv** (Ausgangslage), **in Arbeit**
+(Inbetriebnahme läuft oder ruht), **in Betrieb** und **blockiert**.
 
-**Inbetriebnahme** – nach dem Vorbild der Friedhofseinnahme, damit der Spieler
-keine zweite Regel lernen muss:
+Die ganze Mechanik steht auf **einer** Regel:
 
-- Eine Einheit der **Besitzerfraktion** muss das Lager **ausdrücklich als Ziel**
-  geplant haben (ihr Pfad endet dort).
-- Sie verlangt **ununterbrochene Präsenz** über `supplyCaptureTime`, während die
-  eigene Fraktion **allein vor Ort** ist; mehrere eigene Einheiten verkürzen nichts.
-- Jede Unterbrechung – Kampf, Verlust der Präsenz – setzt den Fortschritt
-  **vollständig auf 0**.
+> Auf ein Lager wirkt nur, wer es **ausdrücklich als Pfadziel** plant – für die
+> Inbetriebnahme wie für die Blockade. Wer bloß durchmarschiert, tut beides nicht.
+
+**Inbetriebnahme:**
+
+- Eine Einheit der **Besitzerfraktion** muss das Lager ausdrücklich als Ziel
+  haben (ihr Pfad endet dort) und `supplyCaptureTime` daran arbeiten; mehrere
+  eigene Einheiten verkürzen nichts.
+- Aufhalten kann sie nur ein Gegner, der das Lager **seinerseits ausdrücklich
+  besetzt**. Dann ruht die Arbeit.
+- **Der Fortschritt verfällt nie.** Ruht die Arbeit – weil der Läufer fällt,
+  abzieht oder ein Besetzer eintrifft –, wird der erreichte Stand verbucht und
+  bleibt liegen. Der nächste Läufer setzt dort fort, wo der letzte aufhörte.
 - Danach liefert das Lager **dauerhaft**, auch wenn die Einheit weiterzieht. Sie
   ist wieder frei und muss keine Wache stehen.
 
-Das ist die zentrale Balance-Entscheidung: Ein Lager kostet **einmalig** Zeit,
-nicht dauerhaft eine Einheit. Bei vier Einheiten je Seite wäre ein dauerhaft
-abgestellter Sammler zu teuer – der Abstecher würde sich nie lohnen, genau wie
-heute der Friedhofsläufer.
+**Blockade** – der Hebel des Gegners gegen ein bereits laufendes Lager:
 
-**Blockade** – der einzige Hebel des Gegners:
-
-- Solange eine **gegnerische** Einheit das Lager **ausdrücklich besetzt** (auch
-  ihr Pfad endet dort), liefert es nichts.
+- Solange eine **gegnerische** Einheit das Lager ausdrücklich besetzt, liefert
+  es nichts.
 - Zieht sie ab oder fällt sie, liefert es **sofort wieder** – die einmal
   erfolgte Inbetriebnahme geht nie verloren.
-- Ein bloßer **Durchmarsch blockiert nicht**. Das ist wichtig, weil der
-  Anmarschweg des Gegners ohnehin am Lager vorbeiführt: Ohne diese Regel wäre
-  der Nachschub permanent durch Zufallsverkehr zerrissen, ohne dass irgendwer
-  es beabsichtigt. Dieselbe Unterscheidung gilt schon bei den Türmen, wo bloßes
-  Durchqueren keinen Turmkampf auslöst.
 - Wer ein gegnerisches Lager besetzt, **hält die Stellung**: Sein Auftrag gilt
   nie als erledigt, er marschiert also nicht von selbst weiter.
 
-Der Unterschied zwischen „ausdrücklich" und „im Vorbeigehen" wirkt genau dort,
-wo er soll. Während der Inbetriebnahme steht ohnehin eine eigene Einheit am
-Lager – ein ankommender Feind löst dann automatisch einen Kampf aus und
-unterbricht, ganz gleich was er vorhatte. Erst im laufenden Betrieb, wenn das
-Lager unbewacht ist, entscheidet die Absicht des Gegners.
+### Warum genau so – die Korrektur einer toten Mechanik
+
+Der erste Entwurf folgte der **Friedhofsregel**: ununterbrochene Präsenz, allein
+vor Ort, jede Störung wirft den Fortschritt auf 0. Damit war die Mechanik
+**praktisch tot** – in 0 von 16 gemessenen Partien kam der Verbündete zustande,
+selbst mit einem erzwungenen Läufer.
+
+Die Ursache war strukturell, keine Zahlenfrage. Das Lager `ws` ist der einzige
+Zugang zum Nebenturm `swest`; jede Turmoffensive des Gegners läuft zwangsläufig
+mitten hindurch (gespiegelt gilt dasselbe für `en` und `reast`). Zählte bloße
+Anwesenheit, zerstörte **reiner Zufallsverkehr** jede Inbetriebnahme – ohne dass
+der Gegner es beabsichtigt oder irgendetwas dafür bezahlt hätte. Die
+Inbetriebnahme (8 s) war zudem länger als das Zeitfenster bis zum Eintreffen der
+feindlichen Hauptmacht (~7 s), das Fenster ging also nie auf.
+
+Die Regel stand damit **an der falschen Stelle streng**: Das Verwundbare – die
+Inbetriebnahme – kostete den Gegner nichts, das Robuste – die laufende Lieferung
+– kostete ihn eine dauerhaft gebundene Einheit. Der teure Hebel war genau der,
+den er nie brauchte.
+
+Beide Korrekturen zusammen drehen das um:
+
+1. **Dieselbe Bedingung für Einnahme und Blockade.** Stören kostet immer eine
+   Einheit, die dafür abgestellt wird. Das macht die Regel gleichzeitig
+   *einfacher* (eine statt zwei) und die Mechanik erst spielbar.
+2. **Fortschritt ruht statt zu verfallen.** `supplyCaptureTime` heißt „so viele
+   Sekunden insgesamt", nicht „am Stück". Ein Läufer darf fallen, ohne dass
+   seine Arbeit verloren ist.
+
+Das Gegenmittel bleibt erhalten und ist sogar das naheliegendste: **Wer den
+Läufer erschlägt, hält die Inbetriebnahme an.** Sie verliert nur nichts mehr.
+
+Gemessen nach der Änderung (`tools/allyab.mjs`, gleiche Armee mit und ohne
+Lagerlauf): Das Lager geht in **100 %** der Partien in Betrieb – vorher 0 %.
+
+Das ist auch die zentrale Balance-Entscheidung: Ein Lager kostet **einmalig**
+Zeit, nicht dauerhaft eine Einheit. Bei vier Einheiten je Seite wäre ein
+dauerhaft abgestellter Sammler zu teuer – der Abstecher würde sich nie lohnen,
+genau wie heute der Friedhofsläufer.
 
 ## 4. Vorrat: stetiger Nachschub
 
@@ -134,9 +164,9 @@ wie bei den Respawn-Wellen)? Weil ein Rasterpunkt, der zwischen zwei Batches
 fällt, nachgeholt werden müsste – und ob das passiert, hinge davon ab, ob
 zufällig anderswo auf der Karte ein Kampf für einen Zwischen-Batch sorgt.
 Deterministisch wäre das zwar, aber der Spieler könnte nicht mehr vorhersagen,
-wann sein Verbündeter kommt: mal 55, mal 60 Sekunden nach der Einnahme. Stetiger
-Nachschub macht daraus eine feste Zusage – **ein Lager = 60 s bis zum
-Verbündeten**, immer.
+wann sein Verbündeter kommt: mal 36, mal 40 Sekunden nach der Inbetriebnahme.
+Stetiger Nachschub macht daraus eine feste Zusage – **ein laufendes Lager = 40 s
+bis zum Verbündeten**, immer.
 
 ## 5. Der Verbündete
 
@@ -173,18 +203,45 @@ dafür, dass der Gegner ihn kommen sieht und abfangen kann.
   denkbar; der Vorrat ist bewusst als allgemeine Währung modelliert, damit eine
   zweite Verwendung nur eine Auswahl in der Planung braucht.
 
-## 6. Zahlenwerte (Startpunkt, im Turnier kalibriert)
+## 6. Zahlenwerte (im Turnier kalibriert)
 
-| Wert | Schlüssel | Start | Begründung |
+| Wert | Schlüssel | Wert | Begründung |
 | --- | --- | --- | --- |
-| Inbetriebnahme | `supplyCaptureTime` | 8 s | Etwas kürzer als die Friedhofseinnahme (10 s): Das Lager liegt auf dem Hauptweg und ist deutlich schwerer ungestört zu halten. |
-| Rate | `supplyTickTime` | 5 s | Ein laufendes Lager liefert 12 Vorrat in 60 s. |
-| Schwelle | `allySupplyCost` | 12 | Der Verbündete erscheint nach ≈ 70 s inklusive Anmarsch und Inbetriebnahme – spät genug, dass die Turmoffensive nicht ausgestochen wird. |
+| Inbetriebnahme | `supplyCaptureTime` | 6 s | Deutlich kürzer als die Friedhofseinnahme (10 s): Das Lager liegt auf dem Hauptweg und ist schwerer ungestört zu halten. |
+| Rate | `supplyTickTime` | 4 s | Ein laufendes Lager liefert 10 Vorrat in 40 s. |
+| Schwelle | `allySupplyCost` | 10 | Zusammen **46 s Gesamtdauer** ab Eintreffen des Läufers. |
 | Verbündeter | `allyHp` / `allyDamage` / `allyAttackInterval` / `allySpeed` | 60 / 20 / 1,5 s / 1,0 | Kampfwert 800 ≈ 2,4 schwere Einheiten, also ungefähr +50 % auf eine Armee aus vier schweren Einheiten. |
 
-Alle Werte stehen in `config.js` und sind im Erweitert-Menü feinjustierbar; der
-Setup-Schalter **„Vorratslager aktiv"** schaltet das ganze System ab
-(`supplyEnabled: false`), analog zum Türme-Schalter.
+Der eigentliche Hebel ist die **Gesamtdauer** `supplyCaptureTime +
+allySupplyCost × supplyTickTime`. Sie entscheidet, ob der Verbündete die Partie
+überhaupt noch erreicht. Gemessen (`tools/allyab.mjs`, gemittelt über alle
+Budgets, je 16 Partien):
+
+| Gesamtdauer | Lager läuft | Verbündeter erscheint | Ø Ruf |
+| --- | --- | --- | --- |
+| 68 s (8 s + 12 × 5 s, alter Stand) | 100 % | 32/64 | 90 s |
+| **46 s (6 s + 10 × 4 s)** | **100 %** | **32/64** | **68 s** |
+| 38 s (6 s + 8 × 4 s) | 100 % | 32/64 | 60 s |
+| 29 s (5 s + 8 × 3 s) | 100 % | 32/64 | 51 s |
+| 22 s (4 s + 6 × 3 s) | 100 % | 48/64 | 38 s |
+
+Gewählt sind **46 s**. Die alten 68 s riefen den Verbündeten erst nach Ø 90 s –
+zu spät, um in einer Partie von Ø 190 s (Schwer gegen Schwer) noch zu wirken.
+Kürzere Werte holen ihn früher, machen den Läufer aber bei großen Budgets
+übermächtig.
+
+Dass der Verbündete nur in 32 von 64 Partien erscheint, ist **kein Zahlenproblem
+und beabsichtigt**: Er kommt bei 18 und 24 Ressourcen zuverlässig (16/16), bei 8
+und 12 nie. Dort ist die Partie schon entschieden, bevor er fällig wäre – eine
+von vier Einheiten für einen Abstecher abzustellen, ist bei kleinem Budget ein
+echtes Opfer. Kürzere Werte ändern daran nichts (bei 29 s ebenfalls 0/16). Genau
+das soll die Mechanik sein: eine Entscheidung mit Preis, kein Automatismus.
+
+Alle Werte stehen in `config.js` und sind im Erweitert-Menü feinjustierbar –
+aufgeteilt auf die Sektionen **„Vorratslager"** (Zeiten und Schwelle) und
+**„Mächtiger Verbündeter"** (seine Kampfwerte, dieselben Größen wie bei den
+anwerbbaren Einheitentypen). Der Setup-Schalter **„Vorratslager aktiv"** schaltet
+das ganze System ab (`supplyEnabled: false`), analog zum Türme-Schalter.
 
 **Kalibrierungsregel:** Die Werte sind dann richtig, wenn ein Computergegner mit
 Lagerstrategie gegen einen ohne Lagerstrategie ungefähr ausgeglichen abschneidet.
@@ -195,12 +252,13 @@ deutlich, ist er sinnlos. Gemessen wird headless über `createSim`.
 
 Das ereignisbasierte Zeitmodell bleibt vollständig intakt:
 
-1. **Inbetriebnahmen** verhalten sich exakt wie Friedhofseinnahmen: Ihr
-   Abschlusszeitpunkt (`startedAt + supplyCaptureTime`) fließt in
-   `nextEventTime` ein, Start und Abbruch werden am Ende eines Batches
-   ausgewertet. Eine **Blockade** ändert nur die Rate und erzeugt keinen neuen
-   Zeitpunkt – der Vorrat wird beim Zustandswechsel abgerechnet
-   (`settleSupply`), bevor die neue Rate gilt.
+1. **Inbetriebnahmen** werden wie Friedhofseinnahmen am Ende eines Batches
+   ausgewertet. Ihr Abschlusszeitpunkt ist `since + (supplyCaptureTime −
+   progress)` und fließt über `supplyCaptureDueAt` in `nextEventTime` ein; ruht
+   die Arbeit, ist er `Infinity`. Der Fortschritt wird bei jedem Wechsel
+   zwischen Arbeiten und Ruhen verbucht – nach demselben Muster wie der Vorrat
+   bei `settleSupply`, damit eine geänderte Rate nie rückwirkend gilt. Eine
+   **Blockade** ändert nur die Rate und erzeugt keinen neuen Zeitpunkt.
 2. **Der Schwellenzeitpunkt** ist pro Fraktion genau ein Ereignis
    (`allyDueAt`), berechnet aus verbuchtem Stand und aktueller Rate. Liefert das
    Lager gerade nicht oder ist der Verbündete bereits erschienen, ist er
