@@ -57,6 +57,17 @@ export function planEasy(config, map, faction, rng = Math.random) {
     attackers[attackers.length - 1].path = [neutral[Math.floor(rng() * neutral.length)]];
   }
 
+  // Vorratslager: Ab mittlerer Armeegröße schickt die leichte Stufe gelegentlich
+  // eine Einheit zum eigenen Lager (map.supplyCampOf) – Pfadende = Lager, sonst
+  // wäre es nur ein Durchmarsch. Sie bleibt in Haltung „Angriff" stehen, bis das
+  // Lager liefert, und zieht dann von selbst weiter zum gegnerischen Fürsten.
+  // Bewusst grob und zufällig: Diese Stufe rechnet nicht nach, ob sich der
+  // Umweg lohnt (die Abwägung steht in ai-hard.js).
+  const ownCamp = config.supplyEnabled ? (map.supplyCampOf?.[faction] ?? null) : null;
+  if (ownCamp && attackers.length >= 3 && rng() < 0.5) {
+    attackers[0].path = [ownCamp];
+  }
+
   // Türme: ein Teil der bossgebundenen Angreifer nimmt gegnerische Türme ins
   // Visier – der Pfad endet am Turm, wodurch der Turm angegriffen wird; nach
   // seiner Zerstörung schwächt das den gegnerischen Fürsten. Es bleibt stets
