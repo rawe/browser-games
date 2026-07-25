@@ -55,12 +55,26 @@ import { resolveUnitTypeMap } from './config.js';
 
 const EPS = 1e-6;
 
-// plans: { blue: units[], red: units[] } mit units[i] =
-//   { type: unitTypeKey, path: [nodeId…], stance: 'attack' | 'defend' }
-// `path` ist eine Folge benachbarter Wegpunkte ab dem eigenen Startpunkt und
-// wird exakt abgelaufen. Danach greift die Einheit automatisch den
-// gegnerischen Boss an ('attack') oder hält den letzten Wegpunkt ('defend');
-// ein leerer Pfad bedeutet Direktmarsch zum Boss bzw. Verteidigung der Basis.
+// plans: { blue: units[], red: units[] } mit units[i] entweder
+//   – neu:    { type, actions: [{ path, stance, trigger }, …] }
+//   – legacy: { type, path: [nodeId…], stance: 'attack' | 'defend' }
+// Legacy-Pläne werden zu einer Ein-Auftrag-Kette normalisiert.
+//
+// Auftragskette: Jede Einheit arbeitet eine geordnete Liste von Aufträgen ab.
+// Ein Auftrag ist ein Pfad benachbarter Wegpunkte plus Haltung – wie das frühere
+// Einzelmodell. `trigger`:
+//   – null / { kind: 'then' }  → sequenziell: der Auftrag startet, sobald der
+//     vorige fertig ist (Pfad abgelaufen und Ziel-Turm zerstört). Der erste
+//     Auftrag ist immer sequenziell und startet ab Sekunde 0.
+//   – { kind: 'when', cond }   → Reaktion: sobald `cond` wahr wird, wirft die
+//     Einheit ihren aktuellen Auftrag weg und wechselt zu diesem (Unterbrechung).
+//     Feuert genau einmal. Reaktionen sind nicht Teil der Sequenz; danach greift
+//     der reguläre Fallback des Reaktions-Auftrags (Angriff → Boss, Halten →
+//     stehen bleiben). Eine Einheit reagiert nur auf Events, für die sie einen
+//     „Sobald"-Auftrag besitzt (explizites Zuhören).
+// Nach der abgearbeiteten sequenziellen Kette greift der Fallback: bei Haltung
+// „Angriff" Marsch auf den gegnerischen Boss, bei „Halten" Stellung halten.
+// Determinismus/Regeln: siehe design-aktionen-events.md.
 export function createSim({ map, config, plans }) {
   const {
     edgeTime,
@@ -142,24 +156,46 @@ export function createSim({ map, config, plans }) {
   const addEvent = (e) => events.push({ t: time, ...e });
   const groupLabel = (g) => `${FACTIONS[g.faction].name}-Trupp (${g.def.name})`;
 
+  // Einen einzelnen Auftrag (Pfad + Haltung) in seine Ausführungsdaten
+  // übersetzen: die Befehlsliste `orders` und – bei einem Angriffspfad, der auf
+  // einem gegnerischen Turm endet – das ausdrückliche `towerTarget`. Ein bloßes
+  // Durchqueren eines Turmknotens als Zwischenwegpunkt aktiviert den Turm nicht.
+  function buildAction(faction, action) {
+    const path = action.path ?? [];
+    let orders = path.map((node) => ({ type: 'attack', node }));
+    if (action.stance === 'defend') {
+      if (orders.length) orders[orders.length - 1] = { type: 'defend', node: path[path.length - 1] };
+      else orders = [{ type: 'defend', node: map.start[faction] }];
+    }
+    const lastNode = path.length ? path[path.length - 1] : null;
+    const towerTarget =
+      action.stance === 'attack' && lastNode && towers[lastNode] && towers[lastNode].faction !== faction
+        ? lastNode
+        : null;
+    return { orders, towerTarget };
+  }
+
   // --- Gruppen aus den Plänen bauen: jede Einheit ist eine eigene Gruppe ---
   for (const faction of ['blue', 'red']) {
     plans[faction].forEach((u, i) => {
       const def = unitTypes[u.type];
-      let orders = u.path.map((node) => ({ type: 'attack', node }));
-      if (u.stance === 'defend') {
-        if (orders.length) orders[orders.length - 1] = { type: 'defend', node: u.path[u.path.length - 1] };
-        else orders = [{ type: 'defend', node: map.start[faction] }];
-      }
-      // Ausdrückliches Turm-Angriffsziel: endet der Pfad einer Angriffs-Einheit
-      // auf einem gegnerischen Turm, greift sie diesen Turm an (statt automatisch
-      // zum Boss weiterzumarschieren). Ein bloßes Durchqueren eines Turmknotens
-      // als Zwischenwegpunkt aktiviert den Turm nicht.
-      const lastNode = u.path.length ? u.path[u.path.length - 1] : null;
-      const towerTarget =
-        u.stance === 'attack' && lastNode && towers[lastNode] && towers[lastNode].faction !== faction
-          ? lastNode
-          : null;
+      // Plan normalisieren: Legacy (path/stance) → Ein-Auftrag-Kette.
+      const actions = u.actions ?? [{ path: u.path ?? [], stance: u.stance ?? 'attack', trigger: null }];
+      // Sequenzielle Aufträge (Rückgrat) und Reaktionen trennen. Der erste
+      // Auftrag ist stets sequenziell; alle weiteren mit trigger.kind === 'when'
+      // sind Reaktionen, der Rest gehört zur Sequenz.
+      const seq = [];
+      const reactions = [];
+      actions.forEach((a, idx) => {
+        const trig = a.trigger ?? (idx === 0 ? null : { kind: 'then' });
+        if (idx !== 0 && trig && trig.kind === 'when' && trig.cond) {
+          reactions.push({ cond: trig.cond, built: buildAction(faction, a), fired: false });
+        } else {
+          seq.push(buildAction(faction, a));
+        }
+      });
+      if (!seq.length) seq.push(buildAction(faction, { path: [], stance: 'attack' }));
+      const first = seq[0];
       groups.push({
         id: `${faction === 'blue' ? 'S' : 'F'}${i + 1}`,
         // 1-basierte Nummer der Einheit in der Plan-Reihenfolge ihrer Fraktion –
@@ -172,13 +208,22 @@ export function createSim({ map, config, plans }) {
         damage: def.damage,
         attackInterval: def.attackInterval,
         edgeTime: edgeTime / (def.speed ?? 1), // Reisezeit pro Wegstück
-        orders,
+        // Auftragskette: `seq` ist das sequenzielle Rückgrat, `reactions` die
+        // „Sobald"-Aufträge. Der aktive Auftrag lebt im Ausführungs-Slot
+        // (orders/orderIndex/towerTarget); `seqIndex` zeigt auf den aktiven
+        // sequenziellen Auftrag, `inReaction` markiert eine laufende Reaktion.
+        seq,
+        seqIndex: 0,
+        reactions,
+        inReaction: false,
+        pendingReaction: null, // gelatchte Reaktion, wird am nächsten freien Knoten angewandt
+        orders: first.orders,
         orderIndex: 0,
         // 'atNode' | 'moving' | 'edgeFight' | 'defending' | 'capturing' |
         // 'dead' | 'gone' (endgültig gefallen – kein Friedhof für den Respawn)
         state: 'atNode',
         node: map.start[faction],
-        towerTarget, // Knoten des gegnerischen Ziel-Turms (oder null)
+        towerTarget: first.towerTarget, // Knoten des gegnerischen Ziel-Turms (oder null)
         fighting: false,
         entrenched: false,
         nextAttackAt: Infinity,
@@ -193,6 +238,83 @@ export function createSim({ map, config, plans }) {
         deathNode: null,
       });
     });
+  }
+
+  // --- Auftragskette: Slot-Wechsel & Auslöser ------------------------------
+
+  // Ausführungs-Slot einer Gruppe auf einen gebauten Auftrag setzen.
+  function applySlot(g, built) {
+    g.orders = built.orders;
+    g.orderIndex = 0;
+    g.towerTarget = built.towerTarget;
+  }
+
+  // Ist der aktuelle Auftrag abgearbeitet? Pfad vollständig abgelaufen und kein
+  // lebender Ziel-Turm mehr. (Der Marsch zum Boss ist kein eigener Auftrag,
+  // sondern der Fallback – er zählt nicht als „noch offener" Auftrag.)
+  function actionExhausted(g) {
+    return g.orderIndex >= g.orders.length && !(g.towerTarget && towers[g.towerTarget]?.alive);
+  }
+
+  // Nächsten sequenziellen Auftrag laden. Rückgabe true, wenn ein neuer Auftrag
+  // aktiv wurde (neu auszuwerten), false, wenn keiner mehr folgt (→ Boss-Fallback).
+  // Während einer laufenden Reaktion wird die Sequenz nicht fortgesetzt: die
+  // Reaktion ist final, danach greift ihr eigener Fallback.
+  function loadNextAction(g) {
+    if (g.inReaction) return false;
+    g.seqIndex += 1;
+    if (g.seqIndex < g.seq.length) {
+      applySlot(g, g.seq[g.seqIndex]);
+      return true;
+    }
+    return false;
+  }
+
+  // Eine Reaktion (Unterbrechung) übernehmen: aktuellen Auftrag verwerfen und
+  // den Reaktions-Auftrag in den Slot laden.
+  function enterReaction(g, reaction) {
+    g.inReaction = true;
+    applySlot(g, reaction.built);
+  }
+
+  // Aktueller Wahrheitswert einer Event-Bedingung aus Sicht der Gruppe `g`.
+  // Rein lesend über den Sim-Zustand → deterministisch, ändert sich nur an
+  // bestehenden Ereigniszeitpunkten (Turmzerstörung).
+  function condHolds(cond, g) {
+    if (!cond) return false;
+    if (cond.type === 'enemyShieldDown') {
+      const e = enemyOf(g.faction);
+      return towerCount[e] - destroyedTowers[e] <= 0;
+    }
+    if (cond.type === 'towerDown') {
+      const tw = towers[cond.node];
+      return tw ? !tw.alive : false;
+    }
+    return false;
+  }
+
+  const condText = (cond) =>
+    cond?.type === 'enemyShieldDown'
+      ? 'Boss-Schild des Gegners gefallen'
+      : cond?.type === 'towerDown'
+        ? `Turm ${nodeName(cond.node)} gefallen`
+        : 'Ereignis eingetreten';
+
+  // Reaktionen prüfen: Für jede Gruppe die erste noch nicht gefeuerte Reaktion
+  // finden, deren Bedingung jetzt wahr ist, und sie latchen (`pendingReaction`).
+  // Angewandt wird sie erst, sobald die Einheit frei an einem Knoten steht
+  // (continueOrders) – nie mitten auf einer Kante oder im Nahkampf.
+  function checkReactions(t) {
+    for (const g of groups) {
+      if (g.state === 'dead' || g.state === 'gone' || g.pendingReaction) continue;
+      for (const r of g.reactions) {
+        if (r.fired || !condHolds(r.cond, g)) continue;
+        r.fired = true;
+        g.pendingReaction = r;
+        addLog(`${groupLabel(g)} reagiert – ${condText(r.cond)}.`);
+        break;
+      }
+    }
   }
 
   function currentObjective(g) {
@@ -457,6 +579,12 @@ export function createSim({ map, config, plans }) {
 
   // Setzt die Befehle einer frei stehenden Gruppe fort (weiterziehen oder Stellung halten).
   function continueOrders(g, t) {
+    // Gelatchte Reaktion jetzt anwenden – die Einheit steht frei an einem Knoten
+    // (Ankunft oder Kampfende). Die Unterbrechung wirft den laufenden Auftrag weg.
+    if (g.pendingReaction) {
+      enterReaction(g, g.pendingReaction);
+      g.pendingReaction = null;
+    }
     // An einem fremden Friedhof bleibt die Einheit stehen, bis ihre Fraktion
     // ihn eingenommen hat (die Einnahme selbst verwaltet updateGraveyards –
     // inklusive Wartezeit, falls die Schutzregel sie noch blockiert).
@@ -465,6 +593,11 @@ export function createSim({ map, config, plans }) {
       return;
     }
     for (;;) {
+      // Ist der aktive Auftrag fertig, den nächsten sequenziellen laden (sofern
+      // vorhanden). Ohne weiteren Auftrag bleibt es beim Boss-Fallback unten.
+      while (actionExhausted(g) && loadNextAction(g)) {
+        /* nächsten Auftrag im nächsten Schleifendurchlauf auswerten */
+      }
       const obj = currentObjective(g);
       if (g.node === obj.node) {
         if (obj.type === 'defend') {
@@ -842,6 +975,16 @@ export function createSim({ map, config, plans }) {
     }
     updateCombatState(t);
     updateEdgeCombats(t);
+    // Reaktionen prüfen (nach dem aufgelösten Weltzustand dieses Zeitpunkts) und
+    // wartende Einheiten aus ihrer Stellung/Einnahme wecken, damit die
+    // Unterbrechung greifen kann. Nur freie (nicht kämpfende) Einheiten.
+    checkReactions(t);
+    for (const g of groups) {
+      if (g.pendingReaction && !g.fighting && (g.state === 'defending' || g.state === 'capturing')) {
+        g.state = 'atNode';
+        g.entrenched = false;
+      }
+    }
     for (const g of groups) {
       if (g.state === 'atNode' && !g.fighting) continueOrders(g, t);
     }

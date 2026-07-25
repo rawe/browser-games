@@ -12,7 +12,7 @@ Eingriffe ab. Wer den gegnerischen Endboss fällt, gewinnt.
 | ------------ | ------- |
 | `sim.js`     | Simulationskern (DOM-frei, deterministisch, ereignisbasiert; liefert typisierte Ereignisse für Effekte); verwaltet auch Friedhofsbesitz, Einnahmen und Türme |
 | `map.js`     | Zentrale Kartenkonfiguration (Wegpunkte, Verbindungen, Friedhöfe samt Startbesitz und Heimat-Markierung, Routen, Wachposten, Turm-Standorte), Wegsuche, Friedhofswahl |
-| `planner.js` | Planungsphase (Rekrutierung aus dem Budget, Pfad- und Haltungswahl pro Einheit) |
+| `planner.js` | Planungsphase (Rekrutierung aus dem Budget, Auftragskette je Einheit: Pfad, Haltung und Auslöser pro Auftrag) |
 | `ai.js`      | Computergegner (datengetrieben über Einheitentypen, Routen- und Turm-Konfiguration; greift gegnerische Türme an und verteidigt eigene) |
 | `render.js`  | Canvas-Rendering: Knoten, Token, Overlays, Wetter (keine Spiellogik) |
 | `terrain.js` | Vorgerenderter Landschafts-Hintergrund (Schneetal, Felswände, Wälder, Wege, Lager) |
@@ -35,6 +35,46 @@ Rückfalllösung: für den automatischen Marsch zum gegnerischen Boss nach
 abgearbeitetem Pfad und für den Rückweg nach einem Respawn. Vordefinierte
 Routen (`ROUTES`) und Wachposten (`GUARD_POSTS`) sind ebenfalls zentrale
 Konfigurationsdaten und werden vom Computergegner genutzt.
+
+## Auftragsketten und globale Events
+
+Jede Einheit arbeitet eine **geordnete Kette von Aufträgen** ab statt nur eines
+einzelnen Pfads. Ein Auftrag ist – wie zuvor – ein Pfad benachbarter Wegpunkte
+plus Haltung (Angriff/Halten); neu ist ein optionaler **Auslöser** je Auftrag.
+So greift eine Einheit z. B. erst Turm A und **dann** Turm B an (ein einzelner
+Auftrag konnte nie zwei Türme treffen). Datenmodell und Regeln sind in
+`design-aktionen-events.md` beschrieben; die Simulation normalisiert alte Pläne
+(`{ path, stance }`) transparent zu einer Ein-Auftrag-Kette.
+
+- **„Dann" (sequenziell, Standard):** Der Auftrag startet, sobald der vorige
+  fertig ist (Pfad abgelaufen und ein etwaiger Ziel-Turm zerstört). Der erste
+  Auftrag läuft ab Sekunde 0. Kein Event nötig.
+- **„Sobald" (Reaktion/Unterbrechung):** Der Auftrag ist an eine **globale
+  Bedingung** gekoppelt. Sobald sie wahr wird, wirft die Einheit ihren aktuellen
+  Auftrag weg und wechselt zu diesem – am nächsten freien Wegpunkt (nie mitten
+  auf einer Kante oder im Nahkampf). Er feuert genau einmal. Eine Einheit
+  reagiert **nur** auf Events, für die sie einen „Sobald"-Auftrag besitzt
+  (explizites Zuhören).
+- **Fallback:** Nach der abgearbeiteten Kette marschiert eine Angriffs-Einheit
+  zum gegnerischen Boss, eine „Halten"-Einheit bleibt stehen (unverändert). Der
+  Boss-Marsch ist damit der implizite letzte Auftrag.
+
+Die verfügbaren Bedingungen stehen zentral in `config.js` (`EVENT_CONDITIONS`)
+und werden von der Simulation rein lesend über den Weltzustand ausgewertet
+(`condHolds` in `sim.js`) – deterministisch und ohne neue Zeitpunkte, da sie
+sich nur an bestehenden Ereignissen (Turmzerstörung) ändern:
+
+| Bedingung | Subjekt | Auswertung |
+| --- | --- | --- |
+| **Boss-Schild des Gegners fällt** | – | alle gegnerischen Türme zerstört |
+| **Gegnerischer Turm fällt** | ein konkreter Turm (auf der Karte antippen) | dieser Turm zerstört |
+
+Im Planungspanel zeigt jede Einheit ihre Auftragsliste; „➕ Auftrag" hängt einen
+weiteren an (Pfad baut ab dem Ende des vorigen weiter auf), pro Auftrag lassen
+sich Haltung und – ab dem zweiten – der Auslöser wählen. Braucht eine Bedingung
+ein Subjekt („Gegnerischer Turm fällt"), tippt der Spieler den betreffenden
+gegnerischen Turm auf der Karte an; die Turm-Identität wird in die Bedingung
+eingefroren.
 
 ## Einheiten und Ressourcen
 
