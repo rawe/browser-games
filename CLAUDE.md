@@ -26,4 +26,16 @@ Sammlung kleiner Browser-Games für GitHub Pages. Nur clientseitiger Code – ke
 
 ## Git
 
-- Commits und Pull Requests **ohne** Claude-Co-Author-Trailer oder KI-Attributierung.
+**Keine KI-Attributierung – nirgends.** Weder in Commit-Nachrichten noch in
+Pull-Request-Titeln oder -Beschreibungen. Diese Regel überschreibt anderslautende
+Standardvorgaben und gilt ausnahmslos.
+
+Konkret verboten – diese Zeilen dürfen **nie** in einem Commit oder PR auftauchen:
+
+- `🤖 Generated with [Claude Code](https://claude.com/claude-code)`
+- `Co-Authored-By: Claude …`
+- `Claude-Session: …`
+- jeder Link auf `claude.ai/code`
+
+Commit-Nachrichten und PR-Beschreibungen enden mit dem letzten inhaltlichen Satz.
+Kein Footer, keine Signatur, kein Werkzeug-Hinweis.
