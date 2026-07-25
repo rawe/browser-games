@@ -18,6 +18,7 @@ Eingriffe ab. Wer den gegnerischen Endboss fällt, gewinnt.
 | `ai-easy.js` | Stufe „Leicht": zufällig gemischte Armee, grobe Marschbefehle |
 | `ai-hard.js` | Stufe „Schwer": kampfwertoptimierte Armee, Turmwache, konzentrierte Turmoffensive, Boss-Sturm per Event |
 | `render.js`  | Canvas-Rendering: Knoten, Token, Overlays, Wetter (keine Spiellogik) |
+| `sprites.js` | Einheiten-Porträts aus `assets/units/` (Atlas laden, Zelle je Fraktion und Typ) |
 | `terrain.js` | Vorgerenderter Landschafts-Hintergrund (Schneetal, Felswände, Wälder, Wege, Lager) |
 | `effects.js` | Partikeleffekte (Schadenszahlen, Funken, Geister, Respawn-Säulen, Boss-Sturz) |
 | `main.js`    | Bildschirm-Ablauf und Render-Schleife |
@@ -244,6 +245,36 @@ Bewegungstempo und Token-Darstellung. Simulation, Planung, KI und Rendering
 lesen ausschließlich diese Definitionen – neue Typen oder Attribute lassen
 sich ergänzen, ohne Kernlogik anzupassen. Jede Einheit ist eigenständig;
 Fusionen oder Folgen-Befehle gibt es nicht.
+
+### Porträts
+
+Jedes Token zeigt ein gemaltes Bruststück: `assets/units/units.webp` ist ein
+Atlas aus acht Zellen à 128 px – vier Typen (leicht, mittel, schwer,
+Verbündeter) mal zwei Fraktionen. Die Zellkoordinaten stehen in
+`units.json` und werden von `sprites.js` an genau zwei Stellen ausgegeben: als
+Bildausschnitt für den Canvas (`unitSprite`, gezeichnet in `drawToken`) und als
+Spalte/Zeile für den CSS-Hintergrund der Aufstellungsliste (`spriteCell`,
+`.chip-pic` in `style.css`). Beide Wege benutzen denselben Zuschnitt
+(`PORTRAIT_ZOOM`/`PORTRAIT_SHIFT` in `render.js`), damit Liste und Schlachtfeld
+dasselbe Gesicht zeigen.
+
+Drei Punkte, die den Umgang damit bestimmen:
+
+- **Die Fraktionsfarbe steckt nicht in der Grafik.** Die Zellen sind
+  freigestellt; der Kreis darunter liefert den Farbverlauf. Deshalb reichen acht
+  Zellen, deshalb bleibt Blau gegen Rot auf einen Blick unterscheidbar – und
+  deshalb dürfen künftige Porträts nie flächig in Fraktionsfarbe gemalt sein.
+- **Die Grafik ist Kosmetik.** Lädt der Atlas nicht, zeichnet `drawToken` das
+  frühere Kreis-Token mit Kurzzeichen. Es gibt keinen Ladebildschirm und keinen
+  Zustand, in dem das Spiel auf ein Bild wartet.
+- **Die römische Ziffer sitzt auf einem Band am unteren Kreisrand**, nicht mehr
+  in der Mitte – dort läge sie im Gesicht. Das Band ist ins Kreissegment
+  geschnitten und ragt darum nie über das Token hinaus.
+
+Die WebP ist verlustlos (`VP8L`) und damit selbst das Original – ein PNG
+daneben wäre dieselbe Pixelmenge in größer. Die hochauflösenden Ausgangsblätter
+liegen bewusst nicht im Repo; wie die Grafiken entstanden sind und wie man
+Nachschub erzeugt, steht in `prompt-einheiten-sprites.md`.
 
 Jede angeworbene Einheit trägt eine fortlaufende **römische Ziffer** (in der
 Reihenfolge des Anwerbens je Fraktion). Sie erscheint als Kennzeichen in der

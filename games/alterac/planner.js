@@ -5,6 +5,7 @@
 // eintritt (Unterbrechung). Baut das Bedienpanel auf und verarbeitet Karten-Taps.
 
 import { FACTIONS, towerNodes, enemyOf } from './map.js';
+import { spriteCell } from './sprites.js';
 import {
   resolveUnitTypes,
   resolveUnitTypeMap,
@@ -521,9 +522,17 @@ export function createPlanner({
       chip.className = 'chip' + (selected ? ' selected' : '');
       chip.dataset.selectUnit = i;
       chip.style.setProperty('--fac', fac.color);
+      // Porträt aus demselben Atlas wie das Token auf der Karte – die Liste
+      // zeigt so dasselbe Gesicht wie das Schlachtfeld. Fehlt die Zelle,
+      // bleibt es beim Sinnbild aus der Typdefinition.
+      const cell = spriteCell(faction, def.key);
+      const pic = cell
+        ? `<span class="chip-pic" style="--col:${cell.col};--row:${cell.row};--fac-dark:${fac.dark}"></span>`
+        : '';
       chip.innerHTML =
         `<span class="chip-num">${toRoman(i + 1)}</span>` +
-        `<strong>${def.icon} ${def.name}</strong>` +
+        pic +
+        `<strong>${cell ? '' : `${def.icon} `}${def.name}</strong>` +
         `<span class="chip-plan">${unitSummary(u)}</span>`;
       item.appendChild(chip);
 

@@ -5,8 +5,18 @@ import { FACTIONS, enemyOf, edgePoint, shortestPath } from './map.js';
 import { toRoman } from './config.js';
 import { paintTerrain, mulberry32 } from './terrain.js';
 import { createEffects } from './effects.js';
+import { unitSprite } from './sprites.js';
 
 const TAU = Math.PI * 2;
+
+// Zuschnitt des Porträts im Token-Kreis. Die Atlas-Zelle ist ein quadratisches
+// Bruststück mit Luft über dem Kopf; formatfüllend gezeichnet bliebe davon bei
+// 20 px Token-Durchmesser kaum ein Gesicht übrig. Deshalb wird die Zelle größer
+// als der Kreis gezeichnet (`PORTRAIT_ZOOM`) und leicht nach unten geschoben
+// (`PORTRAIT_SHIFT`, in Kreisradien): Der Kopf rückt in die Kreismitte, die
+// überstehende Brust schneidet die Maske ohnehin weg.
+const PORTRAIT_ZOOM = 1.25;
+const PORTRAIT_SHIFT = 0.15;
 
 export function createRenderer(canvas, map) {
   const W = map.width;
@@ -1005,6 +1015,29 @@ export function createRenderer(canvas, map) {
     ctx.arc(x, yy, r, 0, TAU);
     ctx.fillStyle = fill;
     ctx.fill();
+    // Porträt in den Kreis maskiert. Der Fraktionsverlauf bleibt darunter
+    // sichtbar (die Zellen sind freigestellt) – er trägt die Fraktionsfarbe,
+    // nicht die Figur.
+    const sprite = unitSprite(g.faction, g.def?.key);
+    if (sprite) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, yy, r, 0, TAU);
+      ctx.clip();
+      const d = r * 2 * PORTRAIT_ZOOM;
+      ctx.drawImage(
+        sprite.image,
+        sprite.sx,
+        sprite.sy,
+        sprite.sw,
+        sprite.sh,
+        x - d / 2,
+        yy - d / 2 + r * PORTRAIT_SHIFT,
+        d,
+        d
+      );
+      ctx.restore();
+    }
     ctx.lineWidth = 2;
     ctx.strokeStyle = 'rgba(8,12,20,0.9)';
     ctx.stroke();
@@ -1033,11 +1066,36 @@ export function createRenderer(canvas, map) {
     // kleiner gesetzt, damit sie im Kreis bleiben.
     // Das Kurzzeichen wächst mit dem Token: Der Verbündete ist deutlich größer
     // als eine reguläre Einheit, sein Sinnbild soll das auch ausfüllen.
+    // Mit Porträt wandert die Ziffer aus der Kreismitte auf ein dunkles Band am
+    // unteren Kreisrand – in der Mitte läge sie im Gesicht. Das Band ist ein
+    // Kreissegment und ragt darum nie über das Token hinaus, egal wie lang die
+    // Ziffer wird. Der Verbündete trägt keine Ziffer und bekommt auch kein Band:
+    // Größe, Goldrand und Strahlenkranz kennzeichnen ihn deutlich genug.
     const centerText = g.ordinal != null ? toRoman(g.ordinal) : g.def?.short ?? '';
-    let centerSize = r > 16 ? 17 : r > 13 ? 13 : 11;
-    if (centerText.length >= 4) centerSize = r > 13 ? 9 : 8;
-    else if (centerText.length === 3) centerSize = r > 13 ? 11 : 9.5;
-    label(x, yy + 0.5, centerText, { color: '#fff', weight: 700, size: centerSize });
+    if (sprite) {
+      if (g.ordinal != null) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, yy, r, 0, TAU);
+        ctx.clip();
+        const band = ctx.createLinearGradient(0, yy + r * 0.18, 0, yy + r);
+        band.addColorStop(0, 'rgba(6,10,18,0)');
+        band.addColorStop(0.45, 'rgba(6,10,18,0.82)');
+        band.addColorStop(1, 'rgba(6,10,18,0.92)');
+        ctx.fillStyle = band;
+        ctx.fillRect(x - r, yy + r * 0.18, r * 2, r * 0.9);
+        ctx.restore();
+        let size = Math.max(7, Math.min(12, r * 0.7));
+        if (centerText.length >= 4) size *= 0.7;
+        else if (centerText.length === 3) size *= 0.86;
+        label(x, yy + r * 0.62, centerText, { color: '#fff', weight: 700, size });
+      }
+    } else {
+      let centerSize = r > 16 ? 17 : r > 13 ? 13 : 11;
+      if (centerText.length >= 4) centerSize = r > 13 ? 9 : 8;
+      else if (centerText.length === 3) centerSize = r > 13 ? 11 : 9.5;
+      label(x, yy + 0.5, centerText, { color: '#fff', weight: 700, size: centerSize });
+    }
     if (g.maxHp != null && !opts.ghost) {
       drawHpBar(x, yy - r - 11, Math.max(28, r * 2.1), g.hp, g.maxHp);
     }
