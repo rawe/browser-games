@@ -237,33 +237,86 @@ export function createRenderer(canvas, map) {
     ctx.fill();
   }
 
+  // Nachschub im Betrieb: drei Lichtpunkte steigen im Takt über dem Lagergut
+  // auf. Sie laufen nur, solange wirklich geliefert wird, und sind damit das
+  // eigentliche „läuft"-Signal des Lagers.
+  function drawSupplyFlow(n, c) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 3; i++) {
+      const k = (anim * 0.5 + i / 3 + n.x * 0.011) % 1;
+      const x = n.x - 12 + i * 12 + Math.sin((k + i) * 4.2) * 2.6;
+      const y = n.y + 5 - k * 27;
+      ctx.globalAlpha = Math.sin(Math.PI * k) * 0.9;
+      ctx.fillStyle = c.color;
+      ctx.beginPath();
+      ctx.arc(x, y, 2.4 - k * 1.1, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Blockade: gekreuzte Sperrbalken über dem Lagergut, in der Farbe des
+  // *Störers* – er besetzt das Lager, also spricht das Signal seine Sprache.
+  function drawSupplyBlock(n, f) {
+    const bars = [
+      [-15, -8, 15, 10],
+      [15, -8, -15, 10],
+    ];
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const pass of [0, 1]) {
+      ctx.lineWidth = pass ? 2.2 : 4.2;
+      ctx.strokeStyle = pass ? f.color : '#0a0f18';
+      for (const [x1, y1, x2, y2] of bars) {
+        ctx.beginPath();
+        ctx.moveTo(n.x + x1, n.y + y1);
+        ctx.lineTo(n.x + x2, n.y + y2);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   // Vorratslager: bleibt ein Kampfpunkt (Steinsockel mit Fahnenmast wie beim
   // gewöhnlichen Wegpunkt), trägt aber zusätzlich das Lagergut – gestapelte
-  // Kisten und ein Fass. Die Flagge zeigt hier den *Besitzer* des Lagers, nicht
-  // die gerade anwesende Fraktion: Ein gesichertes Lager bleibt auch nach dem
-  // Abzug der Einheit in der Hand seiner Fraktion. Besitzring und
-  // Fortschrittsbogen sprechen dieselbe Sprache wie beim Friedhof.
-  // `info` = { owner, capture }, `capture` = { color, frac }; `ring` markiert
-  // wie bei den übrigen Kampfpunkten ein laufendes Gefecht am Knoten.
+  // Kisten und ein Fass. Die Flagge zeigt immer den *Besitzer*; der steht von
+  // Beginn an fest und wechselt nie. Unterschieden werden die drei Zustände:
+  //   inaktiv    – matt und unbelebt, nur ein angedeuteter Besitzring
+  //   in Betrieb – kräftiger Schein, satter Ring, aufsteigender Nachschub
+  //   blockiert  – Sperrbalken und Warnring in der Farbe des Störers
+  // Der Fortschrittsbogen der laufenden Inbetriebnahme spricht dieselbe Sprache
+  // wie beim Friedhof. `info` = { owner, active, blocked, capture },
+  // `capture` = { color, frac }; `ring` markiert wie bei den übrigen
+  // Kampfpunkten ein laufendes Gefecht am Knoten.
   function drawSupplyCamp(n, info, ring) {
     const c = info.owner ? FACTIONS[info.owner] : null;
+    // Der Störer ist immer der Gegner des (festen) Besitzers. Blockiert wird nur
+    // gezeigt, was auch wirklich stockt: Vor der Inbetriebnahme gibt es nichts
+    // zu unterbrechen – dann bleibt es beim „inaktiv" (so hält es auch die Sim,
+    // die Blockade-Ereignisse erst im Betrieb meldet).
+    const foe = info.active && info.blocked && info.owner ? FACTIONS[enemyOf(info.owner)] : null;
+    const live = info.active && !info.blocked; // liefert gerade
     const phase = n.x * 0.05 + n.y * 0.07;
+    const alarm = 0.5 + 0.5 * Math.sin(anim * 6);
     // Bodenschatten über die gesamte Lagerbreite
     ctx.beginPath();
     ctx.ellipse(n.x, n.y + 8, 24, 7, 0, 0, TAU);
     ctx.fillStyle = 'rgba(6,10,18,0.45)';
     ctx.fill();
-    // Schein des Besitzers unter dem Lagergut – von weitem erkennbar, dass hier
-    // Nachschub für eine Fraktion läuft.
-    if (c) {
-      const pulse = 0.5 + 0.5 * Math.sin(anim * 2 + n.x * 0.03);
+    // Schein unter dem Lagergut – das Zustandssignal auf Distanz: im Betrieb
+    // ruhig pulsierend in der Farbe des Besitzers, blockiert hektisch in der
+    // Farbe des Störers, inaktiv nur ein mattes Glimmen.
+    const glow = foe ?? c;
+    if (glow) {
+      const pulse = foe ? alarm : 0.5 + 0.5 * Math.sin(anim * 2 + n.x * 0.03);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.5 + 0.5 * pulse;
-      const glow = ctx.createRadialGradient(n.x, n.y + 2, 2, n.x, n.y + 2, 27);
-      glow.addColorStop(0, `${c.color}3d`);
-      glow.addColorStop(1, `${c.color}00`);
-      ctx.fillStyle = glow;
+      ctx.globalAlpha = live ? 0.5 + 0.5 * pulse : foe ? 0.4 + 0.6 * pulse : 0.16;
+      const g = ctx.createRadialGradient(n.x, n.y + 2, 2, n.x, n.y + 2, 27);
+      g.addColorStop(0, `${glow.color}3d`);
+      g.addColorStop(1, `${glow.color}00`);
+      ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(n.x, n.y + 2, 27, 0, TAU);
       ctx.fill();
@@ -280,7 +333,10 @@ export function createRenderer(canvas, map) {
     ctx.lineWidth = 2;
     ctx.strokeStyle = '#0a0f18';
     ctx.stroke();
-    // Mast mit Lagerflagge
+    // Mast, Lagerflagge und Lagergut. Ein noch nicht in Betrieb genommenes
+    // Lager liegt sichtbar verlassen da – dieselben Formen, nur matt.
+    ctx.save();
+    if (!info.active) ctx.globalAlpha = 0.6;
     ctx.strokeStyle = '#0a0f18';
     ctx.lineWidth = 3.4;
     ctx.beginPath();
@@ -310,13 +366,30 @@ export function createRenderer(canvas, map) {
     drawCrate(n.x - 12, n.y + 9, 11, 9);
     drawCrate(n.x - 14, n.y, 8, 6.5);
     drawBarrel(n.x + 13, n.y + 9, 10, 13);
-    // Besitzring (neutral grau) und – bei laufender Einnahme – der
-    // Fortschrittsbogen darüber, exakt wie beim Friedhof.
+    ctx.restore();
+    if (live && c) drawSupplyFlow(n, c);
+    if (foe) drawSupplyBlock(n, foe);
+    // Besitzring: im Betrieb satt in der Fraktionsfarbe, inaktiv nur gestrichelt
+    // angedeutet, blockiert als umlaufender Warnring in der Farbe des Störers.
+    ctx.save();
     ctx.beginPath();
     ctx.arc(n.x, n.y + 2, 21, 0, TAU);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = c ? `${c.color}88` : 'rgba(124,136,162,0.35)';
+    if (foe) {
+      ctx.setLineDash([7, 5]);
+      ctx.lineDashOffset = -anim * 16;
+      ctx.lineWidth = 2.6;
+      ctx.globalAlpha = 0.6 + 0.4 * alarm;
+      ctx.strokeStyle = foe.color;
+    } else if (live) {
+      ctx.lineWidth = 2.4;
+      ctx.strokeStyle = c ? `${c.color}cc` : 'rgba(124,136,162,0.35)';
+    } else {
+      ctx.setLineDash([2, 6]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = c ? `${c.color}66` : 'rgba(124,136,162,0.35)';
+    }
     ctx.stroke();
+    ctx.restore();
     if (info.capture) {
       ctx.beginPath();
       ctx.arc(n.x, n.y + 2, 25, 0, TAU);
@@ -779,10 +852,12 @@ export function createRenderer(canvas, map) {
     return null;
   }
 
-  // Lagerinfo eines Knotens: im Gefecht aus der Simulation (Besitzer und
-  // laufende Einnahme), in der Planung gibt es keinen Stand – dann ist das
-  // Lager neutral und ohne Fortschritt. `null` heißt „hier ist kein Lager",
-  // etwa weil das System im Setup abgeschaltet wurde.
+  // Lagerinfo eines Knotens: im Gefecht aus der Simulation (Betriebszustand und
+  // laufende Inbetriebnahme), in der Planung aus der Karte – der Besitzer steht
+  // von Anfang an fest, gibt es keine Simulation, ist das Lager schlicht noch
+  // inaktiv und ohne Fortschritt (dasselbe Muster wie `towerInfoAt`).
+  // `null` heißt „hier ist kein Lager", etwa weil das System im Setup
+  // abgeschaltet wurde.
   function supplyInfoAt(nodeId, view) {
     const st = view.sim?.supplyState;
     if (st) {
@@ -790,7 +865,9 @@ export function createRenderer(canvas, map) {
       const cap = st.captures?.[nodeId] ?? null;
       const dur = st.captureTime || 1;
       return {
-        owner: st.owner?.[nodeId] ?? null,
+        owner: st.owner?.[nodeId] ?? map.supplyCamps?.[nodeId] ?? null,
+        active: !!st.active?.[nodeId],
+        blocked: !!st.blocked?.[nodeId],
         capture: cap
           ? {
               color: FACTIONS[cap.faction].color,
@@ -800,7 +877,9 @@ export function createRenderer(canvas, map) {
       };
     }
     if (view.config?.supplyEnabled === false) return null;
-    return { owner: null, capture: null };
+    const owner = map.supplyCamps?.[nodeId] ?? null;
+    if (!owner) return null;
+    return { owner, active: false, blocked: false, capture: null };
   }
 
   function drawShieldIcon(x, y, s, color) {
@@ -939,8 +1018,10 @@ export function createRenderer(canvas, map) {
     // (`ordinal === null`) und fällt wie die Planungs-Platzhalter (Truppzahl /
     // „?") auf sein Kurzzeichen aus `def.short` zurück. Längere Ziffern werden
     // kleiner gesetzt, damit sie im Kreis bleiben.
+    // Das Kurzzeichen wächst mit dem Token: Der Verbündete ist deutlich größer
+    // als eine reguläre Einheit, sein Sinnbild soll das auch ausfüllen.
     const centerText = g.ordinal != null ? toRoman(g.ordinal) : g.def?.short ?? '';
-    let centerSize = r > 13 ? 13 : 11;
+    let centerSize = r > 16 ? 17 : r > 13 ? 13 : 11;
     if (centerText.length >= 4) centerSize = r > 13 ? 9 : 8;
     else if (centerText.length === 3) centerSize = r > 13 ? 11 : 9.5;
     label(x, yy + 0.5, centerText, { color: '#fff', weight: 700, size: centerSize });

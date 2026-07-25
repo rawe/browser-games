@@ -10,8 +10,8 @@ Eingriffe ab. Wer den gegnerischen Endboss fällt, gewinnt.
 
 | Datei        | Aufgabe |
 | ------------ | ------- |
-| `sim.js`     | Simulationskern (DOM-frei, deterministisch, ereignisbasiert; liefert typisierte Ereignisse für Effekte); verwaltet auch Friedhofsbesitz, Einnahmen und Türme |
-| `map.js`     | Zentrale Kartenkonfiguration (Wegpunkte, Verbindungen, Friedhöfe samt Startbesitz und Heimat-Markierung, Routen, Wachposten, Turm-Standorte), Wegsuche, Friedhofswahl |
+| `sim.js`     | Simulationskern (DOM-frei, deterministisch, ereignisbasiert; liefert typisierte Ereignisse für Effekte); verwaltet auch Friedhofsbesitz, Einnahmen, Türme, Vorratslager und den mächtigen Verbündeten |
+| `map.js`     | Zentrale Kartenkonfiguration (Wegpunkte, Verbindungen, Friedhöfe samt Startbesitz und Heimat-Markierung, Routen, Wachposten, Turm- und Vorratslager-Standorte), Wegsuche, Friedhofswahl |
 | `planner.js` | Planungsphase (Rekrutierung aus dem Budget, Auftragskette je Einheit: Pfad, Haltung und Auslöser pro Auftrag) |
 | `ai.js`      | Computergegner: Stufenliste (`AI_LEVELS`) und Auswahl des Planers anhand von `config.aiLevel` |
 | `ai-easy.js` | Stufe „Leicht": zufällig gemischte Armee, grobe Marschbefehle |
@@ -29,6 +29,45 @@ Verbindungen (`EDGES`) in `map.js`. Sie enthält Abzweigungen, zwei
 Querverbindungen (Eisfelsklamm–Steinbruch, Wolfsschlucht–Kiefernhang) und zu
 jedem Endboss mindestens zwei getrennte Zugänge: das Nordtor und den Eisigen
 Grat im Norden, das Südtor und den Schmugglerpfad im Süden.
+
+### Spiegelsymmetrie – die Fairness-Grundlage
+
+Die Karte bildet sich unter der Punktspiegelung Nord↔Süd **vollständig auf sich
+selbst ab** (rboss↔bboss, rgate↔sgate, reast↔swest, rgy↔bgy, wn↔es, en↔ws,
+gyw↔gye; Feldmitte und Talfriedhof liegen auf der Achse). Alle 23 Verbindungen
+sind unter dieser Abbildung invariant, und weil die Reisezeit **pro Wegstück**
+zählt (`edgeTime`) statt in Pixeln, sind auch alle Wegstrecken exakt gleich.
+
+Zwei Dinge müssen dafür erhalten bleiben, wenn jemand die Karte erweitert:
+
+1. **Jede Neuerung braucht ihr Spiegelbild.** Ein markierter Wegpunkt (Turm,
+   Vorratslager) ist nur dann fair, wenn sein gespiegelter Partner dieselbe
+   Markierung für die andere Fraktion trägt.
+2. **Die x-Koordinaten müssen exakt gespiegelt bleiben** – die Summe zweier
+   gespiegelter Knoten ist immer 480. Der Grund steht im nächsten Abschnitt.
+   (Die y-Koordinaten sind nur ungefähr gespiegelt; das ist unerheblich, weil
+   Pixel-Abstände die Reisezeit nicht beeinflussen.)
+
+### Die Flankenregel der Wegsuche
+
+Geplante Pfade folgen exakt den gewählten Wegpunkten. Nur wo die Simulation
+selbst einen Weg sucht – beim Marsch zum Boss nach abgearbeitetem Pfad und beim
+Rückweg nach einem Respawn – muss sie zwischen mehreren **gleich langen** Wegen
+wählen. Diese Wahl entscheidet die **Flanke der Fraktion**: Im Zweifel hält sich
+eine Einheit rechts, aus Sicht ihrer eigenen Basis in Marschrichtung. Für die
+Sturmlanze ist das die Ost-, für den Frostwolf die Westflanke.
+
+Das ist keine Kosmetik, sondern notwendig. Vorher entschied die alphabetische
+Ordnung der Knoten-Kennungen – und die überlebt eine Spiegelung nicht, weil sie
+die Kennungen paarweise vertauscht. Die Folge war, dass **beide** Fraktionen
+durch denselben Korridor marschierten: Eine Flanke wurde zur vielbegangenen
+Hauptachse, die andere zum toten Winkel, und Wegpunkte auf der einen Seite waren
+systematisch umkämpfter als ihre Spiegelbilder. Mit der Flankenregel ist der Weg
+der einen Seite stets das exakte Spiegelbild des Weges der anderen — und ganz
+nebenbei führt der Anmarsch jeder Fraktion am Vorratslager des Gegners vorbei.
+
+Dieselbe Regel gilt in `ai-hard.js`, wo gleichwertige Ziele und Routen sonst
+über Routennamen oder Knoten-Kennungen aufgelöst würden.
 
 In der Planung baut der Spieler den Pfad jeder Einheit Wegpunkt für Wegpunkt
 über benachbarte Punkte auf – es gibt keine automatische Kürzeste-Route-Wahl
@@ -244,6 +283,60 @@ Schlacht lebt im Simulationszustand (`sim.graveyards`).
   nicht strikt weiterverwendet. Kontrolliert die Fraktion zum Wellenzeitpunkt
   keinen Friedhof mehr, ist kein Respawn mehr möglich – die Einheit ist
   endgültig gefallen.
+
+## Vorratslager und der mächtige Verbündete
+
+Vorbild ist das Original-Alteractal, in dem gesammelte Gegenstände bei einem NPC
+abgegeben werden, ein fraktionsweiter Zähler wächst und beim Schwellenwert ein
+mächtiger Verbündeter erscheint (Lokholar der Eislord / Ivus der Waldlord).
+Übernommen ist das Muster, nicht die Zahlen. Entwurf und Begründungen stehen in
+`design-vorratslager.md`.
+
+Jede Fraktion hat **genau ein fest zugeordnetes Vorratslager** an einem
+bestehenden Kampfpunkt: der **Steinbruch** gehört dem Frostwolf, die
+**Wolfsschlucht** der Sturmlanze (`supply: 'red' | 'blue'` am Wegpunkt in
+`map.js`). Ein Lager wechselt **nie** den Besitzer – der Gegner kann es besetzen
+und lahmlegen, aber niemals selbst nutzen. Beide Standorte sind Spiegelbilder:
+Jede Fraktion erreicht ihr eigenes Lager in zwei, das gegnerische in drei
+Wegstücken, und der automatische Marsch führt jede Seite am Lager der anderen
+vorbei.
+
+- **Inbetriebnahme:** Ein Lager startet inaktiv. Eine Einheit der Besitzer-
+  fraktion muss es **ausdrücklich als Pfadziel** haben und `supplyCaptureTime`
+  Sekunden ununterbrochen dort stehen, während ihre Fraktion allein vor Ort ist –
+  dieselbe Regel wie bei der Friedhofseinnahme, jede Störung setzt den
+  Fortschritt auf 0. Danach liefert das Lager **dauerhaft**, auch wenn die
+  Einheit weiterzieht; eine Wache ist nicht nötig.
+- **Blockade:** Solange eine gegnerische Einheit das Lager **ausdrücklich
+  besetzt** (auch ihr Pfad endet dort), stockt der Nachschub. Zieht sie ab oder
+  fällt sie, liefert es sofort wieder – die Inbetriebnahme geht nie verloren.
+  Ein bloßer **Durchmarsch blockiert nicht**: Weil der Anmarschweg des Gegners
+  ohnehin am Lager vorbeiführt, würde sonst Zufallsverkehr den Nachschub
+  permanent zerreißen. Dieselbe Unterscheidung gilt bei den Türmen, wo bloßes
+  Durchqueren keinen Turmkampf auslöst. Wer ein gegnerisches Lager besetzt, hält
+  die Stellung – sein Auftrag gilt nie als erledigt.
+- **Nachschub:** Ein lieferndes Lager bringt einen Vorratspunkt je
+  `supplyTickTime`. Der Vorrat läuft **stetig** auf und wird nur bei
+  Zustandswechseln verbucht; daraus ist der Moment des Schwellenübertritts exakt
+  berechenbar und wird als reguläres Ereignis eingeplant. Ein Lager bedeutet
+  damit immer dieselbe, vorhersagbare Wartezeit – unabhängig davon, was sonst
+  auf der Karte passiert.
+- **Der Verbündete:** Bei `allySupplyCost` wird der Vorrat verbraucht und der
+  mächtige Verbündete erscheint am eigenen Boss-Wegpunkt – **Ivus der Waldlord**
+  für die Sturmlanze, **Lokholar der Eislord** für den Frostwolf. Er marschiert
+  über den regulären Fallback selbstständig zum gegnerischen Boss, kämpft
+  unterwegs wie jede andere Einheit, ist tötbar und **respawnt nicht**. Je
+  Fraktion und Partie erscheint höchstens einer. Der Boss-Schild gilt auch für
+  ihn: Er ersetzt die Turmarbeit nicht, er beschleunigt sie.
+
+Anders als im Original sind beide Verbündete **exakt gleich stark** – dort ist
+Lokholar schwächer, wächst aber mit jedem Kill, während Ivus stark startet und
+nicht skaliert. Diese Asymmetrie ist bewusst nicht übernommen.
+
+Alle Werte (`supplyCaptureTime`, `supplyTickTime`, `allySupplyCost`, `allyHp`,
+`allyDamage`, `allyAttackInterval`) stehen in `config.js` und sind im
+Erweitert-Menü feinjustierbar; der Setup-Schalter **„Vorratslager aktiv"**
+schaltet das System ganz ab (`supplyEnabled: false`).
 
 ## Türme
 

@@ -3,7 +3,7 @@
 // die Erschütterung beim Fall eines Bosses. Übersetzt die typisierten
 // Sim-Ereignisse in Partikel; keine Spiellogik.
 
-import { edgePoint } from './map.js';
+import { edgePoint, enemyOf } from './map.js';
 
 const TAU = Math.PI * 2;
 
@@ -140,6 +140,24 @@ export function createEffects(map) {
     for (let i = 0; i < 4; i++) snowKick(x + rand(-16, 16), y + rand(-2, 8));
   }
 
+  // Blockiertes Vorratslager: Der Gegner besetzt es, der Nachschub stockt.
+  // Der zusammenzuckende Ring trägt die Farbe des *Störers*, dazu Qualm über
+  // dem Lagergut – das Gegenstück zum Aufblühen der Inbetriebnahme.
+  function supplyStalled(x, y, color) {
+    ring(x, y, color, 42, 0.5, 4);
+    ring(x, y, 'rgba(60,64,78,0.8)', 24, 0.45, 3, 0.1);
+    sparks(x, y - 4, color, 10, 65);
+    for (let i = 0; i < 3; i++) smoke(x + rand(-13, 13), y + rand(-4, 6));
+  }
+
+  // Nachschub läuft wieder: heller Aufatmer in der Farbe des Besitzers –
+  // spürbar leiser als die Inbetriebnahme, denn gewonnen wird hier nichts Neues.
+  function supplyResumed(x, y, color) {
+    ring(x, y, color, 46, 0.6, 3);
+    sparks(x, y - 6, color, 12, 85);
+    for (let i = 0; i < 2; i++) snowKick(x + rand(-14, 14), y + rand(-2, 8));
+  }
+
   // Beschwörung des mächtigen Verbündeten – der Höhepunkt der Vorrats-Mechanik:
   // Erschütterung, gleißendes Aufblitzen, doppelte Lichtsäule und drei
   // nachhallende Schockringe, abwechselnd Fraktionsfarbe und Gold.
@@ -203,10 +221,17 @@ export function createEffects(map) {
         sparks(p.x, p.y - 6, facColor(ev.faction), 16, 90);
         beam(p.x, p.y);
       } else if (ev.type === 'supplyCaptureStart') {
-        // Beginnende Lagereinnahme: dezent wie beim Friedhof.
+        // Beginnende Inbetriebnahme: dezent wie beim Friedhof. `ev.faction` ist
+        // der Besitzer des Lagers – ein anderer kann es nie in Betrieb nehmen.
         ring(p.x, p.y, facColor(ev.faction), 28, 0.6, 2.5);
       } else if (ev.type === 'supplyCaptured') {
         supplySecured(p.x, p.y, facColor(ev.faction));
+      } else if (ev.type === 'supplyBlocked') {
+        // Auch hier nennt das Ereignis den Besitzer; die Blockade geht vom
+        // Gegner aus, also signalisiert sie dessen Farbe.
+        supplyStalled(p.x, p.y, facColor(enemyOf(ev.faction)));
+      } else if (ev.type === 'supplyResumed') {
+        supplyResumed(p.x, p.y, facColor(ev.faction));
       } else if (ev.type === 'allySummoned') {
         allySummon(p.x, p.y, facColor(ev.faction));
       } else if (ev.type === 'respawn') {
