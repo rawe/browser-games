@@ -5,7 +5,7 @@ import { FACTIONS, enemyOf, edgePoint, shortestPath } from './map.js';
 import { toRoman } from './config.js';
 import { paintTerrain, mulberry32, onValleyReady } from './terrain.js';
 import { createEffects } from './effects.js';
-import { unitSprite, bossSprite } from './sprites.js';
+import { unitSprite, bossSprite, buildingFrame } from './sprites.js';
 
 const TAU = Math.PI * 2;
 
@@ -17,6 +17,19 @@ const TAU = Math.PI * 2;
 // überstehende Brust schneidet die Maske ohnehin weg.
 const PORTRAIT_ZOOM = 1.25;
 const PORTRAIT_SHIFT = 0.15;
+
+// Zielmaße der gemalten Gebäude in Kartenpixeln. `WIDTH` meint die Breite des
+// Bauwerks selbst (der Alpha-Bounding-Box), nicht die der Atlas-Zelle; die Höhe
+// folgt aus dem Seitenverhältnis. `GROUND` ist die Standlinie relativ zum
+// Wegpunkt – dieselbe Höhe, auf der schon der Bodenschatten liegt.
+//
+// Die Werte sind nach oben begrenzt: Über dem Bauwerk hängen noch Mast, Fahne
+// und Lebensbalken, und die nördliche Burg steht bei y = 78. Ein größerer Bau
+// schöbe ihren Lebensbalken aus der Karte.
+const KEEP_WIDTH = 56;
+const KEEP_GROUND = 20;
+const TOWER_WIDTH = 26;
+const TOWER_GROUND = 15;
 
 export function createRenderer(canvas, map) {
   const W = map.width;
@@ -124,6 +137,107 @@ export function createRenderer(canvas, map) {
     ctx.ellipse(x, y - f * 0.6, 1.3, 2.2, 0, 0, TAU);
     ctx.fill();
     ctx.restore();
+  }
+
+  // ---------------------------------------------------------- Gemalte Bauten
+  // Platzierung eines Bauwerks: Maßstab immer aus der `body`-Ebene, damit
+  // Ruine und Leuchtmaske denselben bekommen und deckungsgleich liegen. Alle
+  // Ebenen teilen Zellgröße und Anker, deshalb genügt ein Rechteck für alle.
+  // `top` gibt die Oberkante des Bauwerks zurück – daran hängen Mast, Fahne
+  // und Lebensbalken, die weiterhin der Code zeichnet.
+  function buildingLayout(kind, faction, x, groundY, targetW) {
+    const body = buildingFrame(`${kind}.${faction}.body`);
+    if (!body) return null;
+    const s = targetW / body.bbox[2];
+    const dy = groundY - body.anchor[1] * s;
+    return {
+      dx: x - body.anchor[0] * s,
+      dy,
+      d: body.cell * s,
+      top: dy + body.bbox[1] * s,
+    };
+  }
+
+  function drawBuildingLayer(key, lay) {
+    const f = buildingFrame(key);
+    if (!f) return;
+    ctx.drawImage(f.image, f.sx, f.sy, f.sw, f.sh, lay.dx, lay.dy, lay.d, lay.d);
+  }
+
+  // Leuchtmaske additiv darüber: dieselbe Zelle, dieselbe Lage, nur die warmen
+  // Stellen sind darin überhaupt gefüllt. Die Deckkraft moduliert der Aufrufer –
+  // damit flackert gemaltes Licht mit derselben Funktion wie bisher das
+  // gezeichnete.
+  function drawBuildingGlow(key, lay, alpha) {
+    const f = buildingFrame(key);
+    if (!f) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(f.image, f.sx, f.sy, f.sw, f.sh, lay.dx, lay.dy, lay.d, lay.d);
+    ctx.restore();
+  }
+
+  // Gemaltes Fahnentuch, in senkrechte Streifen zerlegt und mit demselben
+  // Wellenprofil versetzt, das `traceFlag` für das gefüllte Polygon benutzt.
+  // Der Schwalbenschwanz steckt schon als Transparenz im Bild, die Form muss
+  // hier also nicht nachgebaut werden – nur die Bewegung.
+  //
+  // Die Streifen überlappen um einen halben Pixel: Ohne das blitzt zwischen
+  // ihnen der Hintergrund durch, sobald die Karte skaliert gezeichnet wird.
+  function drawBannerCloth(faction, x, y, len, h, t) {
+    const f = buildingFrame(`banner.${faction}`);
+    if (!f) return false;
+    const [bx, by, bw, bh] = f.bbox;
+    const strips = 18;
+    const wave = (k, row) => Math.sin(t * 3.1 + k * 2.6 + row) * 2.4 * k;
+    for (let i = 0; i < strips; i++) {
+      const k = i / strips;
+      const yTop = y + wave(k, 0);
+      const yBot = y + h + wave(k, 3.2);
+      ctx.drawImage(
+        f.image,
+        f.sx + bx + (bw * i) / strips,
+        f.sy + by,
+        bw / strips + 0.5,
+        bh,
+        x + len * k,
+        yTop,
+        len / strips + 0.5,
+        yBot - yTop
+      );
+    }
+    return true;
+  }
+
+  // Mast samt Fahne. Gemalt, wenn der Atlas da ist – sonst das bisherige
+  // Polygon im Fraktionsverlauf.
+  function drawMastAndBanner(faction, x, top, mastLen, flagLen, flagH) {
+    const c = FACTIONS[faction];
+    const yTop = top - mastLen;
+    ctx.strokeStyle = '#0a0f18';
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, yTop);
+    ctx.stroke();
+    ctx.strokeStyle = '#9a7a4e';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, yTop);
+    ctx.stroke();
+    const t = anim + x * 0.02;
+    if (drawBannerCloth(faction, x + 1, yTop + 1, flagLen, flagH, t)) return;
+    traceFlag(x + 1, yTop + 1, flagLen, flagH, t);
+    const g = ctx.createLinearGradient(x, 0, x + flagLen + 1, 0);
+    g.addColorStop(0, c.color);
+    g.addColorStop(1, c.dark);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = 'rgba(8,12,20,0.85)';
+    ctx.stroke();
   }
 
   function drawBrazier(x, y) {
@@ -625,14 +739,111 @@ export function createRenderer(canvas, map) {
     ctx.restore();
   }
 
+  // Gezeichnete Festung – der Rückfall, wenn der Gebäudeatlas fehlt. Malte
+  // vor den gemalten Bauten die Festung vollständig und tut es weiter, damit
+  // das Spiel nie an einer Grafik hängt.
+  function drawKeepVector(n, alive, x0, y0, w, h) {
+      // Seitenmauern mit Zinnen und Schneeauflage
+      for (const side of [-1, 1]) {
+        const mx = side === -1 ? x0 - 15 : x0 + w;
+        const my = y0 + h - 22;
+        const mg = ctx.createLinearGradient(0, my, 0, my + 22);
+        mg.addColorStop(0, alive ? '#4d5972' : '#333a49');
+        mg.addColorStop(1, alive ? '#2c3548' : '#202531');
+        ctx.fillStyle = mg;
+        ctx.fillRect(mx, my, 15, 22);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#0a0f18';
+        ctx.strokeRect(mx, my, 15, 22);
+        ctx.fillStyle = alive ? '#4d5972' : '#333a49';
+        ctx.fillRect(mx + 1, my - 4, 4.5, 4.5);
+        ctx.fillRect(mx + 9, my - 4, 4.5, 4.5);
+        ctx.fillStyle = 'rgba(226,238,252,0.4)';
+        ctx.fillRect(mx + 1, my - 4, 4.5, 1.4);
+        ctx.fillRect(mx + 9, my - 4, 4.5, 1.4);
+      }
+      // Turmkörper mit Steinfugen
+      const stone = ctx.createLinearGradient(x0, y0, x0, y0 + h);
+      stone.addColorStop(0, alive ? '#68748f' : '#3a4150');
+      stone.addColorStop(1, alive ? '#333d52' : '#242a36');
+      ctx.fillStyle = stone;
+      ctx.fillRect(x0, y0, w, h);
+      ctx.strokeStyle = 'rgba(10,15,24,0.28)';
+      ctx.lineWidth = 1;
+      for (let row = 0; row < 5; row++) {
+        const yy = y0 + 8 + row * 8;
+        ctx.beginPath();
+        ctx.moveTo(x0 + 1, yy);
+        ctx.lineTo(x0 + w - 1, yy);
+        ctx.stroke();
+        for (let vx = x0 + (row % 2 ? 9 : 15); vx < x0 + w - 3; vx += 12) {
+          ctx.beginPath();
+          ctx.moveTo(vx, yy - 8);
+          ctx.lineTo(vx, yy);
+          ctx.stroke();
+        }
+      }
+      // Zinnen mit Schnee
+      for (let i = 0; i < 4; i++) {
+        const zx = x0 + i * (w / 3.6);
+        ctx.fillStyle = alive ? '#68748f' : '#3a4150';
+        ctx.fillRect(zx, y0 - 6, w / 6, 7);
+        ctx.fillStyle = 'rgba(226,238,252,0.45)';
+        ctx.fillRect(zx, y0 - 6, w / 6, 2);
+      }
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#0a0f18';
+      ctx.strokeRect(x0, y0, w, h);
+      // Schießscharten mit warmem, flackerndem Licht
+      for (const sx of [n.x - 9, n.x + 9]) {
+        if (alive) {
+          const flick = 0.7 + 0.3 * Math.sin(anim * 9 + sx);
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          const g = ctx.createRadialGradient(sx, y0 + 14, 0, sx, y0 + 14, 8);
+          g.addColorStop(0, `rgba(255,180,90,${0.25 * flick})`);
+          g.addColorStop(1, 'rgba(255,180,90,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(sx, y0 + 14, 8, 0, TAU);
+          ctx.fill();
+          ctx.restore();
+          ctx.fillStyle = `rgba(255,210,122,${flick})`;
+        } else {
+          ctx.fillStyle = '#1a212e';
+        }
+        ctx.fillRect(sx - 1.5, y0 + 10, 3, 8);
+      }
+      // Tor mit Metallbändern
+      ctx.beginPath();
+      ctx.moveTo(n.x - 7, y0 + h);
+      ctx.lineTo(n.x - 7, y0 + h - 13);
+      ctx.arc(n.x, y0 + h - 13, 7, Math.PI, 0);
+      ctx.lineTo(n.x + 7, y0 + h);
+      ctx.closePath();
+      ctx.fillStyle = '#171c28';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#0a0f18';
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(190,200,220,0.25)';
+      ctx.lineWidth = 1.2;
+      for (const gy of [y0 + h - 4, y0 + h - 9]) {
+        ctx.beginPath();
+        ctx.moveTo(n.x - 6.5, gy);
+        ctx.lineTo(n.x + 6.5, gy);
+        ctx.stroke();
+      }
+  }
+
   function drawKeep(n, alive, bossState, shield = 0) {
-    const c = FACTIONS[n.faction];
     const w = 40;
     const h = 46;
     const x0 = n.x - w / 2;
     const y0 = n.y - h / 2 - 4;
+    const lay = buildingLayout('keep', n.faction, n.x, n.y + KEEP_GROUND, KEEP_WIDTH);
     ctx.beginPath();
-    ctx.ellipse(n.x, n.y + 18, 42, 12, 0, 0, TAU);
+    ctx.ellipse(n.x, n.y + 18, lay ? 34 : 42, lay ? 9.5 : 12, 0, 0, TAU);
     ctx.fillStyle = 'rgba(10,15,24,0.6)';
     ctx.fill();
     // Schutzschild durch stehende Türme: schimmernde Kuppel über der Festung,
@@ -657,139 +868,45 @@ export function createRenderer(canvas, map) {
       ctx.stroke();
       ctx.restore();
     }
-    // Seitenmauern mit Zinnen und Schneeauflage
-    for (const side of [-1, 1]) {
-      const mx = side === -1 ? x0 - 15 : x0 + w;
-      const my = y0 + h - 22;
-      const mg = ctx.createLinearGradient(0, my, 0, my + 22);
-      mg.addColorStop(0, alive ? '#4d5972' : '#333a49');
-      mg.addColorStop(1, alive ? '#2c3548' : '#202531');
-      ctx.fillStyle = mg;
-      ctx.fillRect(mx, my, 15, 22);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#0a0f18';
-      ctx.strokeRect(mx, my, 15, 22);
-      ctx.fillStyle = alive ? '#4d5972' : '#333a49';
-      ctx.fillRect(mx + 1, my - 4, 4.5, 4.5);
-      ctx.fillRect(mx + 9, my - 4, 4.5, 4.5);
-      ctx.fillStyle = 'rgba(226,238,252,0.4)';
-      ctx.fillRect(mx + 1, my - 4, 4.5, 1.4);
-      ctx.fillRect(mx + 9, my - 4, 4.5, 1.4);
+    if (lay) {
+      drawBuildingLayer(`keep.${n.faction}.${alive ? 'body' : 'ruin'}`, lay);
+      // Fensterlicht: dieselbe Flackerfunktion wie früher für die gezeichneten
+      // Schießscharten, nur moduliert sie jetzt eine gemalte Leuchtmaske.
+      if (alive) {
+        drawBuildingGlow(`keep.${n.faction}.glow`, lay, 0.55 + 0.45 * Math.sin(anim * 9 + n.y));
+      }
+    } else {
+      drawKeepVector(n, alive, x0, y0, w, h);
     }
-    // Turmkörper mit Steinfugen
-    const stone = ctx.createLinearGradient(x0, y0, x0, y0 + h);
-    stone.addColorStop(0, alive ? '#68748f' : '#3a4150');
-    stone.addColorStop(1, alive ? '#333d52' : '#242a36');
-    ctx.fillStyle = stone;
-    ctx.fillRect(x0, y0, w, h);
-    ctx.strokeStyle = 'rgba(10,15,24,0.28)';
-    ctx.lineWidth = 1;
-    for (let row = 0; row < 5; row++) {
-      const yy = y0 + 8 + row * 8;
-      ctx.beginPath();
-      ctx.moveTo(x0 + 1, yy);
-      ctx.lineTo(x0 + w - 1, yy);
-      ctx.stroke();
-      for (let vx = x0 + (row % 2 ? 9 : 15); vx < x0 + w - 3; vx += 12) {
+    // Alles über dem Mauerwerk bleibt Code und hängt an der Oberkante des
+    // Bauwerks – gemalt liegt die woanders als gezeichnet.
+    const top = lay ? lay.top : y0 - 6;
+    if (alive) {
+      // Feuerschalen an den Flanken
+      const bdx = lay ? KEEP_WIDTH * 0.44 : w / 2 + 7.5;
+      const bdy = lay ? n.y + KEEP_GROUND - KEEP_WIDTH * 0.3 : y0 + h - 26;
+      drawBrazier(n.x - bdx, bdy);
+      drawBrazier(n.x + bdx, bdy);
+      drawMastAndBanner(n.faction, n.x, top, 24, lay ? 26 : 20, lay ? 10 : 12);
+      drawHpBar(n.x, top - 34, 54, bossState.hp, bossState.maxHp, { gold: true, h: 6 });
+    } else {
+      // Risse und aufsteigender Rauch. Die Risse zeichnet nur der Rückfall –
+      // die gemalte Ruine bringt ihre eigenen mit.
+      if (!lay) {
+        ctx.strokeStyle = 'rgba(8,12,18,0.7)';
+        ctx.lineWidth = 1.6;
         ctx.beginPath();
-        ctx.moveTo(vx, yy - 8);
-        ctx.lineTo(vx, yy);
+        ctx.moveTo(n.x - 4, y0 + 2);
+        ctx.lineTo(n.x - 10, y0 + 16);
+        ctx.lineTo(n.x - 5, y0 + 30);
+        ctx.lineTo(n.x - 12, y0 + h - 4);
+        ctx.moveTo(n.x + 8, y0 + 4);
+        ctx.lineTo(n.x + 4, y0 + 20);
+        ctx.lineTo(n.x + 12, y0 + 34);
         ctx.stroke();
       }
-    }
-    // Zinnen mit Schnee
-    for (let i = 0; i < 4; i++) {
-      const zx = x0 + i * (w / 3.6);
-      ctx.fillStyle = alive ? '#68748f' : '#3a4150';
-      ctx.fillRect(zx, y0 - 6, w / 6, 7);
-      ctx.fillStyle = 'rgba(226,238,252,0.45)';
-      ctx.fillRect(zx, y0 - 6, w / 6, 2);
-    }
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = '#0a0f18';
-    ctx.strokeRect(x0, y0, w, h);
-    // Schießscharten mit warmem, flackerndem Licht
-    for (const sx of [n.x - 9, n.x + 9]) {
-      if (alive) {
-        const flick = 0.7 + 0.3 * Math.sin(anim * 9 + sx);
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        const g = ctx.createRadialGradient(sx, y0 + 14, 0, sx, y0 + 14, 8);
-        g.addColorStop(0, `rgba(255,180,90,${0.25 * flick})`);
-        g.addColorStop(1, 'rgba(255,180,90,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(sx, y0 + 14, 8, 0, TAU);
-        ctx.fill();
-        ctx.restore();
-        ctx.fillStyle = `rgba(255,210,122,${flick})`;
-      } else {
-        ctx.fillStyle = '#1a212e';
-      }
-      ctx.fillRect(sx - 1.5, y0 + 10, 3, 8);
-    }
-    // Tor mit Metallbändern
-    ctx.beginPath();
-    ctx.moveTo(n.x - 7, y0 + h);
-    ctx.lineTo(n.x - 7, y0 + h - 13);
-    ctx.arc(n.x, y0 + h - 13, 7, Math.PI, 0);
-    ctx.lineTo(n.x + 7, y0 + h);
-    ctx.closePath();
-    ctx.fillStyle = '#171c28';
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = '#0a0f18';
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(190,200,220,0.25)';
-    ctx.lineWidth = 1.2;
-    for (const gy of [y0 + h - 4, y0 + h - 9]) {
-      ctx.beginPath();
-      ctx.moveTo(n.x - 6.5, gy);
-      ctx.lineTo(n.x + 6.5, gy);
-      ctx.stroke();
-    }
-    if (alive) {
-      // Feuerschalen auf den Seitenmauern
-      drawBrazier(x0 - 7.5, y0 + h - 26);
-      drawBrazier(x0 + w + 7.5, y0 + h - 26);
-      // Banner
-      ctx.strokeStyle = '#0a0f18';
-      ctx.lineWidth = 2.6;
-      ctx.beginPath();
-      ctx.moveTo(n.x, y0 - 6);
-      ctx.lineTo(n.x, y0 - 30);
-      ctx.stroke();
-      ctx.strokeStyle = '#9a7a4e';
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(n.x, y0 - 6);
-      ctx.lineTo(n.x, y0 - 30);
-      ctx.stroke();
-      traceFlag(n.x + 1, y0 - 29, 20, 12, anim + n.y * 0.02);
-      const bg2 = ctx.createLinearGradient(n.x, 0, n.x + 21, 0);
-      bg2.addColorStop(0, c.color);
-      bg2.addColorStop(1, c.dark);
-      ctx.fillStyle = bg2;
-      ctx.fill();
-      ctx.lineWidth = 1.6;
-      ctx.strokeStyle = 'rgba(8,12,20,0.85)';
-      ctx.stroke();
-      drawHpBar(n.x, y0 - 40, 54, bossState.hp, bossState.maxHp, { gold: true, h: 6 });
-    } else {
-      // Risse und aufsteigender Rauch
-      ctx.strokeStyle = 'rgba(8,12,18,0.7)';
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(n.x - 4, y0 + 2);
-      ctx.lineTo(n.x - 10, y0 + 16);
-      ctx.lineTo(n.x - 5, y0 + 30);
-      ctx.lineTo(n.x - 12, y0 + h - 4);
-      ctx.moveTo(n.x + 8, y0 + 4);
-      ctx.lineTo(n.x + 4, y0 + 20);
-      ctx.lineTo(n.x + 12, y0 + 34);
-      ctx.stroke();
       if (Math.random() < frameDt * 4) {
-        effects.smoke(n.x + (Math.random() - 0.5) * 22, y0 + 4);
+        effects.smoke(n.x + (Math.random() - 0.5) * 22, top + 10);
       }
     }
     drawBossMedallion(n, alive);
@@ -806,6 +923,63 @@ export function createRenderer(canvas, map) {
   // mit Zinnen, Fraktionsbanner, Schießscharte und Lebensanzeige. Zerstört:
   // dunkel, rissig, ohne Banner und rauchend. `info` = { faction, hp, maxHp,
   // alive, engaged }; `ring` markiert einen laufenden Kampf am Knoten.
+  // Gezeichneter Wachturm – der Rückfall, wenn der Gebäudeatlas fehlt.
+  // Sein Stein ist zur Laufzeit fraktionsgetönt (`mixHex`); die gemalten
+  // Türme bringen ihre Fraktionsfarbe schon mit.
+  function drawTowerVector(n, alive, info, x0, y0, w, h, bodyTop, bodyBot, crenel) {
+      // Turmkörper mit Steinfugen – in der Fraktionsfarbe getönt.
+      const stone = ctx.createLinearGradient(x0, y0, x0, y0 + h);
+      stone.addColorStop(0, bodyTop);
+      stone.addColorStop(1, bodyBot);
+      ctx.fillStyle = stone;
+      ctx.fillRect(x0, y0, w, h);
+      ctx.strokeStyle = 'rgba(10,15,24,0.28)';
+      ctx.lineWidth = 1;
+      for (let row = 1; row * 8 < h - 2; row++) {
+        const yy = y0 + row * 8;
+        ctx.beginPath();
+        ctx.moveTo(x0 + 1, yy);
+        ctx.lineTo(x0 + w - 1, yy);
+        ctx.stroke();
+      }
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = '#0a0f18';
+      ctx.strokeRect(x0, y0, w, h);
+      // Auskragung mit Zinnen (und Schneeauflage) – ebenfalls fraktionsgetönt.
+      const cw = w + 8;
+      const cx0 = n.x - cw / 2;
+      ctx.fillStyle = crenel;
+      ctx.fillRect(cx0, y0 - 8, cw, 8);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#0a0f18';
+      ctx.strokeRect(cx0, y0 - 8, cw, 8);
+      for (let i = 0; i < 4; i++) {
+        const zx = cx0 + i * (cw / 3.5);
+        ctx.fillStyle = crenel;
+        ctx.fillRect(zx, y0 - 13, cw / 6.5, 6);
+        ctx.fillStyle = 'rgba(226,238,252,0.45)';
+        ctx.fillRect(zx, y0 - 13, cw / 6.5, 1.6);
+      }
+      // Schießscharte
+      if (alive) {
+        const flick = 0.7 + 0.3 * Math.sin(anim * 9 + n.x);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const g = ctx.createRadialGradient(n.x, y0 + 15, 0, n.x, y0 + 15, 7);
+        g.addColorStop(0, `rgba(255,190,100,${0.25 * flick})`);
+        g.addColorStop(1, 'rgba(255,190,100,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(n.x, y0 + 15, 7, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+        ctx.fillStyle = `rgba(255,208,120,${flick})`;
+      } else {
+        ctx.fillStyle = '#1a212e';
+      }
+      ctx.fillRect(n.x - 1.5, y0 + 11, 3, 9);
+  }
+
   function drawTower(n, info, ring) {
     const alive = info.alive;
     const c = FACTIONS[info.faction];
@@ -818,9 +992,10 @@ export function createRenderer(canvas, map) {
     const h = alive ? 34 : 22;
     const x0 = n.x - w / 2;
     const y0 = n.y - h / 2 - 4;
+    const lay = buildingLayout('tower', info.faction, n.x, n.y + TOWER_GROUND, TOWER_WIDTH);
     // Schatten
     ctx.beginPath();
-    ctx.ellipse(n.x, n.y + 15, 19, 6.5, 0, 0, TAU);
+    ctx.ellipse(n.x, n.y + 15, lay ? 17 : 19, lay ? 5.5 : 6.5, 0, 0, TAU);
     ctx.fillStyle = 'rgba(10,15,24,0.55)';
     ctx.fill();
     // Fraktions-Basisring (immer sichtbar – klare Zuordnung der Fraktion)
@@ -831,94 +1006,34 @@ export function createRenderer(canvas, map) {
     ctx.globalAlpha = alive ? 0.75 : 0.5;
     ctx.stroke();
     ctx.globalAlpha = 1;
-    // Turmkörper mit Steinfugen – in der Fraktionsfarbe getönt.
-    const stone = ctx.createLinearGradient(x0, y0, x0, y0 + h);
-    stone.addColorStop(0, bodyTop);
-    stone.addColorStop(1, bodyBot);
-    ctx.fillStyle = stone;
-    ctx.fillRect(x0, y0, w, h);
-    ctx.strokeStyle = 'rgba(10,15,24,0.28)';
-    ctx.lineWidth = 1;
-    for (let row = 1; row * 8 < h - 2; row++) {
-      const yy = y0 + row * 8;
-      ctx.beginPath();
-      ctx.moveTo(x0 + 1, yy);
-      ctx.lineTo(x0 + w - 1, yy);
-      ctx.stroke();
-    }
-    ctx.lineWidth = 2.2;
-    ctx.strokeStyle = '#0a0f18';
-    ctx.strokeRect(x0, y0, w, h);
-    // Auskragung mit Zinnen (und Schneeauflage) – ebenfalls fraktionsgetönt.
-    const cw = w + 8;
-    const cx0 = n.x - cw / 2;
-    ctx.fillStyle = crenel;
-    ctx.fillRect(cx0, y0 - 8, cw, 8);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#0a0f18';
-    ctx.strokeRect(cx0, y0 - 8, cw, 8);
-    for (let i = 0; i < 4; i++) {
-      const zx = cx0 + i * (cw / 3.5);
-      ctx.fillStyle = crenel;
-      ctx.fillRect(zx, y0 - 13, cw / 6.5, 6);
-      ctx.fillStyle = 'rgba(226,238,252,0.45)';
-      ctx.fillRect(zx, y0 - 13, cw / 6.5, 1.6);
-    }
-    // Schießscharte
-    if (alive) {
-      const flick = 0.7 + 0.3 * Math.sin(anim * 9 + n.x);
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      const g = ctx.createRadialGradient(n.x, y0 + 15, 0, n.x, y0 + 15, 7);
-      g.addColorStop(0, `rgba(255,190,100,${0.25 * flick})`);
-      g.addColorStop(1, 'rgba(255,190,100,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(n.x, y0 + 15, 7, 0, TAU);
-      ctx.fill();
-      ctx.restore();
-      ctx.fillStyle = `rgba(255,208,120,${flick})`;
+    if (lay) {
+      drawBuildingLayer(`tower.${info.faction}.${alive ? 'body' : 'ruin'}`, lay);
+      if (alive) {
+        drawBuildingGlow(`tower.${info.faction}.glow`, lay, 0.55 + 0.45 * Math.sin(anim * 9 + n.x));
+      }
     } else {
-      ctx.fillStyle = '#1a212e';
+      drawTowerVector(n, alive, info, x0, y0, w, h, bodyTop, bodyBot, crenel);
     }
-    ctx.fillRect(n.x - 1.5, y0 + 11, 3, 9);
+    const top = lay ? lay.top : y0 - 12;
     if (alive) {
-      // Fraktionsbanner an kurzem Mast
-      ctx.strokeStyle = '#0a0f18';
-      ctx.lineWidth = 2.4;
-      ctx.beginPath();
-      ctx.moveTo(n.x, y0 - 12);
-      ctx.lineTo(n.x, y0 - 30);
-      ctx.stroke();
-      ctx.strokeStyle = '#9a7a4e';
-      ctx.lineWidth = 1.3;
-      ctx.beginPath();
-      ctx.moveTo(n.x, y0 - 12);
-      ctx.lineTo(n.x, y0 - 30);
-      ctx.stroke();
-      traceFlag(n.x + 1, y0 - 29, 16, 9, anim + n.x * 0.02);
-      const bg2 = ctx.createLinearGradient(n.x, 0, n.x + 17, 0);
-      bg2.addColorStop(0, c.color);
-      bg2.addColorStop(1, c.dark);
-      ctx.fillStyle = bg2;
-      ctx.fill();
-      ctx.lineWidth = 1.4;
-      ctx.strokeStyle = 'rgba(8,12,20,0.85)';
-      ctx.stroke();
-      drawHpBar(n.x, y0 - 44, 34, info.hp, info.maxHp);
+      drawMastAndBanner(info.faction, n.x, top, 18, lay ? 20 : 16, lay ? 7.5 : 9);
+      drawHpBar(n.x, top - 32, 34, info.hp, info.maxHp);
     } else {
-      // Risse und aufsteigender Rauch
-      ctx.strokeStyle = 'rgba(8,12,18,0.7)';
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(n.x - 3, y0 + 1);
-      ctx.lineTo(n.x - 6, y0 + 10);
-      ctx.lineTo(n.x - 2, y0 + h - 2);
-      ctx.moveTo(n.x + 5, y0 + 3);
-      ctx.lineTo(n.x + 2, y0 + 12);
-      ctx.stroke();
+      // Risse und aufsteigender Rauch. Die Risse zeichnet nur der Rückfall –
+      // die gemalte Ruine bringt ihre eigenen mit.
+      if (!lay) {
+        ctx.strokeStyle = 'rgba(8,12,18,0.7)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(n.x - 3, y0 + 1);
+        ctx.lineTo(n.x - 6, y0 + 10);
+        ctx.lineTo(n.x - 2, y0 + h - 2);
+        ctx.moveTo(n.x + 5, y0 + 3);
+        ctx.lineTo(n.x + 2, y0 + 12);
+        ctx.stroke();
+      }
       if (Math.random() < frameDt * 2.5) {
-        effects.smoke(n.x + (Math.random() - 0.5) * 14, y0 + 2);
+        effects.smoke(n.x + (Math.random() - 0.5) * 14, top + 6);
       }
     }
     if (ring) {

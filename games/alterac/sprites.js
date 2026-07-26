@@ -10,6 +10,7 @@
 // nach außen dringt.
 
 import atlas from './assets/units/units.json';
+import buildingAtlas from './assets/buildings.json';
 
 function loadAtlas(url) {
   const ref = { image: null };
@@ -32,6 +33,7 @@ function loadAtlas(url) {
 // Grund von vornherein nur die WebP.
 const units = loadAtlas(new URL('./assets/units/units.webp', import.meta.url).href);
 const bosses = loadAtlas(new URL('./assets/units/bosses.webp', import.meta.url).href);
+const buildings = loadAtlas(new URL('./assets/buildings.webp', import.meta.url).href);
 
 // Die Zellenliste des Einheitenatlas kommt aus `units.json` (vom Bildpaket
 // mitgeliefert und im Build eingebettet), nicht aus fest verdrahteten
@@ -77,4 +79,32 @@ export function spriteCell(faction, typeKey) {
 export function bossCell(faction) {
   const col = BOSS_COL[faction];
   return col === undefined ? null : { col, row: 0 };
+}
+
+// Zelle des Gebäudeatlas samt Zusatzangaben aus `buildings.json`. Anders als
+// bei Einheiten und Bossen reicht das Zellrechteck hier nicht:
+//
+//   `bbox`   Alpha-Bounding-Box innerhalb der Zelle. Die Zellen sind alle
+//            256 px groß, das Bauwerk darin unterschiedlich breit – der
+//            Maßstab richtet sich nach der Box, nicht nach der Zelle.
+//   `anchor` Der Punkt, der auf dem Wegpunkt zu liegen kommt: bei Gebäuden
+//            die Mitte der Standfläche, beim Banner die Mastseite oben.
+//
+// Alle Ebenen eines Bauwerks (body, glow, ruin) teilen denselben Anker und
+// dieselbe Zellgröße. Wer sie mit einem gemeinsamen Maßstab zeichnet, bekommt
+// sie zwangsläufig deckungsgleich – genau darauf ist der Atlas gebaut.
+export function buildingFrame(key) {
+  if (!buildings.image) return null;
+  const f = buildingAtlas.frames[key];
+  if (!f) return null;
+  return {
+    image: buildings.image,
+    sx: f.x,
+    sy: f.y,
+    sw: f.w,
+    sh: f.h,
+    cell: buildingAtlas.cell,
+    bbox: f.bbox,
+    anchor: f.anchor,
+  };
 }

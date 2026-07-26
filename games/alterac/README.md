@@ -18,7 +18,7 @@ Eingriffe ab. Wer den gegnerischen Endboss fällt, gewinnt.
 | `ai-easy.js` | Stufe „Leicht": zufällig gemischte Armee, grobe Marschbefehle |
 | `ai-hard.js` | Stufe „Schwer": kampfwertoptimierte Armee, Turmwache, konzentrierte Turmoffensive, Boss-Sturm per Event |
 | `render.js`  | Canvas-Rendering: Knoten, Token, Overlays, Wetter (keine Spiellogik) |
-| `sprites.js` | Einheiten- und Boss-Porträts aus `assets/units/` (Atlanten laden, Zelle je Fraktion und Typ) |
+| `sprites.js` | Porträt- und Gebäude-Atlanten aus `assets/` laden und Zellen ausgeben |
 | `terrain.js` | Landschafts-Hintergrund: gemaltes Talbild `assets/valley.webp` plus Wege, prozedurale Fassung als Rückfall |
 | `effects.js` | Partikeleffekte (Schadenszahlen, Funken, Geister, Respawn-Säulen, Boss-Sturz) |
 | `main.js`    | Bildschirm-Ablauf und Render-Schleife |
@@ -294,6 +294,49 @@ Drei Punkte, die den Umgang damit bestimmen:
 Die WebP ist verlustlos (`VP8L`) und damit selbst das Original – ein PNG
 daneben wäre dieselbe Pixelmenge in größer. Die hochauflösenden Ausgangsblätter
 liegen bewusst nicht im Repo.
+
+### Gebäude: Ebenen statt Standbild
+
+Burg und Wachturm kommen aus `assets/buildings.webp` (1024×1024, sechzehn Zellen
+à 256 px) mit `buildings.json` daneben. Je Bautyp und Fraktion liegen dort drei
+Ebenen – `body`, `glow`, `ruin` – dazu je Fraktion ein Fahnentuch.
+
+Der Schnitt hat einen Grund: **Ein Standbild würde die Animationen töten.** An
+Burg und Turm hängen wehende Fahne, flackerndes Fensterlicht, Feuerschalen,
+Schutzkuppel und Rauch. Animierte Sprite-Sheets generieren zu lassen scheitert
+an der Frame-Kohärenz – Frame 2 wäre eine andere Burg als Frame 1. Also wird
+nur das unbewegte Mauerwerk gemalt, und der Code bewegt weiterhin alles, was
+sich bewegt:
+
+- `glow` ist eine reine Leuchtmaske und wird additiv mit derselben
+  Flackerfunktion darübergelegt, die früher die gezeichneten Schießscharten
+  pulsieren ließ (`0,55 + 0,45·sin(anim·9)`).
+- Das Fahnentuch ist flach und ungewellt gemalt. `drawBannerCloth` zerlegt es in
+  achtzehn senkrechte Streifen und versetzt sie mit dem Wellenprofil aus
+  `traceFlag` – dieselbe Bewegung wie vorher, nur auf gemaltem Tuch statt auf
+  einem Farbverlauf. Der Schwalbenschwanz steckt als Transparenz im Bild.
+- Feuerschalen, Schutzkuppel, Lebensbalken, Bodenschatten, Kampfring,
+  Fraktions-Basisring und Rauch sind unverändert Code.
+
+Damit `body`, `glow` und `ruin` deckungsgleich liegen, teilen alle Zellen eines
+Bauwerks Zellgröße und Ankerpunkt; `buildingLayout` rechnet den Maßstab **immer
+aus der `body`-Ebene** und benutzt ihn für alle drei. Die Leuchtmaske wurde beim
+Erzeugen nicht gemalt, sondern per Schwellwert aus dem fertigen Body gezogen –
+Deckungsgleichheit per Konstruktion.
+
+`anchor` aus der JSON ist der Punkt, der auf dem Wegpunkt landet: bei Gebäuden
+die Mitte der Standfläche, beim Banner die Mastseite oben. Deshalb steht die
+Ruine auf derselben Linie wie der heile Bau, obwohl sie niedriger ist.
+
+`KEEP_WIDTH`/`TOWER_WIDTH` in `render.js` sind nach oben begrenzt: Über dem
+Bauwerk hängen noch Mast, Fahne und Lebensbalken, und die nördliche Burg steht
+bei y = 78. Ein größerer Bau schöbe ihren Lebensbalken aus der Karte.
+
+Fehlt der Atlas, zeichnen `drawKeepVector` und `drawTowerVector` die frühere
+Fassung vollständig – inklusive der Laufzeit-Fraktionstönung des Turmsteins
+(`mixHex`), die die gemalten Türme nicht mehr brauchen.
+
+### Porträts der Bosse
 
 Die beiden **Bosse** haben ihren eigenen Atlas `assets/units/bosses.webp`: zwei
 Zellen à 256 px, Spalte 0 Sturmlanze, Spalte 1 Frostwolf. Er kommt ohne JSON
