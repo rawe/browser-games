@@ -12,7 +12,7 @@ Sammlung kleiner Browser-Games für GitHub Pages. Nur clientseitiger Code – ke
 
 - **Ein Verzeichnis pro Spiel** unter `games/<name>/` mit eigener `index.html` als Einstiegspunkt.
 - **Modular entwickeln:** Spiellogik, Rendering und Input in getrennte ES-Module aufteilen (Muster: `games/snake/`). Spiellogik DOM-frei halten. Keine Mega-Dateien.
-- `games.js` ist das Manifest für die Übersichtsseite (`index.html`) – jedes neue Spiel dort eintragen.
+- `games.js` ist das Manifest für die Übersichtsseite (`index.html`) – jedes neue Spiel dort eintragen. Optional `cover` (+ `coverAlt`) für eine Bildkarte statt der Emoji-Karte; der Pfad muss über `new URL(..., import.meta.url)` laufen, sonst kopiert der Build das Bild nicht mit.
 - `shared/base.css` enthält gemeinsame Styles (Farb-Variablen, Karten, Back-Link) – wiederverwenden statt duplizieren.
 - `vite.config.js` erkennt `games/*/index.html` automatisch als Build-Einstiegspunkte; keine manuelle Registrierung nötig.
 

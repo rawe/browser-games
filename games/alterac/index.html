@@ -13,58 +13,76 @@
   <a class="back-link" href="../../index.html">← Übersicht</a>
 
   <section id="screen-setup" class="setup">
-    <h1>⚔️ Alterac Combat Simulator</h1>
-    <p class="tagline">Befehle planen, bestätigen – dann entscheidet die Schlacht sich selbst.</p>
+    <header class="title-banner">
+      <div class="title-banner__frame">
+        <img
+          src="./assets/title-banner.webp"
+          alt="Der Fürst der Sturmlanze und der Kriegshäuptling des Frostwolfs stehen sich vor ihren Bannern im nächtlichen Alteractal gegenüber"
+          width="1536"
+          height="640"
+          fetchpriority="high"
+        />
+      </div>
+      <div class="title-banner__caption">
+        <h1>Alterac</h1>
+        <span class="title-banner__rule"></span>
+        <p>Combat Simulator</p>
+      </div>
+    </header>
 
-    <form id="setup-form" class="setup-card">
-      <label>Modus
-        <select id="opt-mode">
-          <option value="cpu">Gegen den Computer</option>
-          <option value="hotseat">2 Spieler an einem Gerät</option>
-        </select>
-      </label>
-      <label id="row-ai-level">Stärke des Computergegners
-        <select id="opt-ai-level"></select>
-        <small class="field-hint" id="ai-level-desc"></small>
-      </label>
-      <label>Ressourcenpunkte pro Seite
-        <select id="opt-resources"></select>
-      </label>
-      <label class="switch-row" for="opt-towers">⚔️ Türme aktiv
-        <input type="checkbox" id="opt-towers" class="switch" checked />
-      </label>
-      <label class="switch-row" for="opt-supply">⬢ Vorratslager aktiv
-        <input type="checkbox" id="opt-supply" class="switch" checked />
-      </label>
+    <div class="setup-inner">
+      <p class="tagline">Befehle planen, bestätigen – dann entscheidet die Schlacht sich selbst.</p>
 
-      <details class="advanced" id="advanced">
-        <summary>Erweiterte Einstellungen</summary>
-        <div class="advanced-groups" id="advanced-groups"></div>
+      <form id="setup-form" class="setup-card">
+        <label>Modus
+          <select id="opt-mode">
+            <option value="cpu">Gegen den Computer</option>
+            <option value="hotseat">2 Spieler an einem Gerät</option>
+          </select>
+        </label>
+        <label id="row-ai-level">Stärke des Computergegners
+          <select id="opt-ai-level"></select>
+          <small class="field-hint" id="ai-level-desc"></small>
+        </label>
+        <label>Ressourcenpunkte pro Seite
+          <select id="opt-resources"></select>
+        </label>
+        <label class="switch-row" for="opt-towers">⚔️ Türme aktiv
+          <input type="checkbox" id="opt-towers" class="switch" checked />
+        </label>
+        <label class="switch-row" for="opt-supply">⬢ Vorratslager aktiv
+          <input type="checkbox" id="opt-supply" class="switch" checked />
+        </label>
+
+        <details class="advanced" id="advanced">
+          <summary>Erweiterte Einstellungen</summary>
+          <div class="advanced-groups" id="advanced-groups"></div>
+        </details>
+
+        <button type="submit" class="btn primary">Schlacht planen</button>
+      </form>
+
+      <details class="rules">
+        <summary>Spielregeln (Kurzfassung)</summary>
+        <ul>
+          <li><strong>Armee anwerben:</strong> Jeder Spieler stellt seine Truppe aus einem Budget an Ressourcenpunkten zusammen. Es gibt drei Einheitentypen:
+            <ul id="rules-units"></ul>
+          </li>
+          <li><strong>Pfad festlegen:</strong> Jede Einheit erhält einen eigenen Pfad, der Wegpunkt für Wegpunkt über benachbarte Punkte aufgebaut wird. Die Karte bietet Abzweigungen, Querverbindungen und zu jedem Boss mindestens zwei getrennte Zugänge – die Routenwahl liegt komplett beim Spieler.</li>
+          <li><strong>Angriff oder Halten:</strong> Angreifer ziehen nach ihrem Pfad automatisch weiter zum gegnerischen Boss. Haltende Einheiten bewachen das Ende ihres Pfads und erleiden dort weniger Schaden, wenn sie vor dem Gegner eintreffen.</li>
+          <li>Jede Einheit kämpft mit den Werten ihres Typs: Sie schlägt in ihrem eigenen Angriffsrhythmus zu und trifft das schwächste gegnerische Ziel an ihrem Ort. Überlebende behalten ihre restlichen Lebenspunkte – regeneriert wird nur per Respawn.</li>
+          <li><strong>Begegnung unterwegs:</strong> Treffen sich verfeindete Einheiten auf einem Wegstück, stoppen sie und kämpfen dort im offenen Feld – ohne Verteidigungsbonus. Nachrücker greifen ein, die Sieger ziehen anschließend auf ihrer Route weiter.</li>
+          <li><strong>Friedhöfe erobern:</strong> Neben den beiden Basisfriedhöfen liegen neutrale Friedhöfe als Sackgassen abseits der Hauptwege. Wer einen Friedhof explizit in die Route aufnimmt (Hin- und Rückweg selbst planen), beginnt dort automatisch die Einnahme. Sie dauert die eingestellte Einnahmedauer und verlangt ununterbrochene Präsenz – jeder Kampf setzt den Fortschritt vollständig zurück, mehrere eigene Einheiten beschleunigen nichts. Danach gehört der Friedhof sofort der neuen Fraktion und kann beliebig oft zurückerobert werden.</li>
+          <li><strong>Basisfriedhof geschützt:</strong> Der basisnahe Friedhof einer Fraktion ist nur einnehmbar, solange sie keinen anderen Friedhof mehr kontrolliert. Sobald sie wieder mindestens einen anderen hält, greift der Schutz erneut.</li>
+          <li>Wer 0 Lebenspunkte erreicht, fällt und kehrt mit der nächsten <strong>Respawn-Welle</strong> mit vollen Lebenspunkten zurück: Der Respawn läuft auf einem globalen Takt (dem Respawn-Intervall), sodass alle wartenden Gefallenen gebündelt gemeinsam zurückkehren. Sie erscheinen am nächstgelegenen <em>aktuell kontrollierten</em> eigenen Friedhof, bestimmt erst im Moment der Welle. Von dort geht es auf kürzestem Weg zum offenen Ziel weiter. Ohne eigenen Friedhof ist kein Respawn mehr möglich.</li>
+          <li><strong>Türme:</strong> An den Toren beider Basen stehen je zwei Wachtürme – ortsfeste Kampfeinheiten mit eigenen Werten, die weder respawnen noch regenerieren. Ein Turm greift nur an, wenn eine Einheit ihn <em>ausdrücklich</em> als Ziel plant (Pfad endet am gegnerischen Turm); bloßes Durchqueren aktiviert ihn nicht. Verteidiger können am eigenen Turm „Halten" – solange einer lebt, ist der Turm unverwundbar. Jeder zerstörte Turm schwächt dauerhaft den Angriffsschaden des zugehörigen Fürsten (bis zu einer Untergrenze).</li>
+          <li><strong>Vorratslager in Betrieb nehmen:</strong> Jede Fraktion hat genau ein fest zugeordnetes Vorratslager auf dem Hauptweg – der Steinbruch (Norden) gehört dem Frostwolf, die Wolfsschlucht (Süden) der Sturmlanze. Der Besitz wechselt nie. Ein Lager startet inaktiv; in Betrieb nimmt es nur eine eigene Einheit, die es <em>ausdrücklich</em> als Pfadziel plant (der Pfad endet dort) und die eingestellte Inbetriebnahme-Dauer daran arbeitet – mehrere eigene Einheiten beschleunigen nichts. Aufhalten kann sie nur ein Gegner, der das Lager seinerseits ausdrücklich besetzt. <strong>Der Fortschritt verfällt nie</strong>: Fällt die Einheit, ruht die Arbeit und die nächste setzt dort fort, wo jene aufhörte. Danach liefert das Lager dauerhaft je Nachschub-Takt einen Vorratspunkt, auch ohne Wache: Die Einheit ist wieder frei.</li>
+          <li><strong>Fremdes Lager blockieren:</strong> Das gegnerische Lager lässt sich nie übernehmen oder nutzen, sondern nur lahmlegen. Solange eine Einheit es <em>ausdrücklich</em> besetzt (ihr Pfad endet dort), stockt der Nachschub des Gegners; sie hält dabei die Stellung und zieht nicht von selbst weiter. Ein bloßer Durchmarsch blockiert nicht – wie beim Turm zählt nur die ausdrückliche Absicht, und zwar für die Inbetriebnahme genauso wie für die Blockade. Zieht die Einheit ab oder fällt sie, liefert das Lager sofort wieder: Die einmal erfolgte Inbetriebnahme geht nie verloren, der gesammelte Vorrat auch nicht. Wer den Nachschub des Gegners stoppen will, muss also dauerhaft eine Einheit dafür abstellen.</li>
+          <li><strong>Mächtiger Verbündeter:</strong> Erreicht der Vorrat einer Fraktion die eingestellte Schwelle, wird er verbraucht und ihr mächtiger Verbündeter (Ivus der Waldlord bzw. Lokholar der Eislord) erscheint an der eigenen Basis. Er marschiert selbstständig zum gegnerischen Fürsten und kämpft unterwegs wie jede andere Einheit – höchstens einer je Fraktion, ohne Respawn, und auch ihn hält der Boss-Schild auf, solange gegnerische Türme stehen.</li>
+          <li>Der Boss hat eigene Lebenspunkte, kämpft mit und regeneriert sich nicht. Fällt er, ist die Schlacht sofort vorbei.</li>
+        </ul>
       </details>
-
-      <button type="submit" class="btn primary">Schlacht planen</button>
-    </form>
-
-    <details class="rules">
-      <summary>Spielregeln (Kurzfassung)</summary>
-      <ul>
-        <li><strong>Armee anwerben:</strong> Jeder Spieler stellt seine Truppe aus einem Budget an Ressourcenpunkten zusammen. Es gibt drei Einheitentypen:
-          <ul id="rules-units"></ul>
-        </li>
-        <li><strong>Pfad festlegen:</strong> Jede Einheit erhält einen eigenen Pfad, der Wegpunkt für Wegpunkt über benachbarte Punkte aufgebaut wird. Die Karte bietet Abzweigungen, Querverbindungen und zu jedem Boss mindestens zwei getrennte Zugänge – die Routenwahl liegt komplett beim Spieler.</li>
-        <li><strong>Angriff oder Halten:</strong> Angreifer ziehen nach ihrem Pfad automatisch weiter zum gegnerischen Boss. Haltende Einheiten bewachen das Ende ihres Pfads und erleiden dort weniger Schaden, wenn sie vor dem Gegner eintreffen.</li>
-        <li>Jede Einheit kämpft mit den Werten ihres Typs: Sie schlägt in ihrem eigenen Angriffsrhythmus zu und trifft das schwächste gegnerische Ziel an ihrem Ort. Überlebende behalten ihre restlichen Lebenspunkte – regeneriert wird nur per Respawn.</li>
-        <li><strong>Begegnung unterwegs:</strong> Treffen sich verfeindete Einheiten auf einem Wegstück, stoppen sie und kämpfen dort im offenen Feld – ohne Verteidigungsbonus. Nachrücker greifen ein, die Sieger ziehen anschließend auf ihrer Route weiter.</li>
-        <li><strong>Friedhöfe erobern:</strong> Neben den beiden Basisfriedhöfen liegen neutrale Friedhöfe als Sackgassen abseits der Hauptwege. Wer einen Friedhof explizit in die Route aufnimmt (Hin- und Rückweg selbst planen), beginnt dort automatisch die Einnahme. Sie dauert die eingestellte Einnahmedauer und verlangt ununterbrochene Präsenz – jeder Kampf setzt den Fortschritt vollständig zurück, mehrere eigene Einheiten beschleunigen nichts. Danach gehört der Friedhof sofort der neuen Fraktion und kann beliebig oft zurückerobert werden.</li>
-        <li><strong>Basisfriedhof geschützt:</strong> Der basisnahe Friedhof einer Fraktion ist nur einnehmbar, solange sie keinen anderen Friedhof mehr kontrolliert. Sobald sie wieder mindestens einen anderen hält, greift der Schutz erneut.</li>
-        <li>Wer 0 Lebenspunkte erreicht, fällt und kehrt mit der nächsten <strong>Respawn-Welle</strong> mit vollen Lebenspunkten zurück: Der Respawn läuft auf einem globalen Takt (dem Respawn-Intervall), sodass alle wartenden Gefallenen gebündelt gemeinsam zurückkehren. Sie erscheinen am nächstgelegenen <em>aktuell kontrollierten</em> eigenen Friedhof, bestimmt erst im Moment der Welle. Von dort geht es auf kürzestem Weg zum offenen Ziel weiter. Ohne eigenen Friedhof ist kein Respawn mehr möglich.</li>
-        <li><strong>Türme:</strong> An den Toren beider Basen stehen je zwei Wachtürme – ortsfeste Kampfeinheiten mit eigenen Werten, die weder respawnen noch regenerieren. Ein Turm greift nur an, wenn eine Einheit ihn <em>ausdrücklich</em> als Ziel plant (Pfad endet am gegnerischen Turm); bloßes Durchqueren aktiviert ihn nicht. Verteidiger können am eigenen Turm „Halten" – solange einer lebt, ist der Turm unverwundbar. Jeder zerstörte Turm schwächt dauerhaft den Angriffsschaden des zugehörigen Fürsten (bis zu einer Untergrenze).</li>
-        <li><strong>Vorratslager in Betrieb nehmen:</strong> Jede Fraktion hat genau ein fest zugeordnetes Vorratslager auf dem Hauptweg – der Steinbruch (Norden) gehört dem Frostwolf, die Wolfsschlucht (Süden) der Sturmlanze. Der Besitz wechselt nie. Ein Lager startet inaktiv; in Betrieb nimmt es nur eine eigene Einheit, die es <em>ausdrücklich</em> als Pfadziel plant (der Pfad endet dort) und die eingestellte Inbetriebnahme-Dauer daran arbeitet – mehrere eigene Einheiten beschleunigen nichts. Aufhalten kann sie nur ein Gegner, der das Lager seinerseits ausdrücklich besetzt. <strong>Der Fortschritt verfällt nie</strong>: Fällt die Einheit, ruht die Arbeit und die nächste setzt dort fort, wo jene aufhörte. Danach liefert das Lager dauerhaft je Nachschub-Takt einen Vorratspunkt, auch ohne Wache: Die Einheit ist wieder frei.</li>
-        <li><strong>Fremdes Lager blockieren:</strong> Das gegnerische Lager lässt sich nie übernehmen oder nutzen, sondern nur lahmlegen. Solange eine Einheit es <em>ausdrücklich</em> besetzt (ihr Pfad endet dort), stockt der Nachschub des Gegners; sie hält dabei die Stellung und zieht nicht von selbst weiter. Ein bloßer Durchmarsch blockiert nicht – wie beim Turm zählt nur die ausdrückliche Absicht, und zwar für die Inbetriebnahme genauso wie für die Blockade. Zieht die Einheit ab oder fällt sie, liefert das Lager sofort wieder: Die einmal erfolgte Inbetriebnahme geht nie verloren, der gesammelte Vorrat auch nicht. Wer den Nachschub des Gegners stoppen will, muss also dauerhaft eine Einheit dafür abstellen.</li>
-        <li><strong>Mächtiger Verbündeter:</strong> Erreicht der Vorrat einer Fraktion die eingestellte Schwelle, wird er verbraucht und ihr mächtiger Verbündeter (Ivus der Waldlord bzw. Lokholar der Eislord) erscheint an der eigenen Basis. Er marschiert selbstständig zum gegnerischen Fürsten und kämpft unterwegs wie jede andere Einheit – höchstens einer je Fraktion, ohne Respawn, und auch ihn hält der Boss-Schild auf, solange gegnerische Türme stehen.</li>
-        <li>Der Boss hat eigene Lebenspunkte, kämpft mit und regeneriert sich nicht. Fällt er, ist die Schlacht sofort vorbei.</li>
-      </ul>
-    </details>
+    </div>
   </section>
 
   <section id="screen-game" hidden>
