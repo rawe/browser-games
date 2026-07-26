@@ -1,4 +1,9 @@
 // Manifest aller Spiele. Neues Spiel = neuer Eintrag hier + Verzeichnis unter games/.
+//
+// `cover` ist optional: Spiele mit Titelbild bekommen auf der Übersicht eine
+// Bildkarte, alle anderen behalten die Emoji-Karte. Der Pfad muss über
+// `new URL(..., import.meta.url)` laufen – nur so schreibt Vite ihn beim Build
+// auf den gehashten Dateinamen um (nackte Strings kopiert der Build nicht mit).
 export const games = [
   {
     slug: 'snake',
@@ -11,6 +16,8 @@ export const games = [
     title: 'Alterac Combat Simulator',
     description: 'Taktik-Autobattler: Routen planen, Truppen fusionieren, Punkte halten – dann läuft die Schlacht von allein.',
     emoji: '⚔️',
+    cover: new URL('./games/alterac/assets/title-banner.webp', import.meta.url).href,
+    coverAlt: 'Der Fürst der Sturmlanze und der Kriegshäuptling des Frostwolfs stehen sich vor ihren Bannern im nächtlichen Alteractal gegenüber',
   },
   {
     slug: 'super-cars',

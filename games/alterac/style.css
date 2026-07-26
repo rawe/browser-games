@@ -33,28 +33,122 @@ html {
 }
 
 /* ------------------------------------------------------------------ Setup */
+/* Der Startbildschirm ist zweigeteilt: das Titelbild läuft randlos über die
+   volle Breite, alles darunter bleibt in der schmalen Lesespalte. */
 .setup {
-  max-width: 26rem;
-  margin: 0 auto;
-  padding: 4.5rem 1rem 3rem;
+  padding: 0 0 3rem;
   display: grid;
   gap: 1.25rem;
 }
 
-.setup h1 {
-  margin: 0;
-  text-align: center;
-  font-size: 1.7rem;
-  font-family: Georgia, 'Times New Roman', serif;
-  letter-spacing: 0.04em;
-  color: #f0d489;
-  text-shadow: 0 2px 14px rgba(240, 190, 90, 0.28), 0 1px 2px rgba(0, 0, 0, 0.6);
+.setup-inner {
+  width: 100%;
+  max-width: 26rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+  display: grid;
+  gap: 1.25rem;
 }
 
 .tagline {
-  margin: -0.75rem 0 0;
+  margin: 0;
   text-align: center;
   color: #8a94a8;
+}
+
+/* ---------------------------------------------------------- Titelbanner */
+/* Das Motiv setzt die beiden Fürsten an die Ränder und lässt die Mitte als
+   dunklen Talkessel frei – dort sitzt der Titel ohne eigenen Balken. */
+.title-banner {
+  position: relative;
+  width: 100%;
+  max-width: 60rem;
+  margin-inline: auto;
+}
+
+.title-banner__frame {
+  position: relative;
+}
+
+.title-banner__frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* Schmal ungeschnitten, damit beide Fürsten sichtbar bleiben; ab Tablet
+     enger beschnitten, damit der Kopf nicht die halbe Seite einnimmt. */
+  aspect-ratio: 1536 / 640;
+  object-fit: cover;
+  object-position: center;
+  /* Unten weich in die Seitenfarbe auslaufen – keine harte Bildkante. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 99%);
+  mask-image: linear-gradient(to bottom, #000 58%, transparent 99%);
+}
+
+/* Hält die Porträts vom Seitenrand weg, sonst klebt das Bild am Fensterrand. */
+.title-banner__frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 80% at 50% 45%, transparent 35%, rgba(18, 22, 31, 0.75) 100%),
+    linear-gradient(to bottom, rgba(18, 22, 31, 0.35), transparent 40%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 99%);
+  mask-image: linear-gradient(to bottom, #000 58%, transparent 99%);
+}
+
+/* Schmal: der Titel steht im Textfluss unter dem Bild und ragt in dessen
+   Auslaufzone hinein – im gestauchten Talkessel wäre dafür kein Platz. */
+.title-banner__caption {
+  margin-top: -2.75rem;
+  padding-inline: 1rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.title-banner__caption h1 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+  font-size: clamp(1.7rem, 7vw, 3.4rem);
+  line-height: 1.05;
+  letter-spacing: 0.06em;
+  color: #f7e3ad;
+  text-shadow: 0 0 28px rgba(0, 0, 0, 0.95), 0 2px 6px rgba(0, 0, 0, 0.9),
+    0 0 40px rgba(240, 190, 90, 0.25);
+}
+
+.title-banner__rule {
+  display: block;
+  width: min(60%, 14rem);
+  height: 1px;
+  margin: 0.55rem auto 0;
+  background: linear-gradient(90deg, transparent, rgba(240, 212, 137, 0.7), transparent);
+}
+
+.title-banner__caption p {
+  margin: 0.4rem 0 0;
+  font-size: clamp(0.62rem, 2vw, 0.9rem);
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: #c9d2e2;
+  text-shadow: 0 0 16px rgba(0, 0, 0, 0.95);
+}
+
+@media (min-width: 40rem) {
+  .title-banner__frame img {
+    aspect-ratio: 1536 / 500;
+  }
+
+  /* Breit ist der Talkessel groß genug: der Titel liegt mittig im Bild. */
+  .title-banner__caption {
+    position: absolute;
+    inset-inline: 0;
+    top: 38%;
+    translate: 0 -50%;
+    margin-top: 0;
+    padding-inline: 30%;
+  }
 }
 
 .setup-card {

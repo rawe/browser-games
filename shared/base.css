@@ -69,6 +69,49 @@ body {
   font-size: 0.9rem;
 }
 
+/* Karte mit Titelbild (Manifest-Feld `cover`). Das Bild läuft randlos über
+   die volle Kartenbreite, deshalb wandert der Innenabstand nach innen. */
+.game-card.has-cover {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  /* Der Titel im Bild richtet sich nach der Kartenbreite, nicht nach dem
+     Fenster – im vierspaltigen Raster sind die Karten deutlich schmaler. */
+  container-type: inline-size;
+}
+
+.game-cover {
+  position: relative;
+  display: block;
+}
+
+.game-cover img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Der Titel liegt im Bild. Der Verlauf darunter hält ihn auch dann lesbar,
+   wenn das Motiv an dieser Stelle aufhellt. */
+.game-cover .game-title {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 1.75rem 0.6rem 0.5rem;
+  text-align: center;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+  font-size: clamp(0.85rem, 6.5cqi, 1.15rem);
+  letter-spacing: 0.03em;
+  text-wrap: balance;
+  color: #f7e3ad;
+  background: linear-gradient(to top, rgba(10, 13, 20, 0.92), transparent);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}
+
+.game-card.has-cover .game-description {
+  padding: 0.8rem 1.25rem 1.15rem;
+}
+
 .back-link {
   position: fixed;
   top: 1rem;
