@@ -688,6 +688,28 @@ html {
   font-variant-numeric: tabular-nums;
 }
 
+/* Einheiten-Porträt aus dem Atlas (assets/units/) – dieselbe Grafik, die der
+   Renderer ins Karten-Token maskiert. `--col`/`--row` setzt der Planer aus der
+   Atlas-JSON, damit hier keine Zellkoordinaten doppelt gepflegt werden.
+   Der Zuschnitt entspricht PORTRAIT_ZOOM/PORTRAIT_SHIFT in render.js: Die Zelle
+   wird 1,25-fach vergrößert (daher Hintergrundbild 5 × 2,5 Kachelbreiten) und
+   sitzt nicht mittig, sondern 0,05 Kachelhöhen tiefer – sonst schneidet der
+   Kreis den Helm ab. */
+.chip-pic {
+  --pic: 1.7rem;
+  flex: 0 0 auto;
+  width: var(--pic);
+  height: var(--pic);
+  border-radius: 50%;
+  border: 1px solid rgba(8, 12, 20, 0.9);
+  background-color: var(--fac-dark, #2c5aa8);
+  background-image: url('./assets/units/units.webp');
+  background-repeat: no-repeat;
+  background-size: calc(var(--pic) * 5) calc(var(--pic) * 2.5);
+  background-position: calc(var(--col) * var(--pic) * -1.25 - var(--pic) * 0.125)
+    calc(var(--row) * var(--pic) * -1.25 - var(--pic) * 0.05);
+}
+
 /* Plan-Zusammenfassung füllt die restliche Breite und kürzt bei Bedarf. */
 .chip-plan {
   flex: 1 1 auto;
@@ -1160,6 +1182,30 @@ html {
 
 .overlay-emoji {
   font-size: 3rem;
+}
+
+/* Boss-Medaillon im Sieges-Overlay: dieselbe Zelle wie auf der Karte, nur groß.
+   Der Zuschnitt entspricht `PORTRAIT_ZOOM`/`PORTRAIT_SHIFT` im Renderer – Zelle
+   auf 125 % vergrößert und um ein Achtel nach unten geschoben, damit der Kopf
+   mittig im Kreis sitzt. Der Fraktionsverlauf liegt als zweite
+   Hintergrundschicht darunter und scheint durch die freigestellte Figur. */
+.overlay-boss {
+  --pic: 5.5rem;
+  width: var(--pic);
+  height: var(--pic);
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 2px solid rgba(8, 12, 20, 0.9);
+  box-shadow:
+    0 0 0 2px rgba(255, 214, 138, 0.75),
+    0 8px 22px rgba(4, 7, 12, 0.55);
+  background-image: url('./assets/units/bosses.webp'),
+    radial-gradient(circle at 32% 28%, var(--fac, #5b9cff), var(--fac-dark, #2c5aa8));
+  background-repeat: no-repeat;
+  background-size: calc(var(--pic) * 2.5) calc(var(--pic) * 1.25), cover;
+  background-position:
+    calc(var(--col) * var(--pic) * -1.25 - var(--pic) * 0.125) calc(var(--pic) * -0.05),
+    center;
 }
 
 #overlay-card h2 {

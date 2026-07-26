@@ -18,7 +18,8 @@ Eingriffe ab. Wer den gegnerischen Endboss fällt, gewinnt.
 | `ai-easy.js` | Stufe „Leicht": zufällig gemischte Armee, grobe Marschbefehle |
 | `ai-hard.js` | Stufe „Schwer": kampfwertoptimierte Armee, Turmwache, konzentrierte Turmoffensive, Boss-Sturm per Event |
 | `render.js`  | Canvas-Rendering: Knoten, Token, Overlays, Wetter (keine Spiellogik) |
-| `terrain.js` | Vorgerenderter Landschafts-Hintergrund (Schneetal, Felswände, Wälder, Wege, Lager) |
+| `sprites.js` | Porträt- und Gebäude-Atlanten aus `assets/` laden und Zellen ausgeben |
+| `terrain.js` | Landschafts-Hintergrund: gemaltes Talbild `assets/valley.webp` plus Wege, prozedurale Fassung als Rückfall |
 | `effects.js` | Partikeleffekte (Schadenszahlen, Funken, Geister, Respawn-Säulen, Boss-Sturz) |
 | `main.js`    | Bildschirm-Ablauf und Render-Schleife |
 | `config.js`  | Einheitentypen sowie alle Kampf- und Zeitwerte |
@@ -30,6 +31,26 @@ Verbindungen (`EDGES`) in `map.js`. Sie enthält Abzweigungen, zwei
 Querverbindungen (Eisfelsklamm–Steinbruch, Wolfsschlucht–Kiefernhang) und zu
 jedem Endboss mindestens zwei getrennte Zugänge: das Nordtor und den Eisigen
 Grat im Norden, das Südtor und den Schmugglerpfad im Süden.
+
+### Der Hintergrund kennt das Wegenetz nicht
+
+Der Untergrund ist ein gemaltes Talbild, `assets/valley.webp` (960×1920, also
+doppelte Kartenauflösung). Es enthält bewusst **weder Wege noch Wegpunkte**:
+Beides steht in `NODES`/`EDGES` und darf sich ändern – ein mitgemaltes Wegenetz
+wäre beim nächsten verschobenen Wegpunkt falsch. Gemalt ist nur, was darunter
+liegt: Felsflanken, Bäche, Wälder, Feldlager, Lichtstimmung. Die Wege zeichnet
+weiterhin `drawRoad` entlang `edgePoint`, die Knoten der Renderer.
+
+Damit das trägt, hält das Bild seine offene Talmitte frei – nichts Hohes,
+nichts Kontrastreiches zwischen den Felsflanken. Wer das Bild ersetzt, muss
+diese Eigenschaft erhalten, sonst steht irgendwann ein gemalter Baum unter
+einem Turm.
+
+`paintTerrain` schaltet zwischen zwei Fassungen um: mit Bild zwei Lagen (Tal,
+Wege darüber), ohne Bild die vollständige prozedurale Landschaft, die es vorher
+gab und aus der das Talbild entstanden ist. Der Rückfall greift beim ersten
+Frame wie bei einem fehlgeschlagenen Ladevorgang; `onValleyReady` stößt das
+einmalige Neurastern an, wenn das Bild nachträglich eintrifft.
 
 ### Spiegelsymmetrie – die Fairness-Grundlage
 
@@ -244,6 +265,88 @@ Bewegungstempo und Token-Darstellung. Simulation, Planung, KI und Rendering
 lesen ausschließlich diese Definitionen – neue Typen oder Attribute lassen
 sich ergänzen, ohne Kernlogik anzupassen. Jede Einheit ist eigenständig;
 Fusionen oder Folgen-Befehle gibt es nicht.
+
+### Porträts
+
+Jedes Token zeigt ein gemaltes Bruststück: `assets/units/units.webp` ist ein
+Atlas aus acht Zellen à 128 px – vier Typen (leicht, mittel, schwer,
+Verbündeter) mal zwei Fraktionen. Die Zellkoordinaten stehen in
+`units.json` und werden von `sprites.js` an genau zwei Stellen ausgegeben: als
+Bildausschnitt für den Canvas (`unitSprite`, gezeichnet in `drawToken`) und als
+Spalte/Zeile für den CSS-Hintergrund der Aufstellungsliste (`spriteCell`,
+`.chip-pic` in `style.css`). Beide Wege benutzen denselben Zuschnitt
+(`PORTRAIT_ZOOM`/`PORTRAIT_SHIFT` in `render.js`), damit Liste und Schlachtfeld
+dasselbe Gesicht zeigen.
+
+Drei Punkte, die den Umgang damit bestimmen:
+
+- **Die Fraktionsfarbe steckt nicht in der Grafik.** Die Zellen sind
+  freigestellt; der Kreis darunter liefert den Farbverlauf. Deshalb reichen acht
+  Zellen, deshalb bleibt Blau gegen Rot auf einen Blick unterscheidbar – und
+  deshalb dürfen künftige Porträts nie flächig in Fraktionsfarbe gemalt sein.
+- **Die Grafik ist Kosmetik.** Lädt der Atlas nicht, zeichnet `drawToken` das
+  frühere Kreis-Token mit Kurzzeichen. Es gibt keinen Ladebildschirm und keinen
+  Zustand, in dem das Spiel auf ein Bild wartet.
+- **Die römische Ziffer sitzt auf einem Band am unteren Kreisrand**, nicht mehr
+  in der Mitte – dort läge sie im Gesicht. Das Band ist ins Kreissegment
+  geschnitten und ragt darum nie über das Token hinaus.
+
+Die WebP ist verlustlos (`VP8L`) und damit selbst das Original – ein PNG
+daneben wäre dieselbe Pixelmenge in größer. Die hochauflösenden Ausgangsblätter
+liegen bewusst nicht im Repo.
+
+### Gebäude: Ebenen statt Standbild
+
+Burg und Wachturm kommen aus `assets/buildings.webp` (1024×1024, sechzehn Zellen
+à 256 px) mit `buildings.json` daneben. Je Bautyp und Fraktion liegen dort drei
+Ebenen – `body`, `glow`, `ruin` – dazu je Fraktion ein Fahnentuch.
+
+Der Schnitt hat einen Grund: **Ein Standbild würde die Animationen töten.** An
+Burg und Turm hängen wehende Fahne, flackerndes Fensterlicht, Feuerschalen,
+Schutzkuppel und Rauch. Animierte Sprite-Sheets generieren zu lassen scheitert
+an der Frame-Kohärenz – Frame 2 wäre eine andere Burg als Frame 1. Also wird
+nur das unbewegte Mauerwerk gemalt, und der Code bewegt weiterhin alles, was
+sich bewegt:
+
+- `glow` ist eine reine Leuchtmaske und wird additiv mit derselben
+  Flackerfunktion darübergelegt, die früher die gezeichneten Schießscharten
+  pulsieren ließ (`0,55 + 0,45·sin(anim·9)`).
+- Das Fahnentuch ist flach und ungewellt gemalt. `drawBannerCloth` zerlegt es in
+  achtzehn senkrechte Streifen und versetzt sie mit dem Wellenprofil aus
+  `traceFlag` – dieselbe Bewegung wie vorher, nur auf gemaltem Tuch statt auf
+  einem Farbverlauf. Der Schwalbenschwanz steckt als Transparenz im Bild.
+- Feuerschalen, Schutzkuppel, Lebensbalken, Bodenschatten, Kampfring,
+  Fraktions-Basisring und Rauch sind unverändert Code.
+
+Damit `body`, `glow` und `ruin` deckungsgleich liegen, teilen alle Zellen eines
+Bauwerks Zellgröße und Ankerpunkt; `buildingLayout` rechnet den Maßstab **immer
+aus der `body`-Ebene** und benutzt ihn für alle drei. Die Leuchtmaske wurde beim
+Erzeugen nicht gemalt, sondern per Schwellwert aus dem fertigen Body gezogen –
+Deckungsgleichheit per Konstruktion.
+
+`anchor` aus der JSON ist der Punkt, der auf dem Wegpunkt landet: bei Gebäuden
+die Mitte der Standfläche, beim Banner die Mastseite oben. Deshalb steht die
+Ruine auf derselben Linie wie der heile Bau, obwohl sie niedriger ist.
+
+`KEEP_WIDTH`/`TOWER_WIDTH` in `render.js` sind nach oben begrenzt: Über dem
+Bauwerk hängen noch Mast, Fahne und Lebensbalken, und die nördliche Burg steht
+bei y = 78. Ein größerer Bau schöbe ihren Lebensbalken aus der Karte.
+
+Fehlt der Atlas, zeichnen `drawKeepVector` und `drawTowerVector` die frühere
+Fassung vollständig – inklusive der Laufzeit-Fraktionstönung des Turmsteins
+(`mixHex`), die die gemalten Türme nicht mehr brauchen.
+
+### Porträts der Bosse
+
+Die beiden **Bosse** haben ihren eigenen Atlas `assets/units/bosses.webp`: zwei
+Zellen à 256 px, Spalte 0 Sturmlanze, Spalte 1 Frostwolf. Er kommt ohne JSON
+aus – mit einer Zelle je Fraktion ist die Aufteilung abschließend, es gibt keine
+dritte Seite, um die er wachsen könnte. Die doppelte Zellgröße hat einen Grund:
+Das Boss-Medaillon steht auf der Karte größer als ein Trupp-Token
+(`drawBossMedallion`, rechts neben der Festung, mit goldenem Reif wie der
+Verbündete) und erscheint zusätzlich groß im Sieges-Overlay (`.overlay-boss`).
+Fällt der Boss, verblasst sein Medaillon, statt zu verschwinden. Fehlt der
+Atlas, entfällt es ersatzlos.
 
 Jede angeworbene Einheit trägt eine fortlaufende **römische Ziffer** (in der
 Reihenfolge des Anwerbens je Fraktion). Sie erscheint als Kennzeichen in der

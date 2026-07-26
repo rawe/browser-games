@@ -15,6 +15,7 @@ import { createSim } from './sim.js';
 import { createRenderer } from './render.js';
 import { createPlanner } from './planner.js';
 import { aiPlan, AI_LEVELS, DEFAULT_AI_LEVEL } from './ai.js';
+import { bossCell } from './sprites.js';
 import { lockZoomGestures } from './gestures.js';
 
 // Pinch-/Doppeltipp-Zoom auf Mobilgeräten (v. a. iOS) sperren – gilt für alle
@@ -478,16 +479,23 @@ function showResult() {
   resultShown = true;
   const r = sim.result;
   let title;
-  let emoji;
+  // Beim Sieg blickt der eigene Boss aus dem Overlay – derselbe Kopf, der auf
+  // der Karte die Festung bewacht hat. Fehlt der Bossatlas, bleibt es beim
+  // Pokal. Ein Unentschieden hat keinen Sieger und damit kein Gesicht.
+  let head = '<div class="overlay-emoji">🏆</div>';
   if (r.winner === 'draw') {
-    emoji = '🤝';
+    head = '<div class="overlay-emoji">🤝</div>';
     title = 'Unentschieden';
   } else {
-    emoji = '🏆';
-    title = `${FACTIONS[r.winner].name} siegt!`;
+    const fac = FACTIONS[r.winner];
+    const cell = bossCell(r.winner);
+    if (cell) {
+      head = `<div class="overlay-boss" style="--col:${cell.col};--fac:${fac.color};--fac-dark:${fac.dark}"></div>`;
+    }
+    title = `${fac.name} siegt!`;
   }
   overlayCard.innerHTML = `
-    <div class="overlay-emoji">${emoji}</div>
+    ${head}
     <h2 ${r.winner !== 'draw' ? `style="color:${FACTIONS[r.winner].color}"` : ''}>${title}</h2>
     <p>${r.reason}</p>
     <div class="overlay-buttons">
