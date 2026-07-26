@@ -2,3 +2,9 @@ node_modules/
 dist/
 .DS_Store
 *.log
+
+# Lokale Arbeitsablage: Bildaufträge, Rohmaterial, Zwischenstände
+_lokal/
+games/*/prompt-*.md
+games/*/_referenz-export.html
+.claude/
