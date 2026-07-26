@@ -1,10 +1,41 @@
 // Terrain: malt den statischen Hintergrund des Alteractals einmal vor –
 // nächtliches Schneetal, Felswände, gefrorene Bäche, verschneite Wälder,
 // festgetretene Wege und die Feldlager beider Fraktionen. Keine Spiellogik.
+//
+// Der Untergrund kommt aus `assets/valley.webp`, einem gemalten Talbild. Die
+// prozedurale Fassung darunter bleibt vollständig erhalten und springt ein,
+// solange das Bild nicht geladen ist oder gar nicht lädt.
+//
+// Was das Bild NICHT enthält, ist Absicht: keine Wege und keine Wegpunkte.
+// Beides hängt an `NODES`/`EDGES` in map.js, also an Konfiguration, die sich
+// ändern darf – ein mitgemaltes Wegenetz wäre beim nächsten verschobenen
+// Wegpunkt falsch. Die Wege zeichnet deshalb weiterhin `drawRoad` entlang
+// `edgePoint`, in beiden Fassungen identisch.
 
 import { edgePoint } from './map.js';
 
 const TAU = Math.PI * 2;
+
+// `new URL(..., import.meta.url)`: Nur so schreibt Vite die Adresse auf den
+// gehashten Build-Namen um und der relative Pages-Build (`base: './'`) findet
+// die Datei auch in einem Unterverzeichnis.
+const valley = new Image();
+let valleyReady = false;
+const valleyWaiting = [];
+valley.onload = () => {
+  valleyReady = true;
+  for (const cb of valleyWaiting.splice(0)) cb();
+};
+valley.src = new URL('./assets/valley.webp', import.meta.url).href;
+
+// Meldet, sobald das Talbild da ist. Der Renderer rastert seinen Hintergrund
+// nur beim Größenwechsel neu; ohne dieses Signal bliebe bis zum nächsten
+// Resize die prozedurale Fassung stehen. Ist das Bild schon geladen, ruft der
+// Aufruf sofort zurück.
+export function onValleyReady(cb) {
+  if (valleyReady) cb();
+  else valleyWaiting.push(cb);
+}
 
 // Deterministischer Zufall für die Landschaftsdeko.
 export function mulberry32(seed) {
@@ -19,6 +50,19 @@ export function mulberry32(seed) {
 }
 
 export function paintTerrain(b, map) {
+  // Mit Bild besteht der Hintergrund aus genau zwei Lagen: gemaltes Tal, Wege
+  // darüber. Die Vignette steckt bereits im Bild.
+  if (valleyReady) {
+    b.drawImage(valley, 0, 0, map.width, map.height);
+    for (const e of map.edges) drawRoad(b, map, e);
+    return;
+  }
+  paintProceduralTerrain(b, map);
+}
+
+// Die gezeichnete Fassung: Rückfall und zugleich die Vorlage, aus der das
+// gemalte Talbild entstanden ist.
+function paintProceduralTerrain(b, map) {
   const W = map.width;
   const H = map.height;
   const rnd = mulberry32(42);

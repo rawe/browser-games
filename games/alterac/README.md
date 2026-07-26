@@ -18,8 +18,8 @@ Eingriffe ab. Wer den gegnerischen Endboss fällt, gewinnt.
 | `ai-easy.js` | Stufe „Leicht": zufällig gemischte Armee, grobe Marschbefehle |
 | `ai-hard.js` | Stufe „Schwer": kampfwertoptimierte Armee, Turmwache, konzentrierte Turmoffensive, Boss-Sturm per Event |
 | `render.js`  | Canvas-Rendering: Knoten, Token, Overlays, Wetter (keine Spiellogik) |
-| `sprites.js` | Einheiten-Porträts aus `assets/units/` (Atlas laden, Zelle je Fraktion und Typ) |
-| `terrain.js` | Vorgerenderter Landschafts-Hintergrund (Schneetal, Felswände, Wälder, Wege, Lager) |
+| `sprites.js` | Einheiten- und Boss-Porträts aus `assets/units/` (Atlanten laden, Zelle je Fraktion und Typ) |
+| `terrain.js` | Landschafts-Hintergrund: gemaltes Talbild `assets/valley.webp` plus Wege, prozedurale Fassung als Rückfall |
 | `effects.js` | Partikeleffekte (Schadenszahlen, Funken, Geister, Respawn-Säulen, Boss-Sturz) |
 | `main.js`    | Bildschirm-Ablauf und Render-Schleife |
 | `config.js`  | Einheitentypen sowie alle Kampf- und Zeitwerte |
@@ -31,6 +31,26 @@ Verbindungen (`EDGES`) in `map.js`. Sie enthält Abzweigungen, zwei
 Querverbindungen (Eisfelsklamm–Steinbruch, Wolfsschlucht–Kiefernhang) und zu
 jedem Endboss mindestens zwei getrennte Zugänge: das Nordtor und den Eisigen
 Grat im Norden, das Südtor und den Schmugglerpfad im Süden.
+
+### Der Hintergrund kennt das Wegenetz nicht
+
+Der Untergrund ist ein gemaltes Talbild, `assets/valley.webp` (960×1920, also
+doppelte Kartenauflösung). Es enthält bewusst **weder Wege noch Wegpunkte**:
+Beides steht in `NODES`/`EDGES` und darf sich ändern – ein mitgemaltes Wegenetz
+wäre beim nächsten verschobenen Wegpunkt falsch. Gemalt ist nur, was darunter
+liegt: Felsflanken, Bäche, Wälder, Feldlager, Lichtstimmung. Die Wege zeichnet
+weiterhin `drawRoad` entlang `edgePoint`, die Knoten der Renderer.
+
+Damit das trägt, hält das Bild seine offene Talmitte frei – nichts Hohes,
+nichts Kontrastreiches zwischen den Felsflanken. Wer das Bild ersetzt, muss
+diese Eigenschaft erhalten, sonst steht irgendwann ein gemalter Baum unter
+einem Turm.
+
+`paintTerrain` schaltet zwischen zwei Fassungen um: mit Bild zwei Lagen (Tal,
+Wege darüber), ohne Bild die vollständige prozedurale Landschaft, die es vorher
+gab und aus der das Talbild entstanden ist. Der Rückfall greift beim ersten
+Frame wie bei einem fehlgeschlagenen Ladevorgang; `onValleyReady` stößt das
+einmalige Neurastern an, wenn das Bild nachträglich eintrifft.
 
 ### Spiegelsymmetrie – die Fairness-Grundlage
 
@@ -274,6 +294,16 @@ Drei Punkte, die den Umgang damit bestimmen:
 Die WebP ist verlustlos (`VP8L`) und damit selbst das Original – ein PNG
 daneben wäre dieselbe Pixelmenge in größer. Die hochauflösenden Ausgangsblätter
 liegen bewusst nicht im Repo.
+
+Die beiden **Bosse** haben ihren eigenen Atlas `assets/units/bosses.webp`: zwei
+Zellen à 256 px, Spalte 0 Sturmlanze, Spalte 1 Frostwolf. Er kommt ohne JSON
+aus – mit einer Zelle je Fraktion ist die Aufteilung abschließend, es gibt keine
+dritte Seite, um die er wachsen könnte. Die doppelte Zellgröße hat einen Grund:
+Das Boss-Medaillon steht auf der Karte größer als ein Trupp-Token
+(`drawBossMedallion`, rechts neben der Festung, mit goldenem Reif wie der
+Verbündete) und erscheint zusätzlich groß im Sieges-Overlay (`.overlay-boss`).
+Fällt der Boss, verblasst sein Medaillon, statt zu verschwinden. Fehlt der
+Atlas, entfällt es ersatzlos.
 
 Jede angeworbene Einheit trägt eine fortlaufende **römische Ziffer** (in der
 Reihenfolge des Anwerbens je Fraktion). Sie erscheint als Kennzeichen in der

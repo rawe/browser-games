@@ -3,9 +3,9 @@
 
 import { FACTIONS, enemyOf, edgePoint, shortestPath } from './map.js';
 import { toRoman } from './config.js';
-import { paintTerrain, mulberry32 } from './terrain.js';
+import { paintTerrain, mulberry32, onValleyReady } from './terrain.js';
 import { createEffects } from './effects.js';
-import { unitSprite } from './sprites.js';
+import { unitSprite, bossSprite } from './sprites.js';
 
 const TAU = Math.PI * 2;
 
@@ -61,6 +61,14 @@ export function createRenderer(canvas, map) {
     b.setTransform(scale, 0, 0, scale, 0, 0);
     paintTerrain(b, map);
   }
+
+  // Das gemalte Talbild trifft asynchron ein. Kommt es nach dem ersten Rastern,
+  // wird der Hintergrund einmal neu gezeichnet – sonst bliebe bis zum nächsten
+  // Größenwechsel die prozedurale Fassung stehen. Vor dem ersten `resize()`
+  // hat die Leinwand noch keine Maße; dann erledigt es `resize()` ohnehin.
+  onValleyReady(() => {
+    if (canvas.width) paintBackground();
+  });
 
   // ---------------------------------------------------------------- Bausteine
   function label(x, y, text, opts = {}) {
@@ -548,6 +556,75 @@ export function createRenderer(canvas, map) {
 
   // Festung: Turm mit Seitenmauern, Feuerschalen, leuchtenden Schießscharten
   // und großem Fraktionsbanner. Zerstört: dunkel, rissig, rauchend.
+  // Boss-Medaillon neben der Festung: gibt dem Ziel der Schlacht ein Gesicht.
+  // Aufbau wie ein Trupp-Token – Fraktionsverlauf, freigestelltes Porträt,
+  // dunkler Ring, Glanzkante –, nur größer und mit goldenem Reif, derselben
+  // Auszeichnung, die auch der beschworene Verbündete trägt.
+  //
+  // Es steht rechts der Festung, weil links in der Planungsansicht bereits der
+  // Armeezähler klebt (`drawPlanning` setzt ihn auf `n.x - 46`). Fehlt der
+  // Bossatlas, entfällt das Medaillon ersatzlos: Festung und Lebensbalken haben
+  // den Boss vorher auch allein getragen.
+  function drawBossMedallion(n, alive) {
+    const sprite = bossSprite(n.faction);
+    if (!sprite) return;
+    const c = FACTIONS[n.faction];
+    // 68 px Abstand: Der Kreis (samt Reif 24,5 px) räumt so die Seitenmauer bei
+    // 35 px und die Feuerschale davor frei und stößt gerade an die Schutzkuppel
+    // mit ihren 44 px – näher heran verdeckt er die Flamme.
+    const x = n.x + 68;
+    const y = n.y + 2;
+    const r = 22;
+    ctx.save();
+    // Gefallener Boss: Das Porträt bleibt stehen, verblasst aber und verliert
+    // seine Fraktionsfarbe – der Spieler soll sehen, wen er erledigt hat.
+    if (!alive) ctx.globalAlpha = 0.45;
+    ctx.beginPath();
+    ctx.arc(x, y + 3, r, 0, TAU);
+    ctx.fillStyle = 'rgba(4,7,12,0.5)';
+    ctx.fill();
+    const fill = ctx.createRadialGradient(x - r * 0.35, y - r * 0.45, r * 0.2, x, y, r);
+    fill.addColorStop(0, alive ? c.color : '#4a5468');
+    fill.addColorStop(1, alive ? c.dark : '#2a3140');
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, TAU);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, TAU);
+    ctx.clip();
+    const d = r * 2 * PORTRAIT_ZOOM;
+    ctx.drawImage(
+      sprite.image,
+      sprite.sx,
+      sprite.sy,
+      sprite.sw,
+      sprite.sh,
+      x - d / 2,
+      y - d / 2 + r * PORTRAIT_SHIFT,
+      d,
+      d
+    );
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, TAU);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(8,12,20,0.9)';
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, r - 2.8, -TAU * 0.38, -TAU * 0.08);
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, r + 2.5, 0, TAU);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = alive ? 'rgba(255,214,138,0.75)' : 'rgba(150,142,124,0.45)';
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function drawKeep(n, alive, bossState, shield = 0) {
     const c = FACTIONS[n.faction];
     const w = 40;
@@ -715,6 +792,7 @@ export function createRenderer(canvas, map) {
         effects.smoke(n.x + (Math.random() - 0.5) * 22, y0 + 4);
       }
     }
+    drawBossMedallion(n, alive);
   }
 
   // Zwei Hex-Farben mischen (t = 0 → a, t = 1 → b).
