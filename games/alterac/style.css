@@ -406,8 +406,11 @@ html {
   box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
 }
 
-/* Kopf-/Fußzeilen behalten ihre natürliche Höhe; nur die Liste scrollt. */
-#panel > *:not(.roster) {
+/* Kopf-/Fußzeilen behalten ihre natürliche Höhe. Nachgeben dürfen nur die
+   beiden Blöcke, die dafür gebaut sind: die Einheitenliste der Planung
+   (`.roster`, scrollt) und der Meldungsticker der Simulation (`.ticker`, zeigt
+   dann weniger Meldungen). */
+#panel > *:not(.roster):not(.ticker) {
   flex: 0 0 auto;
 }
 
@@ -1130,30 +1133,66 @@ html {
   color: #f0d489;
 }
 
-/* Vorratsanzeige: je Fraktion eine Zeile aus Name, Stand/Schwelle, einem
-   schmalen Balken und dem Zustand des fest zugeordneten Lagers. Hängt nur im
-   Panel, wenn die Partie Vorratslager hat. Alle Texte dürfen kürzen (Ellipsis),
-   damit die Zeile auf schmalen Geräten nie überläuft – der Balken darunter
-   bleibt immer voll sichtbar. */
-.supply-board {
+/* Boss-HUD: je Fraktion **eine** Zeile mit allem, was zu ihr zu wissen ist –
+   Porträt, Name, Lebenspunkte des Fürsten und darunter zwei Messwert-Zeilen,
+   Schild und Vorrat. Jede der beiden erscheint nur, wenn ihr Teilsystem läuft
+   (Türme mit wirksamem Schild bzw. Vorratslager). Rot steht oben, blau unten,
+   wie die Festungen auf der Karte. Der Block hängt im Panel, verdeckt also nie
+   Gelände und hat mit dem Karten-Scrollen nichts zu tun. */
+.boss-board {
   display: grid;
-  gap: 0.35rem;
-  padding: 0.4rem 0.55rem;
+  gap: 0.45rem;
+  padding: 0.45rem 0.55rem;
   border: 1px solid #2a3348;
   border-radius: 0.6rem;
   background: rgba(26, 32, 48, 0.6);
 }
 
-.supply-row {
+.boss-row {
   display: grid;
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-  align-items: baseline;
-  gap: 0.15rem 0.5rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'pic head'
+    'pic hp'
+    'pic meters';
+  align-items: center;
+  gap: 0.2rem 0.5rem;
 }
 
-.supply-fac,
-.supply-value,
-.supply-camp {
+/* Sind beide Teilsysteme aus, entfällt der Messwert-Block ganz – die
+   Porträtspalte darf dabei nicht in die Höhe springen. */
+.boss-row:not(:has(.boss-meters)) {
+  grid-template-areas:
+    'pic head'
+    'pic hp';
+}
+
+.boss-meters {
+  grid-area: meters;
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.boss-pic {
+  --pic: 2.1rem;
+  grid-area: pic;
+  align-self: center;
+  border: 1px solid rgba(8, 12, 20, 0.9);
+  box-shadow: 0 0 0 1.5px rgba(255, 214, 138, 0.7);
+}
+
+.boss-head {
+  grid-area: head;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.boss-name,
+.boss-hp {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1162,67 +1201,214 @@ html {
   line-height: 1.3;
 }
 
-.supply-fac {
+.boss-name {
   font-weight: 700;
   color: var(--fac, #e6ebf4);
 }
 
-.supply-value {
-  text-align: right;
+.boss-hp {
+  flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
   color: #cfd7e6;
 }
 
-.supply-bar {
-  grid-column: 1 / -1;
+.boss-bar {
+  grid-area: hp;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: #232a3a;
+  overflow: hidden;
+}
+
+.boss-bar > i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  /* Dieselben Stufen wie der Lebensbalken auf der Karte. */
+  background: #6ecf73;
+  transition:
+    width 0.2s linear,
+    background-color 0.3s ease;
+}
+
+.boss-bar > i[data-level='mid'] {
+  background: #ffd76a;
+}
+
+.boss-bar > i[data-level='low'] {
+  background: #ff6b5e;
+}
+
+/* Messwert-Zeile: Symbol, schmaler Balken, kurzer Text. Schild und Vorrat
+   teilen sich diese Form – zwei Größen, die beide „wie weit ist es noch" sagen,
+   sollen auch gleich aussehen. Der Text ist rechtsbündig fixiert, damit die
+   Balken beider Zeilen untereinander gleich lang sind. */
+.boss-meter {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.boss-meter-icon {
+  flex: 0 0 auto;
+  width: 0.85rem;
+  text-align: center;
+  font-size: 0.62rem;
+  line-height: 1;
+  filter: saturate(0.7);
+}
+
+.boss-meter-bar {
+  flex: 1 1 auto;
+  min-width: 0;
   height: 0.28rem;
   border-radius: 999px;
   background: #232a3a;
   overflow: hidden;
 }
 
-.supply-bar > i {
+.boss-meter-bar > i {
   display: block;
-  width: 0;
+  width: 100%;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--fac-dark, #2c5aa8), var(--fac, #5b9cff));
   transition: width 0.2s linear;
 }
 
-/* Zustandszeile des eigenen Lagers: „inaktiv" tritt zurück, „liefert" ist die
-   ruhige Normallage, „blockiert" ist die Warnung an den Spieler und darf als
-   Einziges auffallen. */
-.supply-camp {
-  grid-column: 1 / -1;
-  font-size: 0.72rem;
-  color: #8c97ad;
+.boss-meter-text {
+  flex: 0 0 auto;
+  min-width: 4.6rem;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  color: #8a94a8;
 }
 
-.supply-camp.running {
-  color: #9fd6a6;
+/* --- Schild: kaltes Leuchten, solange Türme stehen --- */
+.boss-meter.shield > .boss-meter-bar > i {
+  background: linear-gradient(90deg, #4a8fc4, #a6dcff);
+  box-shadow: 0 0 6px rgba(150, 210, 255, 0.7);
 }
 
-.supply-camp.blocked {
+.boss-meter.shield .boss-meter-text {
+  color: #8fb6d6;
+}
+
+/* Bricht der Schild gleich, pulsiert er – dezent genug, um nicht zu nerven,
+   deutlich genug, um im Augenwinkel aufzufallen. */
+.boss-meter.weak > .boss-meter-bar > i,
+.boss-meter.weak .boss-meter-icon {
+  animation: shield-pulse 1.1s ease-in-out infinite;
+}
+
+.boss-meter.weak .boss-meter-icon {
+  filter: none;
+}
+
+.boss-meter.weak .boss-meter-text {
+  color: #ffd76a;
   font-weight: 700;
-  color: #ffb15c;
 }
 
-/* Verbündeter erschienen: Zeile und Balken wechseln auf Gold. */
-.supply-row.summoned .supply-value {
+@keyframes shield-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 6px rgba(150, 210, 255, 0.7);
+  }
+  50% {
+    opacity: 0.55;
+    box-shadow: 0 0 12px rgba(190, 230, 255, 0.95);
+  }
+}
+
+/* Gefallener Schild: der Balken bleibt als leere Rinne stehen, damit die Zeile
+   nicht in der Höhe springt – aber nichts an ihr leuchtet noch. */
+.boss-meter.broken {
+  opacity: 0.6;
+}
+
+.boss-meter.broken .boss-meter-text {
+  color: #8a94a8;
+}
+
+/* --- Vorrat: füllt sich in Fraktionsfarbe bis zum mächtigen Verbündeten --- */
+.boss-meter.supply > .boss-meter-bar > i {
+  background: linear-gradient(90deg, var(--fac-dark, #2c5aa8), var(--fac, #5b9cff));
+}
+
+.boss-meter.supply.running .boss-meter-text {
+  color: #cfd7e6;
+}
+
+/* Ein inaktives Lager tritt zurück, ein blockiertes ist die Warnung an den
+   Spieler und darf als Einziges auffallen. */
+.boss-meter.supply.blocked > .boss-meter-bar > i {
+  background: linear-gradient(90deg, #7a4a12, #ffb15c);
+}
+
+.boss-meter.supply.blocked .boss-meter-icon {
+  filter: none;
+}
+
+.boss-meter.supply.blocked .boss-meter-text {
+  color: #ffb15c;
+  font-weight: 700;
+}
+
+/* Der Verbündete ist da: Zeile und Balken wechseln auf Gold. */
+.boss-meter.supply.summoned > .boss-meter-bar > i {
+  background: linear-gradient(90deg, #8a6a24, #f0d489);
+}
+
+.boss-meter.supply.summoned .boss-meter-icon {
+  filter: none;
+}
+
+.boss-meter.supply.summoned .boss-meter-text {
   color: #f0d489;
   font-weight: 700;
 }
 
-.supply-row.summoned .supply-bar > i {
-  background: linear-gradient(90deg, #8a6a24, #f0d489);
+/* Gefallener Fürst: Die Zeile bleibt stehen und verliert ihre Farbe – dasselbe
+   Verhalten, das vorher das Medaillon auf der Karte zeigte. */
+.boss-row.fallen {
+  opacity: 0.5;
 }
 
+.boss-row.fallen .boss-pic {
+  filter: grayscale(1);
+  box-shadow: 0 0 0 1.5px rgba(150, 142, 124, 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boss-meter.weak > .boss-meter-bar > i,
+  .boss-meter.weak .boss-meter-icon {
+    animation: none;
+  }
+}
+
+/* Der Ticker ist der Puffer des Simulationspanels: das einzige Element, das
+   nachgibt. Er belegt genau so viel, wie seine (höchstens drei) Meldungen
+   brauchen – nach oben gedeckelt, damit er das Panel nicht aufbläht, und ohne
+   Vorratsreserve, die zu Beginn als leeres Feld über der ersten Meldung stünde.
+   Reicht die Bildschirmhöhe nicht, schrumpft er unter seinen Inhalt; weil er an
+   der Unterkante hängt, bleibt dabei die neueste Meldung stehen und oben fallen
+   die ohnehin ausgeblichenen ältesten weg. */
 .ticker {
   display: grid;
   gap: 0.15rem;
-  min-height: 3.6rem;
-  align-content: start;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 3.6rem;
+  overflow: hidden;
+  align-content: end;
 }
 
 .ticker p {
@@ -1283,16 +1469,16 @@ html {
    auf 125 % vergrößert und um ein Achtel nach unten geschoben, damit der Kopf
    mittig im Kreis sitzt. Der Fraktionsverlauf liegt als zweite
    Hintergrundschicht darunter und scheint durch die freigestellte Figur. */
-.overlay-boss {
-  --pic: 5.5rem;
+/* Boss-Porträt aus `bosses.webp` als CSS-Hintergrund. Zwei Abnehmer teilen sich
+   den Zuschnitt: das Boss-HUD der Simulation und das Ergebnis-Overlay. Sie
+   unterscheiden sich allein in `--pic`; alles andere darf nicht auseinander-
+   laufen, sonst zeigen HUD und Overlay verschieden beschnittene Gesichter.
+   Die Faktoren entsprechen PORTRAIT_ZOOM (1,25) und PORTRAIT_SHIFT (0,15) aus
+   `render.js`, mit denen der Canvas die Trupp-Porträts zuschneidet. */
+.boss-portrait {
   width: var(--pic);
   height: var(--pic);
-  margin: 0 auto;
   border-radius: 50%;
-  border: 2px solid rgba(8, 12, 20, 0.9);
-  box-shadow:
-    0 0 0 2px rgba(255, 214, 138, 0.75),
-    0 8px 22px rgba(4, 7, 12, 0.55);
   background-image: url('./assets/units/bosses.webp'),
     radial-gradient(circle at 32% 28%, var(--fac, #5b9cff), var(--fac-dark, #2c5aa8));
   background-repeat: no-repeat;
@@ -1300,6 +1486,15 @@ html {
   background-position:
     calc(var(--col) * var(--pic) * -1.25 - var(--pic) * 0.125) calc(var(--pic) * -0.05),
     center;
+}
+
+.overlay-boss {
+  --pic: 5.5rem;
+  margin: 0 auto;
+  border: 2px solid rgba(8, 12, 20, 0.9);
+  box-shadow:
+    0 0 0 2px rgba(255, 214, 138, 0.75),
+    0 8px 22px rgba(4, 7, 12, 0.55);
 }
 
 #overlay-card h2 {
