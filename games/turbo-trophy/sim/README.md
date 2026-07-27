@@ -51,6 +51,16 @@ deterministischen Zufallsgenerator (`rng.js`) – gleicher Seed, gleicher Lauf.
 | Gras | Zeitanteil neben der Strecke |
 | Zickzack | Richtungswechsel der Seitenbewegung pro Sekunde |
 | Kontakte | Ticks, in denen sich zwei Bots berühren |
+| Sprünge | Anzahl befahrener Sprungschanzen |
+| Öl | Auslösungen von Öllachen |
+| Schranke | Zustandswechsel / Ticks, in denen eine Sperre jemanden aufhält |
+| Brücke s | Zeit, die Fahrzeuge auf der oberen Höhenebene verbringen |
+
+Für die Streckenelemente aus Issue #26 prüft `--check` zusätzlich, dass
+Schanzen tatsächlich befahren werden, Öllachen wirken, Schranken während des
+Rennens umschalten, die KI nicht dauernd in geschlossene Sperren fährt und
+Fahrzeuge auf getrennten Höhenebenen einander durchdringen, statt zu
+kollidieren.
 
 ## Parameter-Sweeps
 

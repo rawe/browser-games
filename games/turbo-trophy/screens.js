@@ -6,6 +6,7 @@ import {
   repairCost, upgradeCost,
 } from './career.js';
 import { DIFFICULTIES, profileFor } from './ai.js';
+import { tracks } from './tracks.js';
 
 const money = (n) => `$${n.toLocaleString('de-DE')}`;
 
@@ -50,13 +51,14 @@ export function createScreens(overlayEl) {
       overlayEl.classList.add('hidden');
     },
 
-    title({ onStart, onDifficulty, difficulty, audio }) {
+    title({ onStart, onEditor, onDifficulty, difficulty, audio }) {
       show(`
         <div class="logo">TURBO<br>TROPHY</div>
         <div class="sub">TOP-DOWN-ARCADE-RENNEN IM GEIST VON SUPER CARS</div>
         <div class="panel">
           <h3>MEISTERSCHAFT</h3>
-          <div class="row"><span class="lbl">4 Strecken<small>Werde Erster bis Dritter, um weiterzukommen</small></span></div>
+          <div class="row"><span class="lbl">${tracks.length} Strecken<small>Werde Erster bis Dritter, um weiterzukommen</small></span></div>
+          <div class="row"><span class="lbl">Streckenelemente<small>Schanzen, Öllachen, Schranken und eine Brücke über die Kreuzung</small></span></div>
           <div class="row"><span class="lbl">Preisgeld<small>Investiere zwischen den Rennen in Tuning &amp; Waffen</small></span></div>
           <div class="row"><span class="lbl">Raketen<small>Nach vorn und nach hinten – Gegner ausschalten!</small></span></div>
         </div>
@@ -65,6 +67,7 @@ export function createScreens(overlayEl) {
           ${difficultyPicker(difficulty)}
         </div>
         <button class="big" id="start-btn">SAISON STARTEN</button>
+        <button class="buy" id="editor-btn">&#128736; STRECKENEDITOR</button>
         <p class="hint">
           📱 Buttons unten – links lenken, rechts GAS &amp; Raketen.<br>
           GAS kurz antippen = <b>Dauergas</b> (Hände frei für Raketen),
@@ -75,6 +78,7 @@ export function createScreens(overlayEl) {
         <a class="overview-link" href="../../index.html">← Zur Spiele-Übersicht</a>
       `);
       onClick('start-btn', onStart);
+      onClick('editor-btn', onEditor);
       bindDifficulty(onDifficulty);
       onClick('mute-btn', (e) => {
         audio.setMuted(!audio.isMuted());
@@ -121,7 +125,7 @@ export function createScreens(overlayEl) {
           ${difficultyPicker(career.difficulty)}
         </div>
         <button class="big" id="race-btn">ZUM RENNEN &#9654;</button>
-        <p class="hint">Rennen ${career.stage + 1}/4 • ${career.points} Punkte</p>
+        <p class="hint">Rennen ${career.stage + 1}/${tracks.length} • ${career.points} Punkte</p>
       `);
 
       const rerender = () => screens.shop({ career, track, onBuy, onStart, onDifficulty });

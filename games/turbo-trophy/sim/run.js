@@ -8,6 +8,7 @@
 
 import { tracks } from '../tracks.js';
 import { DIFFICULTIES } from '../ai.js';
+import { ELEMENT_TYPES } from '../elements.js';
 import { simulateOvertake, simulateSeries } from './headless.js';
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => {
@@ -34,6 +35,10 @@ const COLUMNS = [
   ['Gras', 7, (r) => pct(r.offroadShare)],
   ['Zickzack', 9, (r) => r.zigzag.toFixed(2)],
   ['Kontakte', 9, (r) => r.aiContacts.toFixed(0)],
+  ['Sprünge', 8, (r) => r.jumps.toFixed(1)],
+  ['Öl', 5, (r) => r.oilHits.toFixed(1)],
+  ['Schranke', 9, (r) => `${r.gateSwitches.toFixed(0)}/${r.gateStops.toFixed(0)}`],
+  ['Brücke s', 9, (r) => (r.bridgeTicks / 60).toFixed(1)],
 ];
 
 function table(rows) {
@@ -129,6 +134,50 @@ const fewestLaps = Math.min(...parked.map((r) => r.minBotLaps));
 add('Stehendes Hindernis blockiert die Bots nicht dauerhaft',
   worstBlocked < 600 && fewestLaps >= 3,
   `längste Blockade ${(worstBlocked / 60).toFixed(1)} s, wenigste Runden ${fewestLaps} in 150 s`);
+
+/* ---------- Akzeptanzkriterien aus Issue #26 (Streckenelemente) ---------- */
+
+// Nur prüfen, wenn alle Strecken im Lauf sind – sonst fehlen Elementtypen.
+if (stages.length === tracks.length) {
+  const withType = (type) => tracks
+    .map((t, i) => ({ i, has: (t.elements ?? []).some((el) => el.type === type) }))
+    .filter((e) => e.has).map((e) => e.i);
+  const rowsOf = (stageList) => results.filter((r) => stageList.includes(r.stage));
+  const total = (rows, key) => rows.reduce((s, r) => s + r[key], 0);
+
+  const rampRows = rowsOf(withType('ramp'));
+  add('Sprungschanzen werden befahren',
+    withType('ramp').length > 0 && total(rampRows, 'jumps') > 0,
+    `${total(rampRows, 'jumps').toFixed(0)} Sprünge, ${(total(rampRows, 'airTicks') / 60).toFixed(0)} s Flugzeit`);
+
+  const oilRows = rowsOf(withType('oil'));
+  add('Öllachen bringen Fahrzeuge ins Schleudern',
+    total(oilRows, 'oilHits') > 0,
+    `${total(oilRows, 'oilHits').toFixed(0)} Auslösungen`);
+
+  const gateRows = rowsOf(withType('gate'));
+  add('Schranken wechseln während des Rennens ihren Zustand',
+    total(gateRows, 'gateSwitches') > 0,
+    `${total(gateRows, 'gateSwitches').toFixed(0)} Zustandswechsel`);
+
+  // Die KI soll die Sperre umfahren, nicht dauernd hineinfahren.
+  const stopsPerRace = total(gateRows, 'gateStops') / Math.max(1, gateRows.length);
+  add('KI fährt nicht dauernd in geschlossene Schranken (< 90 Ticks je Rennen)',
+    stopsPerRace < 90, `Ø ${stopsPerRace.toFixed(0)} Ticks je Rennen`);
+
+  const bridgeRows = rowsOf(withType('bridge'));
+  add('Brücken werden befahren (obere Höhenebene erreicht)',
+    total(bridgeRows, 'bridgeTicks') > 0,
+    `${(total(bridgeRows, 'bridgeTicks') / 60).toFixed(1)} s auf der oberen Ebene`);
+
+  add('Fahrzeuge auf getrennten Ebenen kollidieren nicht',
+    total(bridgeRows, 'crossLevelPasses') > 0,
+    `${total(bridgeRows, 'crossLevelPasses').toFixed(0)} Begegnungen ohne Kontakt – ohne Höhentrennung wären das Kollisionen`);
+
+  add('Alle Elementtypen sind auf mindestens einer Strecke im Einsatz',
+    Object.keys(ELEMENT_TYPES).every((type) => withType(type).length > 0),
+    Object.keys(ELEMENT_TYPES).map((t) => `${t}=${withType(t).length}`).join('  '));
+}
 
 console.log('\nAkzeptanzkriterien');
 for (const c of checks) console.log(`  ${c.ok ? 'PASS' : 'FAIL'}  ${c.name} — ${c.detail}`);

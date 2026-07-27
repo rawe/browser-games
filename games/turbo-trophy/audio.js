@@ -46,5 +46,12 @@ export function createAudio() {
       tone('triangle', 620, 0, 0.1, 0.1);
       setTimeout(() => tone('triangle', 930, 0, 0.16, 0.1), 80);
     },
+
+    // Streckenelemente: kurz und klar unterscheidbar, damit man auch ohne
+    // Blick auf die Strecke merkt, was gerade passiert ist.
+    jump() { tone('triangle', 260, 780, 0.22, 0.1); },
+    land() { tone('sine', 220, 90, 0.14, 0.09); },
+    skid() { tone('sawtooth', 320, 150, 0.3, 0.07); },
+    gate() { tone('square', 300, 0, 0.12, 0.08); },
   };
 }

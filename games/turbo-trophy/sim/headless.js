@@ -138,6 +138,14 @@ export function simulateRace({
     aiOvertakes: race.stats.aiOvertakes,
     contacts: race.stats.contacts,
     aiContacts: race.stats.aiContacts,
+    // Streckenelemente (Issue #26)
+    jumps: race.stats.jumps,
+    oilHits: race.stats.oilHits,
+    gateStops: race.stats.gateStops,
+    gateSwitches: race.stats.gateSwitches,
+    bridgeTicks: race.stats.bridgeTicks,
+    airTicks: race.stats.airTicks,
+    crossLevelPasses: race.stats.crossLevelPasses,
     maxBlocked,
     botLaps: bots.map((c) => c.lap),
     convoyShare: share('convoy'),
@@ -237,5 +245,12 @@ export function simulateSeries({ stage = 0, difficulty = 'mittel', seeds = 5, fi
     offroadShare: mean((r) => r.offroadShare),
     zigzag: mean((r) => r.zigzag),
     unfinished: runs.filter((r) => r.cars.some((c) => !c.finished)).length,
+    jumps: mean((r) => r.jumps),
+    oilHits: mean((r) => r.oilHits),
+    gateStops: mean((r) => r.gateStops),
+    gateSwitches: mean((r) => r.gateSwitches),
+    bridgeTicks: mean((r) => r.bridgeTicks),
+    airTicks: mean((r) => r.airTicks),
+    crossLevelPasses: mean((r) => r.crossLevelPasses),
   };
 }

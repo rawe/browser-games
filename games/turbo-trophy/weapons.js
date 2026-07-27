@@ -15,6 +15,7 @@ export function fire(race, car, rear) {
     speed: 8.5 + Math.max(0, car.speed),
     life: 75,
     owner: car,
+    level: car.level ?? 0, // trifft nur Fahrzeuge auf derselben Höhenebene
     grace: 12, // kurz nach dem Start immun gegen den eigenen Schützen
   });
   race.events.push({ type: 'fire' });
