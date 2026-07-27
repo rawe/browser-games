@@ -628,6 +628,15 @@ table.results tr.me td {
   padding: 8px 10px;
 }
 
+/* Abbrechen sieht anders aus als Speichern – sonst greift man auf dem Handy
+   nach dem falschen der beiden gleich aussehenden Knöpfe. */
+.ed-top .buy.ed-quiet {
+  background: #101530;
+  color: var(--muted);
+  border: 2px solid var(--border);
+  box-shadow: none;
+}
+
 /* Die Streckenliste wächst mit `tracks.js` – darum umbrechen statt überlaufen. */
 .ed-tracks {
   flex-wrap: wrap;
@@ -676,6 +685,42 @@ table.results tr.me td {
 
 .ed-status.bad {
   color: var(--hot);
+}
+
+/* Abschluss-Feld: Der Ausgang ist die wichtigste Aktion des Editors und liegt
+   deshalb am Ende der Bedienung in Daumenreichweite, nicht nur oben in der
+   Kopfzeile. */
+.ed-finish {
+  text-align: center;
+  border-color: var(--ok);
+}
+
+.ed-finish h3 {
+  color: var(--ok);
+  border-bottom-color: var(--ok);
+}
+
+.ed-finish .big {
+  width: 100%;
+  font-size: 16px;
+  padding: 14px 12px;
+}
+
+.ed-explain {
+  margin-bottom: 10px;
+}
+
+.ed-explain b {
+  color: var(--txt);
+}
+
+/* Der Speicherort ist eine Einschränkung, keine Nebensache – Arbeit, die man
+   verlieren kann, muss man vorher kennen. */
+.ed-storage {
+  margin-top: 10px;
+  text-align: left;
+  border-top: 2px solid var(--border);
+  padding-top: 8px;
 }
 
 /* Die Bedienfelder tragen den Rest der Höhe und scrollen für sich – die
