@@ -3,8 +3,12 @@
 // Ereignisse landen in `race.events` und werden außerhalb übersetzt.
 // Die Gegnersteuerung liegt in `ai.js`, das Abfeuern in `weapons.js`.
 
-import { buildTrack, posAt, project, ROAD_WIDTH, WORLD } from './trackGeometry.js';
+import { buildTrack, gapAlong, posAt, project, ROAD_WIDTH, WORLD } from './trackGeometry.js';
 import { createAiState, driveAi, profileFor } from './ai.js';
+import {
+  buildElements, gateBlocks, gateState, inOil, levelAt, onRamp,
+  GROUND, JUMP_TICKS,
+} from './elements.js';
 import { createRng } from './rng.js';
 import { fire } from './weapons.js';
 
@@ -25,12 +29,19 @@ const INVULN_TICKS = 130;
 const CAR_RADIUS = 13;
 const MISSILE_HIT_RADIUS = 20;
 
+const RAMP_MIN_SPEED = 1.5; // darunter rumpelt man nur über die Schanze
+const OIL_TICKS = 34;       // wie lange ein Fahrzeug nach der Lache schleudert
+const GATE_STOP_RANGE = 18; // Bogenlänge, in der eine Schranke wirklich sperrt
+
 /**
  * Legt ein Rennen an. `options.seed` macht den Lauf reproduzierbar
  * (Standard: zufällig) – die Headless-Simulation nutzt das.
  */
 export function createRace(trackDef, career, options = {}) {
   const track = buildTrack(trackDef);
+  // Streckenelemente hängen am aufgebauten Track, nicht an der Geometrie –
+  // so bleibt `trackGeometry.js` frei von Spiellogik.
+  track.elements = buildElements(track, trackDef.elements ?? []);
   const profile = profileFor(career.difficulty);
   const rng = createRng(options.seed ?? Math.floor(Math.random() * 0xffffffff));
   const cars = [];
@@ -64,6 +75,11 @@ export function createRace(trackDef, career, options = {}) {
       handling: 0,
       armor: 0,
       skill: 1,
+      level: GROUND, // Höhenebene: 0 = Fahrbahn, 1 = Brücke
+      air: 0,        // Restticks in der Luft (Sprungschanze)
+      airMax: 0,     // Ausgangswert dazu – für Flughöhe und Darstellung
+      oil: 0,        // Restticks im Schleudern
+      spin: 0,       // Driftrichtung während des Schleuderns
       ...props,
     };
     car.maxSpeed = car.isPlayer ? 4.0 + car.engine * 0.45 : aiBase * car.skill;
@@ -112,7 +128,17 @@ export function createRace(trackDef, career, options = {}) {
     profile,
     rng,
     aiBase,
-    stats: { contacts: 0, aiContacts: 0, overtakes: 0, aiOvertakes: 0 },
+    stats: {
+      contacts: 0, aiContacts: 0, overtakes: 0, aiOvertakes: 0,
+      // Streckenelemente (Issue #26) – Grundlage der Akzeptanzprüfung.
+      jumps: 0,          // Sprünge über Schanzen
+      oilHits: 0,        // Fahrzeuge, die ins Schleudern geraten sind
+      gateStops: 0,      // Ticks, in denen eine Schranke ein Fahrzeug aufhält
+      gateSwitches: 0,   // Zustandswechsel aller Schranken im Rennen
+      bridgeTicks: 0,    // Ticks, die Fahrzeuge auf der oberen Ebene verbringen
+      airTicks: 0,       // Ticks in der Luft
+      crossLevelPasses: 0, // Begegnungen, die nur dank Höhentrennung folgenlos blieben
+    },
   };
 }
 
@@ -162,6 +188,78 @@ function damage(race, car, amount, fromMissile) {
   }
 }
 
+/**
+ * Wirkung der Streckenelemente auf ein Fahrzeug. Wird mitten in `stepCar`
+ * aufgerufen, direkt nach der Bewegung und vor deren Auswertung.
+ *
+ * `prevX`/`prevY`/`prevS` sind Position und Bogenlänge vor diesem Tick –
+ * eine geschlossene Schranke setzt darauf zurück. Rückgabewert ist die
+ * gültige Projektion (neu berechnet, falls zurückgesetzt wurde).
+ */
+function stepElements(race, car, prevX, prevY, prevS, pr) {
+  const track = race.track;
+  const elements = track.elements;
+
+  if (car.air > 0) {
+    car.air--;
+    if (car.air === 0) {
+      car.speed *= 0.94; // Landung kostet etwas Tempo
+      race.events.push({ type: 'land' });
+    }
+  }
+
+  if (!elements?.length) return pr;
+
+  car.level = levelAt(track, elements, pr.s);
+
+  for (const el of elements) {
+    switch (el.type) {
+      case 'ramp':
+        // Abheben nur mit Schwung – langsam drüberrollen tut nichts.
+        if (car.air === 0 && car.speed >= RAMP_MIN_SPEED && onRamp(track, el, pr.s, pr.lat)) {
+          car.airMax = Math.round(JUMP_TICKS * el.power * Math.min(1.4, car.speed / 3));
+          car.air = car.airMax;
+          car.speed *= 1.04;
+          race.stats.jumps++;
+          race.events.push({ type: 'jump' });
+        }
+        break;
+
+      case 'oil':
+        // In der Luft übersprungen – deshalb sind Schanze und Lache
+        // zusammen ein taktisches Mittel.
+        if (car.air === 0 && car.oil === 0 && inOil(el, car.x, car.y)) {
+          car.oil = OIL_TICKS;
+          car.spin = (race.rng() < 0.5 ? -1 : 1) * (0.22 + race.rng() * 0.16);
+          race.stats.oilHits++;
+          race.events.push({ type: 'skid' });
+        }
+        break;
+
+      case 'gate': {
+        if (car.air > 0) break; // über die Schranke hinweg
+        const state = gateState(el, race.time);
+        if (!state.closed || !gateBlocks(el, pr.lat)) break;
+        const before = gapAlong(track, el.s, prevS);
+        const after = gapAlong(track, el.s, pr.s);
+        // Sperrt, wenn die Schranke in diesem Tick überfahren würde oder das
+        // Fahrzeug direkt darunter steht.
+        if (!(before < 0 && after >= 0) && Math.abs(after) > GATE_STOP_RANGE) break;
+        if (car.speed > 1.8) damage(race, car, 3, false);
+        race.stats.gateStops++;
+        car.x = prevX;
+        car.y = prevY;
+        car.speed *= 0.18;
+        return project(track, car.x, car.y, car.seg);
+      }
+
+      default:
+        break;
+    }
+  }
+  return pr;
+}
+
 function stepCar(race, car, controls) {
   const track = race.track;
 
@@ -177,6 +275,9 @@ function stepCar(race, car, controls) {
       car.speed = 0;
       car.hp = 55;
       car.invuln = INVULN_TICKS;
+      car.air = 0;
+      car.oil = 0;
+      car.level = levelAt(track, track.elements, car.s);
       if (car.ai) {
         car.ai.offset = 0;
         car.ai.overtakeTicks = 0;
@@ -200,6 +301,18 @@ function stepCar(race, car, controls) {
   }
   if (race.countdown > 0) gas = false;
 
+  // Öllache: die Lenkung greift kaum noch und das Fahrzeug driftet in eine
+  // feste Richtung weg – daraus entsteht das Schleudern.
+  if (car.oil > 0) {
+    car.oil--;
+    steer = steer * 0.3 + car.spin;
+    car.speed *= 0.988;
+  }
+
+  const prevX = car.x;
+  const prevY = car.y;
+  const prevS = car.s;
+
   const vmax = car.maxSpeed;
   if (gas) car.speed += accelOf(race, car) * Math.max(0.15, 1 - car.speed / vmax);
   else car.speed *= 0.979;
@@ -212,16 +325,21 @@ function stepCar(race, car, controls) {
   car.x += Math.cos(car.angle) * car.speed;
   car.y += Math.sin(car.angle) * car.speed;
 
-  const pr = project(track, car.x, car.y, car.seg);
+  let pr = project(track, car.x, car.y, car.seg);
+  // Streckenelemente greifen vor der Auswertung: eine geschlossene Schranke
+  // kann die Bewegung dieses Ticks zurücknehmen und liefert dann eine neue
+  // Projektion, mit der alles Weitere rechnet.
+  pr = stepElements(race, car, prevX, prevY, prevS, pr);
   car.seg = pr.i;
   car.lat = pr.lat;
-  car.offroad = pr.dist > ROAD_WIDTH / 2 - 6;
+  // In der Luft zählen weder Gras noch Bande – man fliegt darüber hinweg.
+  car.offroad = car.air === 0 && pr.dist > ROAD_WIDTH / 2 - 6;
   if (car.offroad) car.speed *= 0.955; // Gras bremst
-  const limit = ROAD_WIDTH / 2 + 26;
+  const limit = ROAD_WIDTH / 2 + (car.air > 0 ? 60 : 26);
   if (pr.dist > limit) {
     car.x = pr.px + ((car.x - pr.px) / pr.dist) * limit;
     car.y = pr.py + ((car.y - pr.py) / pr.dist) * limit;
-    car.speed *= 0.88; // Bande
+    if (car.air === 0) car.speed *= 0.88; // Bande
   }
 
   // Rundenzählung: ein Sprung über die halbe Streckenlänge ist der Zielstrich.
@@ -258,6 +376,14 @@ function stepCollisions(race) {
       const a = race.cars[i];
       const b = race.cars[j];
       if (a.respawn > 0 || b.respawn > 0) continue;
+      // Verschiedene Höhenebenen berühren sich nicht – das ist der Sinn von
+      // Brücke und Tunnel. Wer springt, fliegt ebenfalls über alles hinweg.
+      if (a.level !== b.level || a.air > 0 || b.air > 0) {
+        // Mitzählen, wenn sie sich ohne Trennung berührt hätten – das belegt,
+        // dass die Höhenebenen tatsächlich etwas verhindern.
+        if (Math.hypot(b.x - a.x, b.y - a.y) < CAR_RADIUS * 2) race.stats.crossLevelPasses++;
+        continue;
+      }
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const dist = Math.hypot(dx, dy);
@@ -298,6 +424,7 @@ function stepMissiles(race) {
     let hit = false;
     for (const car of race.cars) {
       if (car.respawn > 0 || (car === m.owner && m.grace > 0)) continue;
+      if (car.level !== m.level || car.air > 0) continue; // andere Ebene, kein Treffer
       if (Math.hypot(car.x - m.x, car.y - m.y) < MISSILE_HIT_RADIUS) {
         damage(race, car, 42, true);
         hit = true;
@@ -318,6 +445,26 @@ function stepParticles(race) {
     p.vy *= 0.94;
     p.life--;
     if (p.life <= 0) race.particles.splice(i, 1);
+  }
+}
+
+/**
+ * Kennzahlen der Streckenelemente fortschreiben – nur für die Simulation,
+ * das Spiel selbst braucht sie nicht.
+ */
+function trackElementStats(race) {
+  const elements = race.track.elements;
+  if (!elements?.length) return;
+  for (const car of race.cars) {
+    if (car.respawn > 0) continue;
+    if (car.level !== GROUND) race.stats.bridgeTicks++;
+    if (car.air > 0) race.stats.airTicks++;
+  }
+  for (const el of elements) {
+    if (el.type !== 'gate') continue;
+    const { closed } = gateState(el, race.time);
+    if (el.wasClosed !== undefined && el.wasClosed !== closed) race.stats.gateSwitches++;
+    el.wasClosed = closed;
   }
 }
 
@@ -360,6 +507,7 @@ export function stepRace(race, controls) {
   stepCollisions(race);
   stepMissiles(race);
   stepParticles(race);
+  trackElementStats(race);
   if (race.countdown === 0) trackOvertakes(race);
 
   if (race.endTimer > 0) {

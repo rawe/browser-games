@@ -4,6 +4,7 @@
 // reproduzierbar bleibt.
 
 import { gapAlong, offsetPoint, posAt, ROAD_WIDTH } from './trackGeometry.js';
+import { elementsAhead, gateDetour, gateState } from './elements.js';
 import { fire } from './weapons.js';
 
 /**
@@ -100,6 +101,13 @@ export const TUNING = {
   lookSpeed: 8,         // … Zuwachs pro Tempoeinheit …
   lookCurve: 40,        // … und Verkürzung in Kurven
   lookMin: 46,
+  // Vorausschau auf Streckenelemente. Muss deutlich weiter reichen als die
+  // Sicht auf andere Fahrzeuge: Bei `offsetRate` 0,4 je Tick dauert ein
+  // Spurwechsel über die halbe Fahrbahn rund 1,8 s – wer erst 250 Einheiten
+  // vorher anfängt, steht bei Renntempo schon an der Schranke.
+  hazardBase: 95,
+  hazardSpeed: 100,
+  gateRate: 2.2,    // Faktor auf die Nachführrate, während eine Sperre umfahren wird
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -196,6 +204,65 @@ function decideOvertake(race, car, want, blocker, neighbours, curve, prof) {
 }
 
 /**
+ * Reaktion auf Streckenelemente: Öllachen umfahren, vor einer geschlossenen
+ * Schranke rechtzeitig auf die freie Seite ziehen und notfalls anhalten,
+ * Sprungschanzen dagegen mitnehmen.
+ *
+ * Liefert den angepassten Seitenversatz, das angepasste Wunschtempo und
+ * `dodging` – dann wird der Seitenversatz schneller nachgeführt, weil die
+ * Sperre nicht wartet. Bewusst als eigene Funktion: `driveAi` bleibt so
+ * lesbar, und neue Elementtypen brauchen nur hier einen Zweig.
+ */
+function avoidHazards(race, car, targetOffset, want, prof) {
+  const track = race.track;
+  const elements = track.elements;
+  let dodging = false;
+  if (!elements?.length) return { targetOffset, want, dodging };
+
+  const range = TUNING.hazardBase + car.speed * TUNING.hazardSpeed;
+  for (const { el, gap } of elementsAhead(track, elements, car.s, range)) {
+    if (el.type === 'oil') {
+      // Nur ausweichen, wenn die Lache wirklich auf der geplanten Linie liegt.
+      if (Math.abs(el.lat - targetOffset) > el.radius + 14) continue;
+      const side = el.lat >= 0 ? -1 : 1;
+      const dodge = el.lat + side * (el.radius + 18);
+      targetOffset = Math.abs(dodge) <= TUNING.maxOffset
+        ? dodge
+        : clamp(-el.lat, -TUNING.maxOffset, TUNING.maxOffset);
+      // Ganz dicht davor lieber etwas vom Gas – sonst rutscht man mit
+      // Höchsttempo hinein, wenn das Ausweichen nicht mehr reicht.
+      if (gap < 45) want = Math.min(want, car.maxSpeed * 0.82);
+    } else if (el.type === 'gate') {
+      // Zustand zum voraussichtlichen Ankunftszeitpunkt prüfen, nicht jetzt –
+      // sonst fährt der Bot in eine Schranke, die gerade noch offen ist.
+      const eta = Math.round(gap / Math.max(0.6, car.speed));
+      const soon = gateState(el, race.time + eta);
+      const now = gateState(el, race.time);
+      if (!soon.closed && !now.warning) continue;
+
+      const detour = gateDetour(el);
+      if (detour === null) {
+        // Vollsperre: davor anhalten, bis sie wieder öffnet.
+        if (gap < 60) want = 0;
+        continue;
+      }
+      if (Math.abs(targetOffset - el.lat) <= el.width / 2) targetOffset = detour;
+      dodging = true;
+      // Reicht der Weg nicht mehr, um seitlich herauszukommen: bremsen.
+      const need = Math.abs(detour - car.ai.offset);
+      if (gap < need * 1.7 + 30) want = Math.min(want, car.maxSpeed * 0.5);
+      if (gap < 24 && Math.abs(car.lat - el.lat) <= el.width / 2) want = 0;
+    } else if (el.type === 'ramp' && gap < 130) {
+      // Schanzen werden mitgenommen, wenn sie ohnehin fast auf der Linie
+      // liegen – je aggressiver die Stufe, desto weiter der Griff.
+      const reach = el.width / 2 + 10 + prof.aggression * 14;
+      if (Math.abs(el.lat - targetOffset) < reach) targetOffset = el.lat;
+    }
+  }
+  return { targetOffset, want, dodging };
+}
+
+/**
  * KI-Steuerung für ein Auto. Liefert `{ steer, gas, brake }` wie die
  * Spielereingabe und pflegt nebenbei den KI-Zustand.
  *
@@ -270,6 +337,9 @@ export function driveAi(race, car, profile) {
   const inTheWay = neighbours.find((n) => n.gap < critical && Math.abs(n.lat - car.lat) < 22);
   if (inTheWay) want = Math.min(want, follow(car, inTheWay.car.speed * 0.95));
 
+  let dodging = false;
+  ({ targetOffset, want, dodging } = avoidHazards(race, car, targetOffset, want, prof));
+
   // Fahrfehler: kurzer Lenkstoß plus Gaswegnahme, Häufigkeit nach Stufe.
   if (ai.mistakeTicks > 0) {
     ai.mistakeTicks--;
@@ -282,7 +352,8 @@ export function driveAi(race, car, profile) {
 
   // Sanft nachführen – harte Sprünge gäben Schlangenlinien. Beim Überholen
   // darf es zügiger gehen, sonst kommt das Auto nicht rechtzeitig vorbei.
-  const rate = TUNING.offsetRate * (ai.overtakeTicks > 0 ? TUNING.passRate : 1);
+  const rate = TUNING.offsetRate
+    * (ai.overtakeTicks > 0 ? TUNING.passRate : dodging ? TUNING.gateRate : 1);
   ai.offset += clamp(targetOffset - ai.offset, -rate, rate);
 
   // Zielpunkt: in Kurven näher heran, sonst würde das Auto die Kurve schneiden.

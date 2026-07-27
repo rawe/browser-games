@@ -9,6 +9,8 @@ import { createHud } from './hud.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
 import { createScreens } from './screens.js';
+import { createEditor } from './editor.js';
+import { elementsFor } from './trackStorage.js';
 
 const STEP_MS = 1000 / 60;
 
@@ -16,10 +18,12 @@ const renderer = createRenderer(document.getElementById('scene'), document.getEl
 const screens = createScreens(document.getElementById('overlay'));
 const hud = createHud();
 const audio = createAudio();
+const testExitBtn = document.getElementById('test-exit');
 
 let career = createCareer();
 let race = null;
-let mode = 'title'; // title | shop | race | results | champion
+let testing = false; // Testfahrt aus dem Editor – ohne Folgen für die Karriere
+let mode = 'title'; // title | shop | race | results | champion | editor
 
 const input = createInput({
   onFire: (rear) => {
@@ -29,6 +33,13 @@ const input = createInput({
   onActivate: () => audio.unlock(),
   isRacing: () => mode === 'race',
   onLatch: (latched) => hud.setThrottleLatched(latched && mode === 'race'),
+});
+
+const editor = createEditor({
+  host: document.getElementById('editor'),
+  tracks,
+  onExit: () => { editor.close(); showTitle(); },
+  onTest: (stage) => { audio.unlock(); startTestDrive(stage); },
 });
 
 window.addEventListener('resize', () => renderer.resize());
@@ -47,7 +58,16 @@ function showTitle() {
     difficulty: career.difficulty,
     onDifficulty: (id) => { setDifficulty(id); showTitle(); },
     onStart: () => { audio.unlock(); showShop(); },
+    onEditor: () => { audio.unlock(); showEditor(); },
   });
+}
+
+function showEditor() {
+  mode = 'editor';
+  race = null;
+  hud.clear();
+  screens.hide();
+  editor.open();
 }
 
 function buy(kind) {
@@ -70,13 +90,42 @@ function showShop() {
   });
 }
 
+/** Streckendefinition samt der im Editor gespeicherten Elemente. */
+function raceDef(stage) {
+  const def = tracks[stage];
+  return { ...def, elements: elementsFor(def) };
+}
+
 function startRace() {
-  race = createRace(tracks[career.stage], career);
+  race = createRace(raceDef(career.stage), career);
+  testing = false;
   input.reset();
   hud.clear();
   screens.hide();
+  editor.close();
   renderer.resize();
   mode = 'race';
+}
+
+/** Probefahrt aus dem Editor: eigene Karriere-Kopie, kein Preisgeld, kein Aufstieg. */
+function startTestDrive(stage) {
+  race = createRace(raceDef(stage), { ...createCareer(career.difficulty), stage });
+  testing = true;
+  input.reset();
+  hud.clear();
+  screens.hide();
+  editor.close();
+  testExitBtn.classList.remove('hidden');
+  renderer.resize();
+  mode = 'race';
+}
+
+function endTestDrive() {
+  testing = false;
+  race = null;
+  input.reset();
+  testExitBtn.classList.add('hidden');
+  showEditor();
 }
 
 function endRace() {
@@ -114,7 +163,11 @@ function endRace() {
 }
 
 /* ---------- Schleife ---------- */
-const SOUNDS = { fire: audio.fire, boom: audio.explosion, beep: audio.beep, go: audio.go };
+const SOUNDS = {
+  fire: audio.fire, boom: audio.explosion, beep: audio.beep, go: audio.go,
+  // Streckenelemente – unbekannte Ereignisse bleiben stumm.
+  jump: audio.jump, land: audio.land, skid: audio.skid,
+};
 
 let lastFrame = performance.now();
 let accumulator = 0;
@@ -143,8 +196,16 @@ function frame(now) {
 
   hud.update(race);
   renderer.draw(race);
-  if (race.over) endRace();
+  if (race.over) {
+    if (testing) endTestDrive();
+    else endRace();
+  }
 }
+
+testExitBtn.addEventListener('click', endTestDrive);
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && testing) endTestDrive();
+});
 
 showTitle();
 requestAnimationFrame(frame);
