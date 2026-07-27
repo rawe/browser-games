@@ -58,6 +58,9 @@ export function posAt(track, s) {
  * Nächster Punkt auf der Ideallinie zu (x, y). `hint` ist das zuletzt bekannte
  * Segment – gesucht wird nur in dessen Umgebung, das hält die Suche billig und
  * verhindert Sprünge an Stellen, wo sich die Strecke selbst nahekommt.
+ *
+ * `lat` ist der vorzeichenbehaftete Seitenversatz zur Ideallinie (positiv = in
+ * Richtung der linken Normale, gleiche Konvention wie `offsetPoint`).
  */
 export function project(track, x, y, hint) {
   let best = null;
@@ -76,5 +79,32 @@ export function project(track, x, y, hint) {
     if (!best || dist < best.dist) best = { i, t, px, py, dist };
   }
   best.s = track.cum[best.i] + best.t * track.len[best.i];
+
+  const a = track.pts[best.i];
+  const b = track.pts[(best.i + 1) % track.n];
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy) || 1;
+  best.lat = ((x - best.px) * -dy + (y - best.py) * dx) / len;
   return best;
+}
+
+/** Punkt auf der Ideallinie bei `s`, um `offset` seitlich versetzt. */
+export function offsetPoint(track, s, offset) {
+  const p = posAt(track, s);
+  return {
+    x: p.x - Math.sin(p.angle) * offset,
+    y: p.y + Math.cos(p.angle) * offset,
+    angle: p.angle,
+    seg: p.seg,
+  };
+}
+
+/** Vorzeichenbehafteter Rundabstand von `a` nach `b` (−total/2 … +total/2). */
+export function gapAlong(track, a, b) {
+  const half = track.total / 2;
+  let d = b - a;
+  if (d < -half) d += track.total;
+  else if (d > half) d -= track.total;
+  return d;
 }

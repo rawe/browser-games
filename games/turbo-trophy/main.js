@@ -33,11 +33,20 @@ const input = createInput({
 window.addEventListener('resize', () => renderer.resize());
 
 /* ---------- Zustandswechsel ---------- */
+function setDifficulty(id) {
+  career.difficulty = id;
+}
+
 function showTitle() {
   mode = 'title';
   hud.clear();
   hud.showCareerAmmo(career);
-  screens.title({ audio, onStart: () => { audio.unlock(); showShop(); } });
+  screens.title({
+    audio,
+    difficulty: career.difficulty,
+    onDifficulty: (id) => { setDifficulty(id); showTitle(); },
+    onStart: () => { audio.unlock(); showShop(); },
+  });
 }
 
 function buy(kind) {
@@ -55,6 +64,7 @@ function showShop() {
     career,
     track: tracks[career.stage],
     onBuy: buy,
+    onDifficulty: setDifficulty,
     onStart: () => { audio.unlock(); startRace(); },
   });
 }
@@ -85,7 +95,7 @@ function endRace() {
     mode = 'champion';
     screens.champion({
       career,
-      onRestart: () => { career = createCareer(); showShop(); },
+      onRestart: () => { career = createCareer(career.difficulty); showShop(); },
     });
     return;
   }

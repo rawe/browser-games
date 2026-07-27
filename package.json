@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "sim:turbo": "node games/turbo-trophy/sim/run.js"
   },
   "devDependencies": {
     "esbuild": "^0.28.1",
