@@ -5,8 +5,18 @@ import {
   MAX_AMMO, MAX_LEVEL, AMMO_COSTS, QUALIFY_PLACES,
   repairCost, upgradeCost,
 } from './career.js';
+import { DIFFICULTIES, profileFor } from './ai.js';
 
 const money = (n) => `$${n.toLocaleString('de-DE')}`;
+
+/** Segmentierte Auswahl der KI-Schwierigkeit. */
+function difficultyPicker(current) {
+  const buttons = DIFFICULTIES.map((d) =>
+    `<button class="seg${d.id === current ? ' on' : ''}" data-difficulty="${d.id}">${d.name}</button>`).join('');
+  return `
+    <div class="segmented">${buttons}</div>
+    <p class="seg-hint">${profileFor(current).hint}</p>`;
+}
 
 function pips(level) {
   let out = '<span class="pips">';
@@ -29,13 +39,18 @@ export function createScreens(overlayEl) {
     overlayEl.scrollTop = 0;
   };
   const onClick = (id, fn) => document.getElementById(id).addEventListener('click', fn);
+  const bindDifficulty = (fn) => {
+    overlayEl.querySelectorAll('[data-difficulty]').forEach((btn) => {
+      btn.addEventListener('click', () => fn(btn.dataset.difficulty));
+    });
+  };
 
   const screens = {
     hide() {
       overlayEl.classList.add('hidden');
     },
 
-    title({ onStart, audio }) {
+    title({ onStart, onDifficulty, difficulty, audio }) {
       show(`
         <div class="logo">TURBO<br>TROPHY</div>
         <div class="sub">TOP-DOWN-ARCADE-RENNEN IM GEIST VON SUPER CARS</div>
@@ -44,6 +59,10 @@ export function createScreens(overlayEl) {
           <div class="row"><span class="lbl">4 Strecken<small>Werde Erster bis Dritter, um weiterzukommen</small></span></div>
           <div class="row"><span class="lbl">Preisgeld<small>Investiere zwischen den Rennen in Tuning &amp; Waffen</small></span></div>
           <div class="row"><span class="lbl">Raketen<small>Nach vorn und nach hinten – Gegner ausschalten!</small></span></div>
+        </div>
+        <div class="panel">
+          <h3>GEGNERSTÄRKE</h3>
+          ${difficultyPicker(difficulty)}
         </div>
         <button class="big" id="start-btn">SAISON STARTEN</button>
         <p class="hint">
@@ -54,13 +73,14 @@ export function createScreens(overlayEl) {
         <a class="overview-link" href="../../index.html">← Zur Spiele-Übersicht</a>
       `);
       onClick('start-btn', onStart);
+      bindDifficulty(onDifficulty);
       onClick('mute-btn', (e) => {
         audio.setMuted(!audio.isMuted());
         e.target.textContent = audio.isMuted() ? '🔇 TON AN' : '🔊 TON AUS';
       });
     },
 
-    shop({ career, track, onBuy, onStart }) {
+    shop({ career, track, onBuy, onStart, onDifficulty }) {
       const repair = repairCost(career);
       const upgrade = (key) => {
         const cost = upgradeCost(career[key]);
@@ -94,13 +114,22 @@ export function createScreens(overlayEl) {
             `Feuert nach hinten (max. ${MAX_AMMO})`, money(AMMO_COSTS.rear),
             career.ammoRear >= MAX_AMMO || career.money < AMMO_COSTS.rear)}
         </div>
+        <div class="panel">
+          <h3>GEGNERSTÄRKE</h3>
+          ${difficultyPicker(career.difficulty)}
+        </div>
         <button class="big" id="race-btn">ZUM RENNEN &#9654;</button>
         <p class="hint">Rennen ${career.stage + 1}/4 • ${career.points} Punkte</p>
       `);
 
+      const rerender = () => screens.shop({ career, track, onBuy, onStart, onDifficulty });
       const bind = (id, kind) => onClick(id, () => {
         onBuy(kind);
-        screens.shop({ career, track, onBuy, onStart });
+        rerender();
+      });
+      bindDifficulty((id) => {
+        onDifficulty(id);
+        rerender();
       });
       bind('buy-repair', 'repair');
       bind('buy-engine', 'engine');

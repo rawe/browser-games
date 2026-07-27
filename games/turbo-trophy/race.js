@@ -1,8 +1,14 @@
-// Rennsimulation: Fahrphysik, KI, Raketen, Kollisionen, Rundenzählung.
+// Rennsimulation: Fahrphysik, Raketen, Kollisionen, Rundenzählung.
 // Läuft in festen 60-Hz-Schritten und kennt weder DOM noch Audio – hörbare
 // Ereignisse landen in `race.events` und werden außerhalb übersetzt.
+// Die Gegnersteuerung liegt in `ai.js`, das Abfeuern in `weapons.js`.
 
 import { buildTrack, posAt, project, ROAD_WIDTH, WORLD } from './trackGeometry.js';
+import { createAiState, driveAi, profileFor } from './ai.js';
+import { createRng } from './rng.js';
+import { fire } from './weapons.js';
+
+export { fire };
 
 export const PLAYER_COLOR = '#ff4f7b';
 
@@ -19,21 +25,29 @@ const INVULN_TICKS = 130;
 const CAR_RADIUS = 13;
 const MISSILE_HIT_RADIUS = 20;
 
-export function createRace(trackDef, career) {
+/**
+ * Legt ein Rennen an. `options.seed` macht den Lauf reproduzierbar
+ * (Standard: zufällig) – die Headless-Simulation nutzt das.
+ */
+export function createRace(trackDef, career, options = {}) {
   const track = buildTrack(trackDef);
+  const profile = profileFor(career.difficulty);
+  const rng = createRng(options.seed ?? Math.floor(Math.random() * 0xffffffff));
   const cars = [];
+  const aiBase = (3.55 + trackDef.aiBonus) * profile.speed;
 
   // Startaufstellung: versetzt hintereinander, links/rechts der Ideallinie.
   const makeCar = (gridIndex, props) => {
     const s = track.total - (46 + gridIndex * 52);
     const p = posAt(track, s);
     const side = (gridIndex % 2 === 0 ? 1 : -1) * 21;
-    return {
+    const car = {
       x: p.x - Math.sin(p.angle) * side,
       y: p.y + Math.cos(p.angle) * side,
       angle: p.angle,
       seg: p.seg,
       s,
+      lat: side,
       speed: 0,
       lap: 0,
       progress: 0,
@@ -52,13 +66,19 @@ export function createRace(trackDef, career) {
       skill: 1,
       ...props,
     };
+    car.maxSpeed = car.isPlayer ? 4.0 + car.engine * 0.45 : aiBase * car.skill;
+    car.ai = car.isPlayer ? null : createAiState(rng, side);
+    return car;
   };
 
   RIVALS.forEach((rival, i) => {
+    // Unterschiedlich starke Gegner sorgen für echte Positionskämpfe;
+    // die Streuung hängt an der Schwierigkeitsstufe.
+    const rank = i - (RIVALS.length - 1) / 2;
     cars.push(makeCar(i, {
       name: rival.name,
       color: rival.color,
-      skill: 0.93 + i * 0.05,
+      skill: 1 + rank * profile.spread,
       ammoFront: 1 + career.stage,
       ammoRear: 1,
       armor: Math.min(3, career.stage),
@@ -88,7 +108,11 @@ export function createRace(trackDef, career) {
     finishedCount: 0,
     endTimer: -1,
     over: false,
-    aiBase: 3.55 + trackDef.aiBonus,
+    difficulty: profile.id,
+    profile,
+    rng,
+    aiBase,
+    stats: { contacts: 0, aiContacts: 0, overtakes: 0, aiOvertakes: 0 },
   };
 }
 
@@ -104,22 +128,21 @@ export function standings(race) {
   });
 }
 
-const maxSpeedOf = (race, car) => (car.isPlayer ? 4.0 + car.engine * 0.45 : race.aiBase * car.skill);
-const turnRateOf = (car) => (car.isPlayer ? 0.052 + car.handling * 0.011 : 0.078);
-const accelOf = (car) => (car.isPlayer ? 0.085 + car.engine * 0.012 : 0.09);
+const turnRateOf = (race, car) => (car.isPlayer ? 0.052 + car.handling * 0.011 : race.profile.turn);
+const accelOf = (race, car) => (car.isPlayer ? 0.085 + car.engine * 0.012 : race.profile.accel);
 
 function explode(race, x, y, count) {
   for (let i = 0; i < count; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const sp = 0.8 + Math.random() * 3.4;
+    const a = race.rng() * Math.PI * 2;
+    const sp = 0.8 + race.rng() * 3.4;
     race.particles.push({
       x, y,
       vx: Math.cos(a) * sp,
       vy: Math.sin(a) * sp,
-      life: 22 + Math.random() * 26,
+      life: 22 + race.rng() * 26,
       max: 48,
-      color: Math.random() < 0.5 ? '#ffb03a' : (Math.random() < 0.5 ? '#ff5a2e' : '#ffe27a'),
-      size: 3 + Math.random() * 5,
+      color: race.rng() < 0.5 ? '#ffb03a' : (race.rng() < 0.5 ? '#ff5a2e' : '#ffe27a'),
+      size: 3 + race.rng() * 5,
     });
   }
 }
@@ -139,73 +162,6 @@ function damage(race, car, amount, fromMissile) {
   }
 }
 
-export function fire(race, car, rear) {
-  if (car.respawn > 0 || race.countdown > 0) return false;
-  const key = rear ? 'ammoRear' : 'ammoFront';
-  if (car[key] <= 0) return false;
-  car[key]--;
-
-  const angle = rear ? car.angle + Math.PI : car.angle;
-  race.missiles.push({
-    x: car.x + Math.cos(angle) * 20,
-    y: car.y + Math.sin(angle) * 20,
-    angle,
-    speed: 8.5 + Math.max(0, car.speed),
-    life: 75,
-    owner: car,
-    grace: 12, // kurz nach dem Start immun gegen den eigenen Schützen
-  });
-  race.events.push({ type: 'fire' });
-  return true;
-}
-
-/** KI-Steuerung: Ideallinie verfolgen, vor Kurven bremsen, gelegentlich feuern. */
-function driveAi(race, car) {
-  const track = race.track;
-  const look = 110 + car.speed * 26;
-  const target = posAt(track, car.s + look);
-  let delta = Math.atan2(target.y - car.y, target.x - car.x) - car.angle;
-  delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-  const steer = Math.max(-1, Math.min(1, delta * 3.2));
-
-  const far = posAt(track, car.s + look + 130);
-  let curve = Math.atan2(far.y - car.y, far.x - car.x) - car.angle;
-  curve = Math.abs(Math.atan2(Math.sin(curve), Math.cos(curve)));
-  const want = maxSpeedOf(race, car) * Math.max(0.4, 1 - curve * 0.9);
-
-  // Gummiband: abgehängte Gegner holen leicht auf, führende lassen locker.
-  const me = playerCar(race);
-  if (me) {
-    const gap = me.progress - car.progress;
-    if (gap > 700) car.speed *= 1.002;
-    else if (gap < -900) car.speed *= 0.998;
-  }
-
-  if (car.fireCooldown === 0 && !car.finished && race.countdown === 0) {
-    for (const other of race.cars) {
-      if (other === car || other.respawn > 0) continue;
-      const dx = other.x - car.x;
-      const dy = other.y - car.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist <= 60 || dist >= 300) continue;
-      let rel = Math.atan2(dy, dx) - car.angle;
-      rel = Math.atan2(Math.sin(rel), Math.cos(rel));
-      if (Math.abs(rel) < 0.22 && car.ammoFront > 0 && Math.random() < 0.02) {
-        fire(race, car, false);
-        car.fireCooldown = 140;
-        break;
-      }
-      if (Math.abs(Math.abs(rel) - Math.PI) < 0.22 && car.ammoRear > 0 && Math.random() < 0.012) {
-        fire(race, car, true);
-        car.fireCooldown = 140;
-        break;
-      }
-    }
-  }
-
-  return { steer, gas: car.speed < want, brake: car.speed > want + 0.7 };
-}
-
 function stepCar(race, car, controls) {
   const track = race.track;
 
@@ -217,9 +173,15 @@ function stepCar(race, car, controls) {
       car.y = p.y;
       car.angle = p.angle;
       car.seg = p.seg;
+      car.lat = 0;
       car.speed = 0;
       car.hp = 55;
       car.invuln = INVULN_TICKS;
+      if (car.ai) {
+        car.ai.offset = 0;
+        car.ai.overtakeTicks = 0;
+        car.ai.blockedTicks = 0;
+      }
     }
     return;
   }
@@ -238,21 +200,23 @@ function stepCar(race, car, controls) {
   }
   if (race.countdown > 0) gas = false;
 
-  const vmax = maxSpeedOf(race, car);
-  if (gas) car.speed += accelOf(car) * Math.max(0.15, 1 - car.speed / vmax);
+  const vmax = car.maxSpeed;
+  if (gas) car.speed += accelOf(race, car) * Math.max(0.15, 1 - car.speed / vmax);
   else car.speed *= 0.979;
   if (brake) car.speed *= 0.93;
   if (car.speed < 0.02) car.speed = 0;
   if (car.speed > vmax * 1.15) car.speed = vmax * 1.15;
 
   // Lenkeinschlag greift erst mit etwas Tempo.
-  car.angle += turnRateOf(car) * steer * Math.min(1, car.speed / 1.4);
+  car.angle += turnRateOf(race, car) * steer * Math.min(1, car.speed / 1.4);
   car.x += Math.cos(car.angle) * car.speed;
   car.y += Math.sin(car.angle) * car.speed;
 
   const pr = project(track, car.x, car.y, car.seg);
   car.seg = pr.i;
-  if (pr.dist > ROAD_WIDTH / 2 - 6) car.speed *= 0.955; // Gras bremst
+  car.lat = pr.lat;
+  car.offroad = pr.dist > ROAD_WIDTH / 2 - 6;
+  if (car.offroad) car.speed *= 0.955; // Gras bremst
   const limit = ROAD_WIDTH / 2 + 26;
   if (pr.dist > limit) {
     car.x = pr.px + ((car.x - pr.px) / pr.dist) * limit;
@@ -278,12 +242,12 @@ function stepCar(race, car, controls) {
     race.particles.push({
       x: car.x - Math.cos(car.angle) * 14,
       y: car.y - Math.sin(car.angle) * 14,
-      vx: (Math.random() - 0.5) * 0.6,
-      vy: (Math.random() - 0.5) * 0.6 - 0.3,
+      vx: (race.rng() - 0.5) * 0.6,
+      vy: (race.rng() - 0.5) * 0.6 - 0.3,
       life: 30,
       max: 30,
       color: 'rgba(120,120,120,0.7)',
-      size: 5 + Math.random() * 4,
+      size: 5 + race.rng() * 4,
     });
   }
 }
@@ -298,6 +262,8 @@ function stepCollisions(race) {
       const dy = b.y - a.y;
       const dist = Math.hypot(dx, dy);
       if (dist <= 0 || dist >= CAR_RADIUS * 2) continue;
+      race.stats.contacts++;
+      if (!a.isPlayer && !b.isPlayer) race.stats.aiContacts++;
       const push = (CAR_RADIUS * 2 - dist) / 2;
       const nx = dx / dist;
       const ny = dy / dist;
@@ -355,6 +321,31 @@ function stepParticles(race) {
   }
 }
 
+/**
+ * Positionswechsel zählen: Für jedes Fahrzeugpaar prüfen, ob sich die
+ * Reihenfolge seit dem letzten Tick gedreht hat. Liefert die Kennzahl, an der
+ * sich in der Simulation ablesen lässt, ob überhaupt überholt wird.
+ */
+function trackOvertakes(race) {
+  const cars = race.cars;
+  const prev = race.lastProgress;
+  if (prev) {
+    for (let i = 0; i < cars.length; i++) {
+      for (let j = i + 1; j < cars.length; j++) {
+        const before = prev[i] - prev[j];
+        const now = cars[i].progress - cars[j].progress;
+        if (before < 0 !== now < 0 && Math.abs(now) > 1) {
+          race.stats.overtakes++;
+          if (!cars[i].isPlayer && !cars[j].isPlayer) race.stats.aiOvertakes++;
+        }
+      }
+    }
+  } else {
+    race.lastProgress = [];
+  }
+  for (let i = 0; i < cars.length; i++) race.lastProgress[i] = cars[i].progress;
+}
+
 /** Ein Simulationsschritt (1/60 s). `controls` = { left, right, gas, brake }. */
 export function stepRace(race, controls) {
   race.time++;
@@ -369,6 +360,7 @@ export function stepRace(race, controls) {
   stepCollisions(race);
   stepMissiles(race);
   stepParticles(race);
+  if (race.countdown === 0) trackOvertakes(race);
 
   if (race.endTimer > 0) {
     race.endTimer--;

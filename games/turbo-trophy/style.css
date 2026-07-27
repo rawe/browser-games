@@ -338,6 +338,39 @@ button.buy:disabled {
   cursor: default;
 }
 
+/* ---------- Segmentierte Auswahl (Schwierigkeit) ---------- */
+.segmented {
+  display: flex;
+  gap: 6px;
+}
+
+button.seg {
+  flex: 1;
+  font-family: inherit;
+  font-weight: bold;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--txt);
+  background: #101530;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 4px;
+  cursor: pointer;
+}
+
+button.seg.on {
+  background: var(--amiga);
+  border-color: var(--amiga);
+  color: var(--ink);
+}
+
+.seg-hint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
 button.big {
   font-family: inherit;
   font-weight: bold;

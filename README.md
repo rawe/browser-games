@@ -15,6 +15,16 @@ npm run build    # optimierter Build nach dist/
 npm run preview  # gebauten Stand lokal testen
 ```
 
+### Headless-Simulation
+
+Spiellogik, die vom DOM getrennt ist, lässt sich ohne Browser prüfen. Turbo
+Trophy fährt so ganze Rennserien in Sekunden aus – siehe
+[`games/turbo-trophy/sim/`](games/turbo-trophy/sim/README.md):
+
+```bash
+npm run sim:turbo -- --check   # Kennzahlen und Akzeptanzkriterien der KI
+```
+
 ## Struktur
 
 ```

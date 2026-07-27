@@ -1,4 +1,7 @@
-// Meisterschaft: Konto, Tuning-Stufen, Munition. Reine Datenlogik ohne DOM.
+// Meisterschaft: Konto, Tuning-Stufen, Munition, KI-Schwierigkeit.
+// Reine Datenlogik ohne DOM.
+
+import { DEFAULT_DIFFICULTY } from './ai.js';
 
 export const MAX_LEVEL = 4;
 export const MAX_AMMO = 8;
@@ -12,8 +15,9 @@ export const POINTS = [9, 6, 4, 2];
 // Nur die ersten drei qualifizieren sich für den nächsten Lauf.
 export const QUALIFY_PLACES = 3;
 
-export function createCareer() {
+export function createCareer(difficulty = DEFAULT_DIFFICULTY) {
   return {
+    difficulty,
     money: 1000,
     engine: 0,
     handling: 0,
