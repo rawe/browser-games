@@ -14,7 +14,7 @@ import { createCareer } from '../career.js';
 import { CAR_RADIUS, createRace, playerCar, standings, stepRace, useItem } from '../race.js';
 import { createAiState, driveAi, profileFor } from '../ai.js';
 import { normalizeAmmo } from '../items.js';
-import { gapAlong, offsetPoint, posAt } from '../trackGeometry.js';
+import { gapAlong, offsetPoint, posAt, ROAD_WIDTH } from '../trackGeometry.js';
 
 /**
  * Zwei Maßstäbe für den Spielerwagen – beide fahren mit dem KI-Code, aber mit
@@ -31,17 +31,55 @@ import { gapAlong, offsetPoint, posAt } from '../trackGeometry.js';
  * in der ersten Runde das ganze Feld kassiert. Ohne diesen zweiten Maßstab
  * misst die Simulation an der Realität vorbei.
  */
-const REFERENCE_PROFILE = profileFor('mittel');
+/*
+ * Beide Prüffahrer stehen bewusst als feste Zahlen hier und erben *nicht* mehr
+ * von `profileFor(...)`.
+ *
+ * Vorher taten sie das – und damit wanderte das Lineal bei jeder Balance-
+ * Änderung mit: Wer `curveBrake` einer Stufe anzog, machte im selben Zug auch
+ * den Maßstab schneller, an dem er die Wirkung ablas. Die Stufen sahen dann
+ * gestaffelt aus, obwohl sich am Verhältnis zum Spieler nichts geändert hatte.
+ * Genau daran ist die erste Nacharbeit zu #24 gescheitert.
+ *
+ * Diese Zahlen dürfen deshalb nur mit Bedacht angefasst werden – sie sind der
+ * Nullpunkt, gegen den alle Balance-Kennzahlen gemessen werden.
+ */
 
+/** Durchschnittsfahrer: der Maßstab für „ist LEICHT wirklich leicht?". */
+const REFERENCE_PROFILE = {
+  id: 'referenz',
+  name: 'REFERENZ',
+  speed: 1.06,
+  accel: 0.092,
+  turn: 0.079,
+  curveBrake: 0.98,
+  spread: 0.045,
+  lineError: 4,
+  reaction: 18,
+  mistake: 0.0022,
+  aggression: 0.75,
+  weapon: 1,
+  rubberband: 0,
+};
+
+/**
+ * Starker Spieler: Dauergas, saubere Linie, keine Fahrfehler. `curveBrake: 0.2`
+ * ist die Untergrenze dessen, was ein Mensch fahren kann – wer schneller durch
+ * Kurven will, landet im Gras.
+ */
 export const ACE_PROFILE = {
-  ...profileFor('schwer'),
   id: 'ass',
   name: 'ASS',
-  curveBrake: 0.5,  // hält in Kurven viel mehr Tempo als jede Stufe
+  speed: 1.13,
+  accel: 0.108,
+  turn: 0.085,
+  curveBrake: 0.2,
+  spread: 0.03,
   lineError: 0,     // kein Pendeln um die Ideallinie
-  mistake: 0,       // keine Fahrfehler
   reaction: 5,      // reagiert praktisch sofort
+  mistake: 0,       // keine Fahrfehler
   aggression: 1.4,
+  weapon: 1.5,
   rubberband: 0,    // der Spieler bekommt keinen Gummibandeffekt
 };
 
@@ -327,10 +365,32 @@ export function simulateParked({
     });
   }
 
+  // Ist an dieser Stelle überhaupt eine Lücke? Ein Fahrzeug belegt `lat ± 13`,
+  // vorbei kommt man ab 26 Einheiten freier Breite. Enge Kehren und
+  // geschlossene Schranken können die Fahrbahn so weit zuziehen, dass gar
+  // keine Lücke bleibt – dort ist eine Berührung kein KI-Fehler.
+  const a = posAt(track, parkS - 60).angle;
+  const b = posAt(track, parkS + 60).angle;
+  const curve = Math.abs(Math.atan2(Math.sin(b - a), Math.cos(b - a)));
+  const edge = ROAD_WIDTH / 2;
+  const gapLeft = (lat - CAR_RADIUS) - -edge;
+  const gapRight = edge - (lat + CAR_RADIUS);
+  const gated = track.elements.some((el) => el.type === 'gate'
+    && Math.abs(gapAlong(track, el.s, parkS)) < 90);
+  // 1,5 rad auf 120 Einheiten heißt: der Kurveninnenrand schrumpft auf wenige
+  // Einheiten zusammen. Die nominelle Fahrbahnbreite steht dort nicht mehr zur
+  // Verfügung, egal wie gut jemand fährt.
+  const passable = !gated && curve < 1.5 && Math.max(gapLeft, gapRight) >= CAR_RADIUS * 2;
+
   return {
     track: track.def.name,
     difficulty,
     seed,
+    at,
+    lat,
+    curve,
+    gated,
+    passable,
     encounters,
     rams,
     ramShare: encounters ? rams / encounters : 0,

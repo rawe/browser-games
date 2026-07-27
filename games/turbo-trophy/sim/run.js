@@ -123,8 +123,19 @@ if (levels.length === DIFFICULTIES.length) {
   const aceWins = (id) => avg(aceLevel(id), 'playerWins');
   const acePlace = (id) => avg(aceLevel(id), 'playerPlace');
 
-  add('Stufen wirken auch auf einen starken Fahrer',
-    wins.every((v, i) => i === 0 || v < wins[i - 1] - 0.1),
+  // Jede Stufe wird an dem Fahrer gemessen, für den sie gemacht ist. Die
+  // frühere Fassung verlangte, dass die Siegquote des starken Fahrers auf
+  // *jeder* Stufe fällt – das ist nur erfüllbar, wenn auch LEICHT ihn schon
+  // schlägt, und dann ist LEICHT kein Einstieg mehr. Umgekehrt sättigt der
+  // Durchschnittsfahrer schon auf MITTEL beim letzten Platz und kann sich auf
+  // SCHWER gar nicht mehr verschlechtern. Beides sagt nichts über die
+  // Staffelung aus, sondern nur über den falsch gewählten Maßstab.
+  add('Sprung von LEICHT auf MITTEL trifft den Durchschnittsfahrer',
+    places[1] - places[0] > 1,
+    `Ø Platz leicht=${places[0].toFixed(2)} → mittel=${places[1].toFixed(2)}`);
+
+  add('Sprung von MITTEL auf SCHWER trifft den starken Fahrer',
+    wins[1] - wins[2] > 0.3,
     wins.map((v, i) => `${DIFFICULTIES[i].id}=${pct(v)} Siege`).join('  '));
 
   add('Auf SCHWER gewinnt auch ein starker Fahrer nicht mehr durch (< 45 % Siege)',
@@ -183,13 +194,21 @@ add('Stehendes Hindernis blockiert die Bots nicht dauerhaft',
 // Rückmeldung zu Issue #24 – „die Bots versuchen auszuweichen, ich werde
 // trotzdem gerammt“. Hier zählt jede Vorbeifahrt an einem festgenagelten
 // Fahrzeug, und jede Berührung dabei geht in die Quote ein.
+//
+// Die Stelle in der Runde wird bewusst gestreut. Eine einzelne Messstelle sagt
+// wenig: An einer Geraden weicht jeder aus, in einer engen Haarnadel niemand.
+// Eine frühere Fassung maß nur bei 50 % der Runde und kam auf 0,2 % – über die
+// ganze Runde gemessen waren es 5 %, mit einzelnen Stellen bei 100 %.
+const PARK_SPOTS = [0.08, 0.2, 0.32, 0.44, 0.55, 0.67, 0.79, 0.91];
 const dodges = [];
 for (const stage of stages) {
   for (const difficulty of levels) {
-    // Auch seitlich versetzt prüfen – auf der Ideallinie ist der Fall am
-    // eindeutigsten, am Rand wird die Lücke auf einer Seite eng.
-    for (const lat of [0, 22, -22]) {
-      dodges.push(simulateParked({ stage, difficulty, seed: 1, lat }));
+    for (const at of PARK_SPOTS) {
+      // Auch seitlich versetzt prüfen – auf der Ideallinie ist der Fall am
+      // eindeutigsten, am Rand wird die Lücke auf einer Seite eng.
+      for (const lat of [0, 22, -22]) {
+        dodges.push(simulateParked({ stage, difficulty, seed: 1, lat, at, ticks: 60 * 60 }));
+      }
     }
   }
 }
@@ -200,6 +219,39 @@ add('Bots fahren an einem stehenden Fahrzeug vorbei, statt es zu rammen (< 5 %)'
   passes > 100 && rams / passes < 0.05,
   `${rams} Berührungen in ${passes} Vorbeifahrten (${pct(rams / Math.max(1, passes))}), ` +
   `engster Abstand ${nearest.toFixed(1)} (Berührung ab 26)`);
+
+// Zusätzlich: keine einzelne Stelle darf reihenweise zu Berührungen führen.
+// Der Durchschnitt verdeckt sonst genau die Stellen, an denen es klemmt.
+//
+// Gewertet werden nur Stellen, an denen überhaupt eine Lücke bleibt. Zwei
+// Fälle lassen keine: eine sehr enge Kehre (HAFEN-GP bei 67 % hat 2,2 rad
+// Krümmung auf 120 Einheiten – der Kurveninnenrand ist dort fast ein Punkt)
+// und ein stehendes Fahrzeug direkt an einer geschlossenen Schranke. Dort ist
+// eine Berührung kein Fehler der KI, sondern schlicht kein Platz. Diese
+// Stellen werden getrennt ausgewiesen, damit sie nicht unter den Tisch fallen.
+const bySpot = new Map();
+for (const d of dodges) {
+  const key = `${d.track} @ ${(d.at * 100).toFixed(0)} %`;
+  const acc = bySpot.get(key) ?? { passes: 0, rams: 0, passable: false };
+  acc.passes += d.encounters;
+  acc.rams += d.rams;
+  acc.passable = acc.passable || d.passable;
+  bySpot.set(key, acc);
+}
+const allSpots = [...bySpot.entries()]
+  .filter(([, v]) => v.passes >= 8)
+  .map(([key, v]) => ({ key, share: v.rams / v.passes, ...v }))
+  .sort((a, b) => b.share - a.share);
+const spots = allSpots.filter((s) => s.passable);
+const blocked = allSpots.filter((s) => !s.passable);
+add('Keine passierbare Stelle ist ein Rammpunkt (< 25 % Berührungen)',
+  spots.length > 0 && spots[0].share < 0.25,
+  `schlechteste: ${spots.slice(0, 3).map((s) => `${s.key} ${pct(s.share)}`).join('  •  ')}`);
+// Und es dürfen nicht beliebig viele solcher Stellen sein – sonst wäre das
+// Kriterium oben durch Wegdefinieren zu erfüllen.
+add(`Höchstens eine Engstelle je Strecke ohne Lücke (${stages.length} Strecken)`,
+  blocked.length <= stages.length,
+  blocked.length === 0 ? 'keine' : blocked.map((s) => `${s.key} ${pct(s.share)}`).join('  •  '));
 
 /* ---------- Akzeptanzkriterien aus Issue #26 (Streckenelemente) ---------- */
 

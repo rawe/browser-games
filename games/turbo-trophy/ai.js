@@ -20,6 +20,15 @@ import { useItem } from './weapons.js';
  *            viel Tempo sie in die Kurve mitnehmen. Ein höherer `speed` allein
  *            bringt entsprechend wenig – wer mit angezogener Handbremse fährt,
  *            fährt auch mit mehr PS nicht schneller.
+ *
+ *            Der Wert ist zugleich die *Schwelle* der Stufe: Ein Spieler fährt
+ *            faktisch mit derselben Größe – wer die Kurve mutiger nimmt als
+ *            `curveBrake`, gewinnt, wer vorsichtiger fährt, verliert. Deshalb
+ *            ist die Staffelung der Stufen nichts anderes als die Staffelung
+ *            dieser Zahl, und deshalb wirkt sie so scharf. Gemessen an einem
+ *            Fahrer, der nie vom Gas geht (die Spielweise aus der Rückmeldung
+ *            zu #24), gilt: 1,2 → gewinnt fast immer, 0,6 → gewinnt drei von
+ *            vier, 0,24 → gewinnt vier von zehn.
  * spread     Streuung der Fahrerstärken untereinander
  * lineError  Breite der Pendelbewegung um die Ideallinie (Fahrpräzision)
  * reaction   Ticks zwischen zwei Überholentscheidungen (Reaktionszeit)
@@ -52,7 +61,7 @@ export const DIFFICULTIES = [
     speed: 1.14,
     accel: 0.096,
     turn: 0.084,
-    curveBrake: 0.78,
+    curveBrake: 0.6,
     spread: 0.045,
     lineError: 4,
     reaction: 18,
@@ -68,7 +77,7 @@ export const DIFFICULTIES = [
     speed: 1.18,
     accel: 0.115,
     turn: 0.09,
-    curveBrake: 0.66,
+    curveBrake: 0.28,
     spread: 0.03,
     lineError: 1.5,
     reaction: 9,
@@ -126,8 +135,11 @@ export const TUNING = {
   stallShare: 0.4,  // … bzw. bis zu diesem Anteil des eigenen Tempos
   stallClear: 32,   // seitlicher Abstand, ab dem man gefahrlos vorbeikommt
   stallMargin: 38,  // Sicherheitszuschlag auf den Bremsweg zum Ausweichen
-  stallStop: 28,    // darunter ist die Lücke zu, es hilft nur noch bremsen
+  stallStop: 36,    // darunter ist die Lücke zu, es hilft nur noch bremsen
   stallRate: 2.6,   // Faktor auf die Nachführrate beim Umfahren
+  stallOffset: 42,  // seitlicher Spielraum vor einem Hindernis (Gras ab 44)
+  stallCurve: 0.3,  // ab dieser Krümmung gilt „enge Kurve" …
+  stallCurveSpeed: 0.45, // … und davor wird auf diesen Tempoanteil heruntergegangen
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -297,7 +309,7 @@ function avoidHazards(race, car, targetOffset, want, prof) {
  * 2. Wer es seitlich knapp nicht mehr schafft, nimmt zusätzlich Tempo raus und
  *    verschafft sich damit die fehlenden Ticks.
  */
-function avoidStalled(race, car, targetOffset, want) {
+function avoidStalled(race, car, targetOffset, want, curve) {
   const track = race.track;
   const ai = car.ai;
   const range = TUNING.stallBase + car.speed * TUNING.stallSpeed;
@@ -318,11 +330,18 @@ function avoidStalled(race, car, targetOffset, want) {
     if (!onLine) continue;
 
     // Zur weiteren Seite ausweichen, aber nur, wenn dort auch Platz ist.
-    const room = (side) => TUNING.maxOffset - side * other.lat;
+    //
+    // Hier gilt bewusst ein weiterer Rand als sonst (`stallOffset` statt
+    // `maxOffset`): Der normale Spielraum lässt an einem Fahrzeug auf der
+    // Ideallinie nur rund acht Einheiten Luft, und die reichen in einer engen
+    // Kurve nicht – dort ist die Linie ohnehin schwer zu halten. Ein Stück
+    // dichter an den Fahrbahnrand kostet nichts (Gras beginnt erst weiter
+    // außen) und verdoppelt den Abstand zum Hindernis.
+    const room = (side) => TUNING.stallOffset - side * other.lat;
     let side = room(1) >= room(-1) ? 1 : -1;
     if (room(side) < TUNING.stallClear && room(-side) >= TUNING.stallClear) side = -side;
     const dodge = clamp(other.lat + side * (TUNING.stallClear + 4),
-      -TUNING.maxOffset, TUNING.maxOffset);
+      -TUNING.stallOffset, TUNING.stallOffset);
     targetOffset = dodge;
     dodging = true;
 
@@ -341,6 +360,14 @@ function avoidStalled(race, car, targetOffset, want) {
     const ticks = need / (TUNING.offsetRate * TUNING.stallRate);
     if (gap < ticks * car.speed + TUNING.stallMargin) {
       want = Math.min(want, Math.max(creep, car.speed * 0.9));
+    }
+    // In einer engen Kurve reicht das nicht. Dort ist die Fahrbahn quer zur
+    // Fahrtrichtung schmal, die Linie schwer zu halten und der Bremsweg lang –
+    // zehn Prozent weniger Tempo ändern daran nichts. Wer hier ein Hindernis
+    // vor sich hat, geht deutlich vom Gas, sonst schiebt er beim Ausweichen
+    // geradewegs hinein. Genau an solchen Kehren blieb es sonst beim Versuch.
+    if (curve > TUNING.stallCurve && gap < ticks * car.speed + TUNING.stallMargin * 2) {
+      want = Math.min(want, Math.max(creep, car.maxSpeed * TUNING.stallCurveSpeed));
     }
     // Kurz davor und immer noch auf Tuchfühlung: bis auf Schrittgeschwindigkeit
     // herunter. Der Seitenversatz läuft dabei weiter, die Lücke geht also auf.
@@ -443,7 +470,7 @@ export function driveAi(race, car, profile) {
   // Stehende Fahrzeuge zuletzt: Das Ergebnis darf weder von einem laufenden
   // Überholmanöver noch von einem Fahrfehler wieder überschrieben werden.
   let stalled = false;
-  ({ targetOffset, want, dodging: stalled } = avoidStalled(race, car, targetOffset, want));
+  ({ targetOffset, want, dodging: stalled } = avoidStalled(race, car, targetOffset, want, curve));
 
   // Sanft nachführen – harte Sprünge gäben Schlangenlinien. Beim Überholen und
   // beim Umfahren eines Hindernisses darf es zügiger gehen, sonst kommt das
