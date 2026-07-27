@@ -670,6 +670,41 @@ window.addEventListener('resize', () => {
   if (view.phase !== 'setup') renderer.resize();
 });
 
+// ------------------------------------------- Rückkehr aus dem Hintergrund
+// Der Kartenhintergrund – gemaltes Tal *und* Wege – liegt als eigene, **einmal**
+// gerasterte Offscreen-Leinwand im Renderer und wird danach je Bild nur noch
+// kopiert (`paintBackground`/`drawImage(bg, …)` in `render.js`).
+//
+// Mobile Browser dürfen die Zeichenfläche einer solchen Leinwand verwerfen,
+// während die App im Hintergrund liegt: Speicherdruck, Neustart des
+// GPU-Prozesses, Rückkehr aus dem bfcache. Die sichtbare Leinwand heilt sich
+// selbst, weil sie jedes Bild neu entsteht – die kopierte heilt nie. Sie bleibt
+// für den Rest der Sitzung leer, und die Karte zeigt Knoten und Token auf
+// schwarzem Grund, ohne Gelände und ohne Wege (gemeldet für Firefox auf
+// Android, Issue #34).
+//
+// Es gibt keine Zusage eines Browsers, dass eine einmal gemalte Leinwand
+// gemalt bleibt. Also wird sie neu gerastert, sobald die Seite wieder sichtbar
+// ist – erst im nächsten Bild, damit die Seite wieder vollständig lebt und
+// nicht in eine Fläche gemalt wird, die gerade verworfen wird.
+//
+// Der Preis ist einmaliges Terrain-Rastern je Rückkehr. Sonst folgenlos:
+// `resize()` fasst weder Spielzustand noch Layout an – die Anzeigegröße der
+// Leinwand steht im CSS –, sondern nur ihre Auflösung und den Inhalt der
+// Hintergrundebene.
+function repaintAfterRestore() {
+  if (view.phase === 'setup') return;
+  requestAnimationFrame(() => renderer.resize());
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') repaintAfterRestore();
+});
+
+// `pageshow` deckt die Verlaufsnavigation ab (zurück/vorwärts aus dem
+// bfcache) – dabei feuert `visibilitychange` nicht zwingend.
+window.addEventListener('pageshow', repaintAfterRestore);
+
 // Testeinstieg für Entwicklung: ?test=sim startet direkt eine CPU-Schlacht.
 // Mit `&ai=<stufe>` bzw. `&ai=<blau>,<rot>` lassen sich die KI-Stufen der beiden
 // Seiten gezielt gegeneinander antreten lassen (z. B. ?test=sim&ai=hard,easy).

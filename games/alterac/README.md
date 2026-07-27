@@ -52,6 +52,25 @@ gab und aus der das Talbild entstanden ist. Der Rückfall greift beim ersten
 Frame wie bei einem fehlgeschlagenen Ladevorgang; `onValleyReady` stößt das
 einmalige Neurastern an, wenn das Bild nachträglich eintrifft.
 
+#### Die Hintergrundebene muss nachrasterbar bleiben
+
+Tal und Wege liegen zusammen auf einer **einmal** gerasterten Offscreen-Leinwand
+(`bg` in `render.js`), die danach je Bild nur noch kopiert wird. Das ist der
+Grund, warum der Hintergrund überhaupt bezahlbar ist – und zugleich eine
+Annahme, die kein Browser garantiert: Mobile Browser dürfen die Zeichenfläche
+einer nicht sichtbaren Leinwand verwerfen, wenn die App in den Hintergrund geht
+(Speicherdruck, Neustart des GPU-Prozesses, Rückkehr aus dem bfcache).
+
+Die sichtbare Leinwand übersteht das, weil sie jedes Bild neu entsteht. Die
+kopierte nicht: Sie bliebe für den Rest der Sitzung leer, und die Karte zeigte
+Knoten und Token auf schwarzem Grund – ohne Gelände, ohne Wege. Genau so gemeldet
+für Firefox auf Android (Issue #34).
+
+Deshalb rastert `main.js` die Ebene neu, sobald die Seite wieder sichtbar wird
+(`visibilitychange` und `pageshow`, jeweils im nächsten Frame). Wer künftig
+weitere Ebenen vorrastert, muss sie an denselben Punkt hängen – eine einmal
+gemalte Leinwand bleibt nicht von selbst gemalt.
+
 ### Spiegelsymmetrie – die Fairness-Grundlage
 
 Die Karte bildet sich unter der Punktspiegelung Nord↔Süd **vollständig auf sich
