@@ -63,6 +63,13 @@
 // verankerte Vielfache); jede Gefallene wartet bis zur nächsten Welle und
 // kehrt dann gemeinsam mit allen anderen wartenden Gefallenen zurück. So
 // ballen sich Respawns automatisch zu Wellen.
+//
+// Schlachtbilanz: Jede Gruppe führt unter `stats` eine Buchhaltung mit
+// (ausgeteilter und erlittener Schaden, Todesstöße, Tode, Zeitbudget). Sie ist
+// **rein additiv** – nichts davon wird je zurückgelesen, keine Entscheidung
+// hängt daran. Der Ablauf einer Schlacht ist mit und ohne diese Zähler
+// derselbe; das Headless-Turnier und geteilte Aufmärsche bleiben unberührt.
+// Aufbereitet wird sie nicht hier, sondern in `report.js`.
 
 import { FACTIONS, enemyOf, shortestPath, nearestGraveyard, towerNodes } from './map.js';
 import { resolveUnitTypeMap, resolveAllyType } from './config.js';
@@ -202,8 +209,38 @@ export function createSim({ map, config, plans }) {
 
   const nodeName = (id) => map.nodes[id].name;
   const addLog = (text) => log.push({ t: time, text });
+
   const addEvent = (e) => events.push({ t: time, ...e });
   const groupLabel = (g) => `${FACTIONS[g.faction].name}-Trupp (${g.def.name})`;
+
+  // --- Zeitbudget je Einheit ----------------------------------------------
+  // Die Frage „Was hat diese Einheit eigentlich getan?" beantwortet keine
+  // Schadenszahl: Eine Einheit, die 80 % der Schlacht marschiert ist, hat kein
+  // Kampfproblem, sondern ein Wegproblem. Deshalb wird die Schlachtzeit je
+  // Einheit auf vier Eimer gebucht.
+  //
+  // Gebucht wird an genau einer Stelle – jedem Zeitsprung der Simulation –,
+  // und zwar mit dem Zustand VOR den Ereignissen dieses Zeitpunkts: Die
+  // vergangene Spanne gehört noch dem, was die Einheit bis dahin getan hat.
+  // Der mächtige Verbündete tritt erst mitten in der Schlacht in die Liste ein
+  // und sammelt darum von selbst nur seine eigene Lebenszeit.
+  let statsSince = 0;
+
+  function timeBucket(g) {
+    if (g.state === 'dead' || g.state === 'gone') return 'down';
+    if (g.fighting) return 'fight';
+    if (g.state === 'moving') return 'march';
+    return 'hold'; // steht: am Wegpunkt, eingegraben, oder bei einer Einnahme
+  }
+
+  function advanceTimeTo(t) {
+    const dt = t - statsSince;
+    if (dt > 0) {
+      for (const g of groups) g.stats.time[timeBucket(g)] += dt;
+      statsSince = t;
+    }
+    time = t;
+  }
 
   // Einen einzelnen Auftrag (Pfad + Haltung) in seine Ausführungsdaten
   // übersetzen: die Befehlsliste `orders` und – bei einem Angriffspfad, der auf
@@ -296,6 +333,21 @@ export function createSim({ map, config, plans }) {
       respawnAt: Infinity,
       graveyardNode: null,
       deathNode: null,
+      // Wer zuletzt auf diese Einheit eingeschlagen hat (Gruppe oder null für
+      // Boss/Turm). Daraus wird beim Fall der Todesstoß zugeschrieben.
+      lastHitBy: null,
+      // Schlachtbilanz dieser Einheit – reine Zählerei für den
+      // Ergebnisbildschirm (siehe „Schlachtbilanz" oben).
+      stats: {
+        dealtUnits: 0,
+        dealtBoss: 0,
+        blockedBoss: 0,
+        dealtTower: 0,
+        taken: 0,
+        kills: 0,
+        deaths: 0,
+        time: { march: 0, fight: 0, hold: 0, down: 0 },
+      },
     };
   }
 
@@ -941,6 +993,14 @@ export function createSim({ map, config, plans }) {
   }
 
   function die(g, t) {
+    // Todesstoß: Alle Schläge eines Zeitpunkts werden verrechnet, bevor
+    // Gefallene entfernt werden – „wer hat sie getötet" ist also nicht
+    // eindeutig. Zugeschrieben wird der letzte Treffer in der ohnehin festen
+    // Angriffsreihenfolge: deterministisch und nachvollziehbar. Deshalb ist im
+    // Bericht der ausgeteilte Schaden die führende Zahl, nicht die Kills.
+    g.stats.deaths += 1;
+    if (g.lastHitBy) g.lastHitBy.stats.kills += 1;
+    g.lastHitBy = null;
     g.state = 'dead';
     g.fighting = false;
     g.entrenched = false;
@@ -1023,6 +1083,8 @@ export function createSim({ map, config, plans }) {
         addEvent({ type: 'bossAoe', faction, where });
         for (const target of targets) {
           target.hp = Math.max(0, target.hp - dmg);
+          target.stats.taken += dmg;
+          target.lastHitBy = null; // der Fürst selbst – kein Trupp bekommt den Kill
           addEvent({ type: 'damage', amount: dmg, boss: false, faction: target.faction, where });
         }
         continue;
@@ -1033,6 +1095,9 @@ export function createSim({ map, config, plans }) {
       let targetGroups;
       let bossTargetFaction = null;
       let towerTargetNode = null;
+      // Nur Trupps führen eine Bilanz – Schläge von Boss und Turm gehören
+      // niemandem und bleiben unzugeschrieben.
+      const attacker = atk.kind === 'group' ? atk.g : null;
       if (atk.kind === 'boss') {
         faction = atk.faction;
         damage = bossDamageOf(faction); // je zerstörtem eigenen Turm dauerhaft geschwächt
@@ -1087,12 +1152,21 @@ export function createSim({ map, config, plans }) {
         const dealt =
           target.state === 'defending' && target.entrenched ? damage * entrenchedFactor : damage;
         target.hp = Math.max(0, target.hp - dealt);
+        target.stats.taken += dealt;
+        target.lastHitBy = attacker;
+        if (attacker) attacker.stats.dealtUnits += dealt;
         addEvent({ type: 'damage', amount: dealt, boss: false, faction: target.faction, where });
       } else if (bossTargetFaction) {
         // Boss-Schutz durch stehende Türme: der erlittene Schaden wird gesenkt;
         // bei vollem Schutz (Turm steht) kommt nichts durch – dann signalisiert ein
         // eigenes Ereignis den abgewehrten Treffer statt einer irreführenden Zahl.
         const dealt = damage * bossVulnerability(bossTargetFaction);
+        // Angekommen und geschluckt getrennt buchen: Der Anteil, den der Schild
+        // frisst, ist die Kennzahl, die den Umweg über die Türme begründet.
+        if (attacker) {
+          attacker.stats.dealtBoss += dealt;
+          attacker.stats.blockedBoss += damage - dealt;
+        }
         if (dealt > EPS) {
           boss[bossTargetFaction].hp = Math.max(0, boss[bossTargetFaction].hp - dealt);
           addEvent({ type: 'damage', amount: dealt, boss: true, faction: bossTargetFaction, where });
@@ -1104,6 +1178,7 @@ export function createSim({ map, config, plans }) {
         // Verteidigungsbonus, keine zusätzliche Reduktion).
         const tw = towers[towerTargetNode];
         tw.hp = Math.max(0, tw.hp - damage);
+        if (attacker) attacker.stats.dealtTower += damage;
         addEvent({ type: 'damage', amount: damage, boss: false, tower: true, faction: tw.faction, where });
       }
     }
@@ -1344,10 +1419,10 @@ export function createSim({ map, config, plans }) {
         break;
       }
       if (te > target + EPS) {
-        time = target;
+        advanceTimeTo(target);
         break;
       }
-      time = te;
+      advanceTimeTo(te);
       processBatch(te);
       if (!result && time >= maxTime) endWithDraw('Zeitlimit erreicht – unentschieden.');
     }

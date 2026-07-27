@@ -21,6 +21,8 @@ Eingriffe ab. Wer den gegnerischen Endboss fällt, gewinnt.
 | `sprites.js` | Porträt- und Gebäude-Atlanten aus `assets/` laden und Zellen ausgeben |
 | `terrain.js` | Landschafts-Hintergrund: gemaltes Talbild `assets/valley.webp` plus Wege, prozedurale Fassung als Rückfall |
 | `effects.js` | Partikeleffekte (Schadenszahlen, Funken, Geister, Respawn-Säulen, Boss-Sturz) |
+| `report.js`  | Schlachtbericht: rohe Bilanzzahlen der Simulation zu einer fertigen Auswertung verdichten (DOM-frei) |
+| `result.js`  | Ergebnisbildschirm: Bericht als Blatt über der Karte, samt Sichern und Teilen des Aufmarschs |
 | `main.js`    | Bildschirm-Ablauf, Render-Schleife und das Panel der Simulation (Boss-HUD mit Schild und Vorrat, Ticker) |
 | `config.js`  | Einheitentypen sowie alle Kampf- und Zeitwerte |
 
@@ -272,7 +274,8 @@ identische, deterministische Pläne heben sich gegenseitig auf.
 
 Für Entwicklung und Balancing lassen sich die Stufen direkt gegeneinander
 antreten lassen: `?test=sim&ai=hard,easy` (blau, rot) startet sofort eine
-Schlacht ohne Planungsphase.
+Schlacht ohne Planungsphase, `?test=result&ai=hard,easy` rechnet sie in einem
+Zug durch und zeigt nur den Ergebnisbildschirm.
 
 ## Einheiten und Ressourcen
 
@@ -640,6 +643,81 @@ Feld über der ersten Meldung stünde). Reicht die Bildschirmhöhe nicht – kle
 Gerät, beide Messwerte aktiv –, schrumpft er unter seinen Inhalt und hängt dabei
 an der Unterkante: Die neueste Meldung bleibt stehen, oben fallen die ohnehin
 ausgeblichenen ältesten weg.
+
+## Der Ergebnisbildschirm
+
+Der Spieler greift während der Schlacht nie ein. Der Ergebnisbildschirm ist
+damit die **einzige** Stelle, an der er erfährt, was sein Plan getaugt hat –
+und der Ort, an dem die nächste Planung anfängt. Er sagt deshalb nicht nur, wer
+gewonnen hat, sondern beantwortet drei Fragen der nächsten Partie:
+
+| Frage | Kennzahl |
+| --- | --- |
+| War die Armee richtig zusammengestellt? | Schaden je Ressourcenpunkt, je Einheit |
+| Waren die Ziele richtig? | Türme gefällt, am Schild verpufft, Friedhöfe, Vorrat |
+| Hat jede Einheit etwas getan? | Zeitbudget je Einheit |
+
+Der Aufbau ist ein **Blatt** nach dem Muster der Plan-Bibliothek: fester Kopf,
+fester Fuß, nur die Mitte scrollt. Auf einem Telefon bleibt „Revanche" damit
+immer einen Daumen entfernt, egal wie weit jemand im Bericht gelesen hat, und
+ohne zu scrollen steht der Kern da – Ausgang, Dauer und die Lebenspunkte beider
+Fürsten.
+
+- **Ausgang:** Gegen den Computer in der zweiten Person („Du siegst" / „Du
+  unterliegst"), im Hotseat beim Fraktionsnamen – dort sitzen zwei Spieler am
+  Gerät, „du" hätte keinen Adressaten. Aus dem Blatt blickt der Fürst des
+  Siegers, nach einer Niederlage also der, gegen den man verloren hat.
+- **Duell der Fürsten:** dieselben `.boss-row`-Bausteine wie im Schlacht-HUD,
+  nur eingefroren. Der Endstand sieht damit aus wie der letzte Blick auf das HUD.
+- **Bilanz:** Gegenüberstellung statt Kachelraster – „3 Verluste" sagt wenig,
+  „3 gegen 9" alles. Jede Zeile hängt wie im Boss-HUD an ihrem Teilsystem: keine
+  Turmzeile ohne Türme, keine Vorratszeile ohne Lager.
+- **Truppenbericht:** je Einheit eine Karte mit Ziffer und Porträt aus der
+  Planungsliste – derselbe Trupp, den der Spieler geplant und auf der Karte
+  verfolgt hat. Bewusst kein Tabellenlayout: Eine Tabelle erzwingt auf 360 px
+  waagerechtes Scrollen. Die gegnerische Seite steht eingeklappt darunter (nach
+  der Schlacht gibt es nichts mehr geheim zu halten).
+- **Sichern:** Aufmarsch benennen und in die Bibliothek legen, aus der die
+  Planung lädt, oder als Teilen-Link kopieren (`plans.js`). Die Bibliothek
+  selbst bleibt im Planer; hier steht nur der Eingang zu ihr. Im Hotseat gehören
+  zwei Aufmärsche zur Schlacht – dann gibt es je Seite eine Zeile.
+
+### Das Zeitbudget je Einheit
+
+Der Balken unter jeder Einheit teilt die Schlachtdauer auf vier Eimer auf:
+**Marsch**, **Kampf**, **Stellung**, **Gefallen**. Er ist die Kennzahl, die
+keine Schadenszahl ersetzen kann: Eine Einheit, die 80 % der Schlacht marschiert
+ist, hat kein Kampfproblem, sondern ein Wegproblem – und wer nie zuschlug,
+bekommt es ausdrücklich als „nie im Kampf" gesagt, statt es in einer Null zu
+verstecken.
+
+Was auf 100 % fehlt, ist die Zeit **vor** dem Erscheinen; sie führt den Balken
+schraffiert an. Nur der mächtige Verbündete hat sie, und sie gehört an den
+Anfang: ans Ende gerückt sähe sie aus, als hätte er die Schlacht überlebt.
+
+### Die Zähler dürfen den Ablauf nicht anfassen
+
+Die Rohzahlen sammelt `sim.js` unter `stats` je Gruppe (ausgeteilter und
+erlittener Schaden, vom Boss-Schild geschluckter Anteil, Todesstöße, Tode,
+Zeitbudget). Sie sind **rein additiv** – nichts davon wird je zurückgelesen,
+keine Entscheidung hängt daran. Der Ablauf einer Schlacht ist mit und ohne diese
+Zähler derselbe; das Headless-Turnier und geteilte Aufmärsche bleiben unberührt.
+Gebucht wird die Zeit an genau einer Stelle, jedem Zeitsprung der Simulation,
+mit dem Zustand *vor* den Ereignissen dieses Zeitpunkts.
+
+Zwei Zuschreibungen sind bewusst so und nicht anders:
+
+- **Todesstöße statt „Kills":** Alle Schläge eines Zeitpunkts werden verrechnet,
+  bevor Gefallene entfernt werden – wer eine Einheit „getötet" hat, ist also
+  nicht eindeutig. Zugeschrieben wird der letzte Treffer in der ohnehin festen
+  Angriffsreihenfolge: deterministisch und nachvollziehbar. Deshalb führt im
+  Bericht der ausgeteilte Schaden, nicht die Zahl der Erschlagenen.
+- **Schläge von Boss und Turm gehören niemandem.** Sie zählen beim Getroffenen
+  als erlittener Schaden, aber bei keinem Trupp als ausgeteilter.
+
+Für die Arbeit am Bildschirm selbst rechnet `?test=result` eine ganze Schlacht
+in einem Zug durch und zeigt nur den Bericht – mit `&ai=<blau>,<rot>` wie bei
+`?test=sim` und mit `&players=2` in der Hotseat-Fassung.
 
 ## Begegnungskämpfe auf Wegstücken
 
