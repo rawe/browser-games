@@ -27,7 +27,7 @@ const COUNTDOWN_TICKS = 210;   // 3,5 Sekunden Ampelphase
 const FINISH_DELAY = 110;      // Nachlauf, nachdem der Spieler das Ziel passiert hat
 const RESPAWN_TICKS = 160;
 const INVULN_TICKS = 130;
-const CAR_RADIUS = 13;
+export const CAR_RADIUS = 13;
 const MISSILE_HIT_RADIUS = 20;
 
 const RAMP_MIN_SPEED = 1.5; // darunter rumpelt man nur über die Schanze

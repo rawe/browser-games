@@ -15,6 +15,20 @@ import { useItem } from './weapons.js';
  * speed      Faktor auf die Grundgeschwindigkeit der Gegner
  * accel/turn Beschleunigung und Lenkrate
  * curveBrake Kurvendisziplin (größer = mehr Tempoverlust in Kurven)
+ *            Der wirksamste Hebel der ganzen Tabelle: Die Bots erreichen ihre
+ *            Höchstgeschwindigkeit fast nie, ihr Rundenschnitt hängt daran, wie
+ *            viel Tempo sie in die Kurve mitnehmen. Ein höherer `speed` allein
+ *            bringt entsprechend wenig – wer mit angezogener Handbremse fährt,
+ *            fährt auch mit mehr PS nicht schneller.
+ *
+ *            Der Wert ist zugleich die *Schwelle* der Stufe: Ein Spieler fährt
+ *            faktisch mit derselben Größe – wer die Kurve mutiger nimmt als
+ *            `curveBrake`, gewinnt, wer vorsichtiger fährt, verliert. Deshalb
+ *            ist die Staffelung der Stufen nichts anderes als die Staffelung
+ *            dieser Zahl, und deshalb wirkt sie so scharf. Gemessen an einem
+ *            Fahrer, der nie vom Gas geht (die Spielweise aus der Rückmeldung
+ *            zu #24), gilt: 1,2 → gewinnt fast immer, 0,6 → gewinnt drei von
+ *            vier, 0,24 → gewinnt vier von zehn.
  * spread     Streuung der Fahrerstärken untereinander
  * lineError  Breite der Pendelbewegung um die Ideallinie (Fahrpräzision)
  * reaction   Ticks zwischen zwei Überholentscheidungen (Reaktionszeit)
@@ -44,10 +58,10 @@ export const DIFFICULTIES = [
     id: 'mittel',
     name: 'MITTEL',
     hint: 'Ausgeglichene Gegner auf Augenhöhe',
-    speed: 1.06,
-    accel: 0.092,
-    turn: 0.079,
-    curveBrake: 0.98,
+    speed: 1.14,
+    accel: 0.096,
+    turn: 0.084,
+    curveBrake: 0.6,
     spread: 0.045,
     lineError: 4,
     reaction: 18,
@@ -59,11 +73,11 @@ export const DIFFICULTIES = [
   {
     id: 'schwer',
     name: 'SCHWER',
-    hint: 'Schnell, präzise und aggressiv beim Überholen',
-    speed: 1.13,
-    accel: 0.108,
-    turn: 0.085,
-    curveBrake: 0.88,
+    hint: 'Schnell, präzise, aggressiv – ohne Tuning kaum zu schlagen',
+    speed: 1.18,
+    accel: 0.115,
+    turn: 0.09,
+    curveBrake: 0.28,
     spread: 0.03,
     lineError: 1.5,
     reaction: 9,
@@ -109,6 +123,23 @@ export const TUNING = {
   hazardBase: 95,
   hazardSpeed: 100,
   gateRate: 2.2,    // Faktor auf die Nachführrate, während eine Sperre umfahren wird
+
+  // Stehende Fahrzeuge. Sie brauchen eine eigene, deutlich weitere Vorausschau:
+  // Ein Vordermann fährt mit, ein Hindernis kommt mit voller Fahrt näher. Bei
+  // `detectRange` 150 und Tempo 3 bleiben 50 Ticks – ein Spurwechsel über die
+  // halbe Fahrbahn dauert mit `offsetRate` aber rund 85. Der Ausweichversuch
+  // begann also grundsätzlich zu spät (Rückmeldung zu Issue #24).
+  stallBase: 130,   // Sichtweite auf Hindernisse: Grundwert …
+  stallSpeed: 105,  // … und Zuwachs pro Tempoeinheit
+  stallSlow: 0.9,   // bis zu diesem Tempo gilt ein Fahrzeug als Hindernis
+  stallShare: 0.4,  // … bzw. bis zu diesem Anteil des eigenen Tempos
+  stallClear: 32,   // seitlicher Abstand, ab dem man gefahrlos vorbeikommt
+  stallMargin: 38,  // Sicherheitszuschlag auf den Bremsweg zum Ausweichen
+  stallStop: 36,    // darunter ist die Lücke zu, es hilft nur noch bremsen
+  stallRate: 2.6,   // Faktor auf die Nachführrate beim Umfahren
+  stallOffset: 42,  // seitlicher Spielraum vor einem Hindernis (Gras ab 44)
+  stallCurve: 0.3,  // ab dieser Krümmung gilt „enge Kurve" …
+  stallCurveSpeed: 0.45, // … und davor wird auf diesen Tempoanteil heruntergegangen
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -264,6 +295,91 @@ function avoidHazards(race, car, targetOffset, want, prof) {
 }
 
 /**
+ * Ausweichen vor stehenden oder kriechenden Fahrzeugen.
+ *
+ * Bewusst getrennt von der Überholentscheidung und bewusst als Letztes im
+ * Ablauf: Ein Hindernis ist kein Gegner, um den man pokert, sondern etwas, das
+ * man auf jeden Fall verfehlen will – auch dann, wenn gerade ein Überholmanöver
+ * läuft oder ein Fahrfehler die Linie verzogen hat.
+ *
+ * Zwei Dinge machen den Unterschied zum vorherigen Verhalten:
+ * 1. Die Sichtweite wächst mit dem Tempo und reicht weit genug, dass der
+ *    Spurwechsel bis zum Hindernis auch wirklich fertig wird. Vorher begann
+ *    das Ausweichen zu spät – der Versuch war da, der Kontakt auch.
+ * 2. Wer es seitlich knapp nicht mehr schafft, nimmt zusätzlich Tempo raus und
+ *    verschafft sich damit die fehlenden Ticks.
+ */
+function avoidStalled(race, car, targetOffset, want, curve) {
+  const track = race.track;
+  const ai = car.ai;
+  const range = TUNING.stallBase + car.speed * TUNING.stallSpeed;
+  let dodging = false;
+
+  for (const other of race.cars) {
+    if (other === car || other.respawn > 0) continue;
+    if (other.level !== car.level || other.air > 0) continue; // andere Ebene, kein Kontakt
+    const slow = Math.max(TUNING.stallSlow, car.speed * TUNING.stallShare);
+    if (other.speed > slow) continue;
+    const gap = gapAlong(track, car.s, other.s);
+    if (gap <= 0 || gap > range) continue;
+
+    // Liegt es überhaupt im Weg? Geprüft wird die geplante Linie und die
+    // aktuelle Lage – die Linie eilt der tatsächlichen Position voraus.
+    const onLine = Math.abs(other.lat - targetOffset) < TUNING.stallClear
+      || Math.abs(other.lat - car.lat) < TUNING.stallClear;
+    if (!onLine) continue;
+
+    // Zur weiteren Seite ausweichen, aber nur, wenn dort auch Platz ist.
+    //
+    // Hier gilt bewusst ein weiterer Rand als sonst (`stallOffset` statt
+    // `maxOffset`): Der normale Spielraum lässt an einem Fahrzeug auf der
+    // Ideallinie nur rund acht Einheiten Luft, und die reichen in einer engen
+    // Kurve nicht – dort ist die Linie ohnehin schwer zu halten. Ein Stück
+    // dichter an den Fahrbahnrand kostet nichts (Gras beginnt erst weiter
+    // außen) und verdoppelt den Abstand zum Hindernis.
+    const room = (side) => TUNING.stallOffset - side * other.lat;
+    let side = room(1) >= room(-1) ? 1 : -1;
+    if (room(side) < TUNING.stallClear && room(-side) >= TUNING.stallClear) side = -side;
+    const dodge = clamp(other.lat + side * (TUNING.stallClear + 4),
+      -TUNING.stallOffset, TUNING.stallOffset);
+    targetOffset = dodge;
+    dodging = true;
+
+    // Die Kriechgrenze ist hier keine Bequemlichkeit, sondern Bedingung: Die
+    // Lenkung greift erst mit etwas Tempo (siehe `stepCar`). Wer bis zum
+    // Stillstand bremst, kommt nie zur Seite und steht dort bis zum Rennende.
+    // `speed * 0.9` ohne diese Untergrenze wäre eine geometrische Abnahme und
+    // liefe Tick für Tick gegen null – genau so ist die erste Fassung in eine
+    // 90-Sekunden-Blockade gelaufen.
+    const creep = follow(car, 0);
+
+    // Reicht der Weg noch für den Spurwechsel? Der Seitenversatz läuft mit
+    // `offsetRate * stallRate` je Tick, zurückgelegt wird währenddessen
+    // `speed` je Tick – daraus ergibt sich der nötige Vorlauf.
+    const need = Math.abs(dodge - ai.offset);
+    const ticks = need / (TUNING.offsetRate * TUNING.stallRate);
+    if (gap < ticks * car.speed + TUNING.stallMargin) {
+      want = Math.min(want, Math.max(creep, car.speed * 0.9));
+    }
+    // In einer engen Kurve reicht das nicht. Dort ist die Fahrbahn quer zur
+    // Fahrtrichtung schmal, die Linie schwer zu halten und der Bremsweg lang –
+    // zehn Prozent weniger Tempo ändern daran nichts. Wer hier ein Hindernis
+    // vor sich hat, geht deutlich vom Gas, sonst schiebt er beim Ausweichen
+    // geradewegs hinein. Genau an solchen Kehren blieb es sonst beim Versuch.
+    if (curve > TUNING.stallCurve && gap < ticks * car.speed + TUNING.stallMargin * 2) {
+      want = Math.min(want, Math.max(creep, car.maxSpeed * TUNING.stallCurveSpeed));
+    }
+    // Kurz davor und immer noch auf Tuchfühlung: bis auf Schrittgeschwindigkeit
+    // herunter. Der Seitenversatz läuft dabei weiter, die Lücke geht also auf.
+    if (gap < TUNING.stallMargin && Math.abs(car.lat - other.lat) < TUNING.stallStop) {
+      want = Math.min(want, creep);
+    }
+  }
+
+  return { targetOffset, want, dodging };
+}
+
+/**
  * KI-Steuerung für ein Auto. Liefert `{ steer, gas, brake }` wie die
  * Spielereingabe und pflegt nebenbei den KI-Zustand.
  *
@@ -351,10 +467,19 @@ export function driveAi(race, car, profile) {
     ai.mistakeSteer = race.rng() < 0.5 ? -1 : 1;
   }
 
-  // Sanft nachführen – harte Sprünge gäben Schlangenlinien. Beim Überholen
-  // darf es zügiger gehen, sonst kommt das Auto nicht rechtzeitig vorbei.
-  const rate = TUNING.offsetRate
-    * (ai.overtakeTicks > 0 ? TUNING.passRate : dodging ? TUNING.gateRate : 1);
+  // Stehende Fahrzeuge zuletzt: Das Ergebnis darf weder von einem laufenden
+  // Überholmanöver noch von einem Fahrfehler wieder überschrieben werden.
+  let stalled = false;
+  ({ targetOffset, want, dodging: stalled } = avoidStalled(race, car, targetOffset, want, curve));
+
+  // Sanft nachführen – harte Sprünge gäben Schlangenlinien. Beim Überholen und
+  // beim Umfahren eines Hindernisses darf es zügiger gehen, sonst kommt das
+  // Auto nicht rechtzeitig vorbei.
+  const rate = TUNING.offsetRate * Math.max(
+    ai.overtakeTicks > 0 ? TUNING.passRate : 1,
+    dodging ? TUNING.gateRate : 1,
+    stalled ? TUNING.stallRate : 1,
+  );
   ai.offset += clamp(targetOffset - ai.offset, -rate, rate);
 
   // Zielpunkt: in Kurven näher heran, sonst würde das Auto die Kurve schneiden.

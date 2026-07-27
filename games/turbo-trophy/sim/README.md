@@ -30,6 +30,26 @@ Durchschnittsplatz ist damit ein Maßstab dafür, wie stark die Gegner sind.
 Jedes Rennen läuft über `createRace(track, career, { seed })` mit einem
 deterministischen Zufallsgenerator (`rng.js`) – gleicher Seed, gleicher Lauf.
 
+### Zwei Maßstäbe
+
+Es gibt zwei feste Fahrerprofile, und der Unterschied ist der Grund, warum die
+erste Fassung der KI-Stufen an der Realität vorbeigemessen hat:
+
+| `driver` | Profil | wofür |
+| --- | --- | --- |
+| `reference` | `mittel` | Durchschnittsfahrer – zeigt, ob die Stufen überhaupt auseinanderliegen |
+| `ace` | `ACE_PROFILE` | jemand, der das Spiel kann: Dauergas, saubere Linie, keine Fahrfehler, wenig Tempoverlust in Kurven |
+| `parked` | – | fährt nicht, steht als Hindernis herum |
+
+Gegen den Durchschnittsfahrer sahen die Stufen sauber gestaffelt aus – ein
+guter Spieler hat auf SCHWER trotzdem in der ersten Runde das ganze Feld
+kassiert. Seitdem hängen die Balance-Kriterien am `ace`, nicht am
+Durchschnitt. `npm run sim:turbo` gibt beide Tabellen aus.
+
+Der `ace` ist bewusst eine *Untergrenze* für einen starken Spieler: Er nutzt
+weder Turbo-Timing noch Waffen taktisch. Wenn er ein Viertel der Rennen
+gewinnt, gewinnt ein guter Mensch eher mehr.
+
 ## Funktionen
 
 - `simulateRace({ stage, difficulty, seed })` – ein Rennen, liefert
@@ -46,15 +66,20 @@ deterministischen Zufallsgenerator (`rng.js`) – gleicher Seed, gleicher Lauf.
 - `simulateHoming({ offset, gap, homing })` – Rakete auf ein seitlich
   versetztes Ziel. Mit `homing: false` als Vergleichswert: eine gerade Rakete
   verfehlt dort, eine zielsuchende trifft.
+- `simulateParked({ stage, difficulty, lat })` – ein Fahrzeug wird mitten auf
+  der Strecke festgenagelt, die Bots fahren ihre Runden daran vorbei. Gezählt
+  wird jede Vorbeifahrt und jede Berührung dabei. Misst nicht, *ob* die Bots
+  ausweichen wollen, sondern ob sie es schaffen.
 
-Diese drei Szenarien entwaffnen alle Fahrzeuge und parken die Unbeteiligten –
+Diese Szenarien entwaffnen alle Fahrzeuge und parken die Unbeteiligten –
 gemessen wird nur, was geprüft werden soll.
 
 ## Kennzahlen
 
 | Spalte | Bedeutung |
 | --- | --- |
-| Platz Ref. | Durchschnittsplatz des Referenzfahrers (1 = Sieg) |
+| Platz Ref. | Durchschnittsplatz des Durchschnittsfahrers (1 = Sieg) |
+| Platz Ass | dasselbe für den starken Fahrer – die zweite Tabelle |
 | Ø Tempo | mittlere Geschwindigkeit der Bots |
 | Überh. KI | Positionswechsel zwischen Bots je Rennen |
 | Kolonne | Zeitanteil, in dem ein Bot länger als 2 s hinter einem langsameren klebt |
