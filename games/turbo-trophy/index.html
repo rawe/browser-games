@@ -17,6 +17,9 @@
         <span class="tag">POS <b id="hud-pos">–</b></span>
         <span class="tag">RUNDE <b id="hud-lap">–</b></span>
         <span class="tag gas-tag hidden" id="hud-gas">&#9654;&#9654; DAUERGAS</span>
+        <span class="tag turbo-tag hidden" id="hud-turbo">&#9889; TURBO
+          <span class="turbo-bar"><span id="hud-turbo-fill"></span></span>
+        </span>
       </div>
       <div class="hud-row">
         <div id="hud-health"><div id="hud-health-fill"></div></div>
@@ -34,14 +37,8 @@
         <button class="tc-btn steer" id="btn-right" aria-label="Rechts lenken">&#9654;</button>
       </div>
       <div class="tc-group" id="tc-actions">
-        <div class="tc-row">
-          <button class="tc-btn rocket" id="btn-fire-front" aria-label="Rakete nach vorn">
-            &#9650; RAKETE<small id="ammo-front">0</small>
-          </button>
-          <button class="tc-btn rocket" id="btn-fire-rear" aria-label="Rakete nach hinten">
-            &#9660; RAKETE<small id="ammo-rear">0</small>
-          </button>
-        </div>
+        <!-- Ausrüstungsknöpfe baut `input.js` aus der Item-Liste (items.js). -->
+        <div class="tc-row tc-items" id="tc-items"></div>
         <div class="tc-row">
           <button class="tc-btn brake" id="btn-brake" aria-label="Bremsen und Dauergas beenden">BREMSE</button>
           <button class="tc-btn gas" id="btn-gas" aria-label="Gas geben – kurz tippen für Dauergas">

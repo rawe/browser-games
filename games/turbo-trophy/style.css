@@ -96,6 +96,39 @@ body {
   animation: gas-pulse 1.1s ease-in-out infinite;
 }
 
+/* Turbo-Anzeige: gleiche Bauform wie das Dauergas, aber in Warnfarbe und mit
+   Restbalken – der Schub läuft von selbst ab, das muss man sehen. */
+.tag.turbo-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  background: var(--amiga);
+  border-color: var(--amiga);
+  animation: turbo-pulse 0.6s ease-in-out infinite;
+}
+
+@keyframes turbo-pulse {
+  50% {
+    box-shadow: 0 0 0 4px rgba(255, 210, 63, 0.3);
+  }
+}
+
+.turbo-bar {
+  width: 44px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(12, 16, 32, 0.3);
+  overflow: hidden;
+}
+
+.turbo-bar > span {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--ink);
+}
+
 .tag.hidden {
   display: none;
 }
@@ -107,7 +140,8 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tag.gas-tag {
+  .tag.gas-tag,
+  .tag.turbo-tag {
     animation: none;
   }
 }
@@ -195,11 +229,14 @@ body {
   gap: 12px;
 }
 
+/* Feste Spaltenbreite: 190px passen neben die 156px der Lenktasten auch auf
+   einen 375px breiten Bildschirm. */
 #tc-actions {
   display: flex;
   flex-direction: column;
   gap: 10px;
   align-items: flex-end;
+  width: 190px;
 }
 
 .tc-row {
@@ -213,17 +250,58 @@ body {
   font-size: 34px;
 }
 
-.tc-btn.rocket {
-  width: 70px;
-  height: 56px;
-  font-size: 13px;
-  line-height: 1.15;
+/* Ausrüstung: die Reihe ist genauso breit wie BREMSE + GAS darunter und
+   bricht nach je drei Knöpfen um. Dadurch passt ein sechstes Item ohne
+   Änderung an Breite oder Layout dazu. */
+.tc-items {
+  width: 190px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tc-btn.item {
+  flex: 1 1 30%;
+  min-width: 0;
+  height: 50px;
+  gap: 3px;
+  padding: 0 2px;
+  overflow: hidden;
+}
+
+.item-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.item-icon {
+  font-size: 15px;
+  line-height: 1;
   color: var(--hot);
 }
 
-.tc-btn.rocket small {
-  color: var(--txt);
+.item-count {
   font-size: 12px;
+  color: var(--txt);
+}
+
+.item-label {
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Leerer Bestand: sichtbar tot statt heimlich wirkungslos. */
+.tc-btn.item:disabled {
+  opacity: 0.4;
+  border-color: #232a4d;
+  box-shadow: none;
+}
+
+.tc-btn.item:disabled .item-icon,
+.tc-btn.item:disabled .item-count {
+  color: var(--muted);
 }
 
 .tc-btn.brake {

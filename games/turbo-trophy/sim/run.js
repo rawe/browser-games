@@ -9,7 +9,7 @@
 import { tracks } from '../tracks.js';
 import { DIFFICULTIES } from '../ai.js';
 import { ELEMENT_TYPES } from '../elements.js';
-import { simulateOvertake, simulateSeries } from './headless.js';
+import { simulateHoming, simulateOvertake, simulateSeries, simulateTurboRam } from './headless.js';
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => {
   const [k, v] = a.replace(/^--/, '').split('=');
@@ -39,6 +39,10 @@ const COLUMNS = [
   ['Öl', 5, (r) => r.oilHits.toFixed(1)],
   ['Schranke', 9, (r) => `${r.gateSwitches.toFixed(0)}/${r.gateStops.toFixed(0)}`],
   ['Brücke s', 9, (r) => (r.bridgeTicks / 60).toFixed(1)],
+  ['Zielsuch', 9, (r) => r.homingHits.toFixed(1)],
+  ['Turbo', 6, (r) => r.turboUses.toFixed(1)],
+  ['Rammen', 7, (r) => r.turboRams.toFixed(1)],
+  ['Öl abgel.', 10, (r) => r.oilDrops.toFixed(1)],
 ];
 
 function table(rows) {
@@ -177,6 +181,62 @@ if (stages.length === tracks.length) {
   add('Alle Elementtypen sind auf mindestens einer Strecke im Einsatz',
     Object.keys(ELEMENT_TYPES).every((type) => withType(type).length > 0),
     Object.keys(ELEMENT_TYPES).map((t) => `${t}=${withType(t).length}`).join('  '));
+}
+
+/* ---------- Akzeptanzkriterien aus Issue #27 (Arsenal) ---------- */
+{
+  const sum = (key) => results.reduce((s, r) => s + r[key], 0);
+  const late = results.filter((r) => r.stage >= 2); // ab hier hat die KI das volle Arsenal
+
+  add('KI setzt Zielsuchraketen ein und trifft damit',
+    sum('homingHits') > 0, `${sum('homingHits').toFixed(0)} Treffer`);
+
+  add('KI setzt den Turbo ein',
+    sum('turboUses') > 0, `${sum('turboUses').toFixed(0)} Schübe`);
+
+  add('KI legt Öllachen ab',
+    sum('oilDrops') > 0, `${sum('oilDrops').toFixed(0)} Ablagen`);
+
+  // Die Ramme ist ein seltener Glücksfall – sie muss vorkommen können,
+  // darf das Rennen aber nicht bestimmen.
+  add('Turbo-Sprünge auf Gegner kommen vor, bleiben aber selten',
+    sum('turboRams') > 0 && sum('turboRams') / Math.max(1, results.length) < 3,
+    `${sum('turboRams').toFixed(0)} Rammen in ${results.length} Serien`);
+
+  // Balance: das neue Arsenal darf die Rennen nicht in Materialschlachten
+  // verwandeln – die Referenzfahrt muss weiter sauber durchlaufen.
+  const lateContacts = Math.max(...late.map((r) => r.aiContacts), 0);
+  add('Arsenal bleibt ausbalanciert (keine Materialschlacht)',
+    lateContacts < 400, `höchste Kontaktzahl in späten Rennen: ${lateContacts.toFixed(0)}`);
+
+  // Gezielte Szenarien – im normalen Rennen treten diese Fälle zu selten auf,
+  // um daraus etwas ablesen zu können.
+  const rams = [];
+  for (const error of [-20, -10, 0, 10, 20]) {
+    for (let i = 0; i < 3; i++) rams.push(simulateTurboRam({ error, seed: 1 + i * 977 }));
+  }
+  const hits = rams.filter((r) => r.rammed);
+  const minRamDamage = Math.min(Infinity, ...hits.map((r) => r.victimDamage));
+  add('Turbo-Sprung auf ein Fahrzeug richtet erheblichen Schaden an',
+    hits.length > 0 && minRamDamage >= 40,
+    `${hits.length}/${rams.length} Landungen trafen, Schaden am Getroffenen ab ${minRamDamage}, ` +
+    `Rückschlag für den Angreifer ${hits[0]?.attackerDamage ?? 0}`);
+
+  const straight = [0, 20, 34, 44].map((offset) => simulateHoming({ offset, homing: false }));
+  const homing = [0, 20, 34, 44].map((offset) => simulateHoming({ offset, homing: true }));
+  add('Zielsuchraketen verfolgen ihr Ziel zuverlässig',
+    homing.every((r) => r.hit && r.hadTarget),
+    `zielsuchend ${homing.filter((r) => r.hit).length}/${homing.length} Treffer, ` +
+    `gerade ${straight.filter((r) => r.hit).length}/${straight.length} bei seitlich versetztem Ziel`);
+
+  // Gemessen wird der tatsächliche Trefferschaden – die gerade Rakete trifft
+  // im Versatz-Aufbau nie, deshalb dient ein Treffer aus kurzer Distanz
+  // geradeaus als Vergleichswert.
+  const nose = simulateHoming({ offset: 0, gap: 60, homing: false });
+  const homingDamage = Math.max(...homing.map((r) => r.damage));
+  add('Zielsuchrakete trifft härter als eine gerade Rakete',
+    nose.hit && homingDamage > nose.damage,
+    `${homingDamage} gegen ${nose.damage} Schaden`);
 }
 
 console.log('\nAkzeptanzkriterien');

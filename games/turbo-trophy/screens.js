@@ -2,13 +2,18 @@
 // Reines Markup + Klick-Bindung; alle Entscheidungen laufen über Callbacks.
 
 import {
-  MAX_AMMO, MAX_LEVEL, AMMO_COSTS, QUALIFY_PLACES,
-  repairCost, upgradeCost,
+  MAX_LEVEL, QUALIFY_PLACES,
+  canBuy, repairCost, upgradeCost,
 } from './career.js';
 import { DIFFICULTIES, profileFor } from './ai.js';
+import { ITEMS } from './items.js';
 import { tracks } from './tracks.js';
 
 const money = (n) => `$${n.toLocaleString('de-DE')}`;
+
+// Kaufwünsche laufen als Kennung durch `onBuy`. Ausrüstung trägt dabei diesen
+// Vorsatz vor der Item-ID, damit `main.js` sie ohne eigene Liste erkennt.
+export const ITEM_BUY_PREFIX = 'item:';
 
 /** Segmentierte Auswahl der KI-Schwierigkeit. */
 function difficultyPicker(current) {
@@ -23,6 +28,23 @@ function pips(level) {
   let out = '<span class="pips">';
   for (let i = 0; i < MAX_LEVEL; i++) out += `<span class="pip${i < level ? ' on' : ''}"></span>`;
   return `${out}</span>`;
+}
+
+/** Tastenbelegung der Ausrüstung für den Hilfetext – ohne feste Buchstaben. */
+const itemKeyHint = () =>
+  ITEMS.filter((item) => item.keyName)
+    .map((item) => `${item.keyName} = ${item.name}`)
+    .join(', ');
+
+/** Eine Zeile je Ausrüstungsstück – rein aus `ITEMS` erzeugt. */
+function arsenalRows(career) {
+  return ITEMS.map((item) => shopRow(
+    `buy-${item.id}`,
+    `${item.icon} ${item.name} × ${career.ammo[item.id] ?? 0}`,
+    `${item.hint} (max. ${item.max})`,
+    money(item.cost),
+    !canBuy(career, item.id),
+  )).join('');
 }
 
 function shopRow(id, label, desc, priceLabel, disabled) {
@@ -59,8 +81,8 @@ export function createScreens(overlayEl) {
           <h3>MEISTERSCHAFT</h3>
           <div class="row"><span class="lbl">${tracks.length} Strecken<small>Werde Erster bis Dritter, um weiterzukommen</small></span></div>
           <div class="row"><span class="lbl">Streckenelemente<small>Schanzen, Öllachen, Schranken und eine Brücke über die Kreuzung</small></span></div>
-          <div class="row"><span class="lbl">Preisgeld<small>Investiere zwischen den Rennen in Tuning &amp; Waffen</small></span></div>
-          <div class="row"><span class="lbl">Raketen<small>Nach vorn und nach hinten – Gegner ausschalten!</small></span></div>
+          <div class="row"><span class="lbl">Preisgeld<small>Investiere zwischen den Rennen in Tuning &amp; Arsenal</small></span></div>
+          <div class="row"><span class="lbl">Arsenal<small>${ITEMS.map((i) => i.name).join(' • ')}</small></span></div>
         </div>
         <div class="panel">
           <h3>GEGNERSTÄRKE</h3>
@@ -69,10 +91,10 @@ export function createScreens(overlayEl) {
         <button class="big" id="start-btn">SAISON STARTEN</button>
         <button class="buy" id="editor-btn">&#128736; STRECKENEDITOR</button>
         <p class="hint">
-          📱 Buttons unten – links lenken, rechts GAS &amp; Raketen.<br>
-          GAS kurz antippen = <b>Dauergas</b> (Hände frei für Raketen),
+          📱 Buttons unten – links lenken, rechts GAS &amp; Ausrüstung.<br>
+          GAS kurz antippen = <b>Dauergas</b> (Hände frei für die Ausrüstung),
           erneut tippen oder BREMSE beendet es. Halten geht weiterhin.<br>
-          🖮 Pfeile/WASD fahren, Leertaste = Rakete vor, X = Rakete zurück.
+          🖮 Pfeile/WASD fahren, ${itemKeyHint()}.
         </p>
         <button class="buy" id="mute-btn">${audio.isMuted() ? '🔇 TON AN' : '🔊 TON AUS'}</button>
         <a class="overview-link" href="../../index.html">← Zur Spiele-Übersicht</a>
@@ -112,13 +134,8 @@ export function createScreens(overlayEl) {
           ${shopRow('buy-armor', `Panzerung ${pips(career.armor)}`, 'Weniger Schaden', armor.label, armor.disabled)}
         </div>
         <div class="panel">
-          <h3>WAFFENAUSWAHL</h3>
-          ${shopRow('buy-ammo-front', `&#9650; Front-Rakete × ${career.ammoFront}`,
-            `Feuert nach vorn (max. ${MAX_AMMO})`, money(AMMO_COSTS.front),
-            career.ammoFront >= MAX_AMMO || career.money < AMMO_COSTS.front)}
-          ${shopRow('buy-ammo-rear', `&#9660; Heck-Rakete × ${career.ammoRear}`,
-            `Feuert nach hinten (max. ${MAX_AMMO})`, money(AMMO_COSTS.rear),
-            career.ammoRear >= MAX_AMMO || career.money < AMMO_COSTS.rear)}
+          <h3>ARSENAL</h3>
+          ${arsenalRows(career)}
         </div>
         <div class="panel">
           <h3>GEGNERSTÄRKE</h3>
@@ -141,8 +158,7 @@ export function createScreens(overlayEl) {
       bind('buy-engine', 'engine');
       bind('buy-handling', 'handling');
       bind('buy-armor', 'armor');
-      bind('buy-ammo-front', 'ammoFront');
-      bind('buy-ammo-rear', 'ammoRear');
+      for (const item of ITEMS) bind(`buy-${item.id}`, `${ITEM_BUY_PREFIX}${item.id}`);
       onClick('race-btn', onStart);
     },
 

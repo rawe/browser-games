@@ -5,7 +5,8 @@
 
 import { gapAlong, offsetPoint, posAt, ROAD_WIDTH } from './trackGeometry.js';
 import { elementsAhead, gateDetour, gateState } from './elements.js';
-import { fire } from './weapons.js';
+import { itemFor, MISSILE, TURBO } from './items.js';
+import { useItem } from './weapons.js';
 
 /**
  * Schwierigkeitsprofile. Alle KI-Eigenschaften hängen an diesen Werten –
@@ -372,31 +373,95 @@ export function driveAi(race, car, profile) {
     else if (gap < -900) car.speed *= 1 - 0.002 * prof.rubberband;
   }
 
-  aiWeapons(race, car, prof);
+  aiWeapons(race, car, prof, curve);
+
+  // Ein laufender Turbo will auch ausgefahren werden – sonst gäbe die KI
+  // mitten im Schub vom Gas, weil `want` noch am alten Tempo hängt. Bewusst
+  // als Faktor: die Kurvenbremse bleibt wirksam, sonst führe der Schub
+  // geradewegs in die nächste Bande.
+  if (car.turbo > 0) want *= TURBO.speed;
 
   return { steer, gas: car.speed < want, brake: car.speed > want + 0.7 };
 }
 
-/** Raketeneinsatz: nach vorn auf Vordermänner, nach hinten gegen Verfolger. */
-function aiWeapons(race, car, prof) {
-  if (car.fireCooldown !== 0 || car.finished || race.countdown > 0) return;
+/**
+ * Ausrüstungseinsatz der KI (Issue #27). Alle Items aus `items.js` werden
+ * benutzt, jeweils dann, wenn sie etwas bringen:
+ *
+ * - Front-Rakete   auf einen Vordermann in Schussrichtung
+ * - Heck-Rakete    gegen einen dichten Verfolger
+ * - Zielsuchrakete auf einen Vordermann – sie kurvt, darum reicht ein grober
+ *                  Winkel und eine größere Reichweite
+ * - Turbo          zum Überholen, auf gerader Strecke oder vor einer Schanze
+ * - Öllache        gegen einen dichten Verfolger
+ *
+ * Die Grundwahrscheinlichkeiten stehen als `aiUse` an den Items, der Faktor
+ * der Schwierigkeitsstufe (`prof.weapon`) wirkt darauf.
+ */
+function aiWeapons(race, car, prof, curve) {
+  if (car.finished || race.countdown > 0) return;
+  const chance = (id) => race.rng() < (itemFor(id)?.aiUse ?? 0) * prof.weapon;
+  const has = (id) => (car.ammo?.[id] ?? 0) > 0;
+  const shoot = (id) => {
+    useItem(race, car, id);
+    car.fireCooldown = 140;
+  };
+
+  // Turbo hat keinen gemeinsamen Nachladezähler mit den Waffen – sonst
+  // blockierten sich Schub und Rakete gegenseitig.
+  if (has('turbo') && car.turbo === 0 && curve < 0.18 && car.speed > car.maxSpeed * 0.6) {
+    const ramp = nearestRampAhead(race, car);
+    // Vor einer Schanze lohnt der Schub doppelt: weiter fliegen und beim
+    // Aufsetzen einen Gegner erwischen.
+    if ((ramp !== null && ramp < 200) || car.ai.overtakeTicks > 0) {
+      if (chance('turbo')) useItem(race, car, 'turbo');
+    }
+  }
+
+  if (car.fireCooldown !== 0) return;
+
   for (const other of race.cars) {
     if (other === car || other.respawn > 0) continue;
     const dx = other.x - car.x;
     const dy = other.y - car.y;
     const dist = Math.hypot(dx, dy);
-    if (dist <= 60 || dist >= 300) continue;
     let rel = Math.atan2(dy, dx) - car.angle;
     rel = Math.atan2(Math.sin(rel), Math.cos(rel));
-    if (Math.abs(rel) < 0.22 && car.ammoFront > 0 && race.rng() < 0.02 * prof.weapon) {
-      fire(race, car, false);
-      car.fireCooldown = 140;
+    const ahead = Math.abs(rel) < 0.22;
+    const behind = Math.abs(Math.abs(rel) - Math.PI) < 0.22;
+
+    // Zielsuchend zuerst: sie ist die teure Waffe und soll nicht ungenutzt
+    // liegen bleiben, nur weil eine normale Rakete auch gepasst hätte.
+    if (has('homing') && dist > 70 && dist < MISSILE.homing.range
+        && Math.abs(rel) < 0.7 && other.level === car.level && chance('homing')) {
+      shoot('homing');
       return;
     }
-    if (Math.abs(Math.abs(rel) - Math.PI) < 0.22 && car.ammoRear > 0 && race.rng() < 0.012 * prof.weapon) {
-      fire(race, car, true);
-      car.fireCooldown = 140;
+    if (dist <= 60 || dist >= 300) continue;
+    if (ahead && has('front') && chance('front')) {
+      shoot('front');
+      return;
+    }
+    if (behind && has('rear') && chance('rear')) {
+      shoot('rear');
+      return;
+    }
+    // Öl lohnt nur gegen jemanden, der wirklich dicht dranhängt.
+    if (behind && dist < 150 && has('oil') && chance('oil')) {
+      shoot('oil');
       return;
     }
   }
+}
+
+/** Abstand zur nächsten Sprungschanze vor dem Auto – `null`, wenn keine da ist. */
+function nearestRampAhead(race, car) {
+  const elements = race.track.elements;
+  if (!elements?.length) return null;
+  let best = null;
+  for (const { el, gap } of elementsAhead(race.track, elements, car.s, 260)) {
+    if (el.type !== 'ramp') continue;
+    if (best === null || gap < best) best = gap;
+  }
+  return best;
 }
