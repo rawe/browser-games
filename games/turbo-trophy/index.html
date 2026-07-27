@@ -16,6 +16,7 @@
       <div class="hud-row">
         <span class="tag">POS <b id="hud-pos">–</b></span>
         <span class="tag">RUNDE <b id="hud-lap">–</b></span>
+        <span class="tag gas-tag hidden" id="hud-gas">&#9654;&#9654; DAUERGAS</span>
       </div>
       <div class="hud-row">
         <div id="hud-health"><div id="hud-health-fill"></div></div>
@@ -41,7 +42,12 @@
             &#9660; RAKETE<small id="ammo-rear">0</small>
           </button>
         </div>
-        <button class="tc-btn gas" id="btn-gas" aria-label="Gas geben">GAS</button>
+        <div class="tc-row">
+          <button class="tc-btn brake" id="btn-brake" aria-label="Bremsen und Dauergas beenden">BREMSE</button>
+          <button class="tc-btn gas" id="btn-gas" aria-label="Gas geben – kurz tippen für Dauergas">
+            GAS<small id="gas-state">TIPPEN = DAUERGAS</small>
+          </button>
+        </div>
       </div>
     </div>
 

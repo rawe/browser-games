@@ -16,6 +16,7 @@ export function createHud() {
   const healthEl = el('hud-health-fill');
   const messageEl = el('message');
   const submessageEl = el('submessage');
+  const gasEl = el('hud-gas');
   const ammoEls = { front: el('ammo-front'), rear: el('ammo-rear') };
 
   let flashText = '';
@@ -43,6 +44,12 @@ export function createHud() {
     clear() {
       setMessage('', '');
       flashUntil = 0;
+      gasEl.classList.add('hidden');
+    },
+
+    /** Dauergas-Anzeige – wird von der Eingabe umgeschaltet, nicht pro Frame. */
+    setThrottleLatched(latched) {
+      gasEl.classList.toggle('hidden', !latched);
     },
 
     update(race) {
