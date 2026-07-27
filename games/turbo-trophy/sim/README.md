@@ -10,6 +10,15 @@ npm run sim:turbo -- --check      # Akzeptanzkriterien als PASS/FAIL
 npm run sim:turbo -- --seeds=12 --difficulty=schwer --stage=2
 ```
 
+Daneben gibt es schnelle Zustandsprüfungen der übrigen DOM-freien Logik:
+
+```bash
+npm run check:turbo               # z. B. der Dauergas-Schalter aus throttle.js
+```
+
+`checks.js` ist bewusst klein gehalten: reine Zustandsmaschinen lassen sich
+damit exakt prüfen, ohne ein ganzes Rennen simulieren zu müssen.
+
 ## Wie es funktioniert
 
 `headless.js` benutzt dieselben Module wie das Spiel (`race.js`, `ai.js`,

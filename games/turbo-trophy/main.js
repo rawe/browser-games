@@ -28,6 +28,7 @@ const input = createInput({
   },
   onActivate: () => audio.unlock(),
   isRacing: () => mode === 'race',
+  onLatch: (latched) => hud.setThrottleLatched(latched && mode === 'race'),
 });
 
 window.addEventListener('resize', () => renderer.resize());

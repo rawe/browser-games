@@ -87,6 +87,31 @@ body {
   color: var(--amiga);
 }
 
+/* Dauergas-Anzeige: im Blickfeld, damit der Gaszustand ohne Blick auf den
+   Button erkennbar bleibt. */
+.tag.gas-tag {
+  color: var(--ink);
+  background: var(--ok);
+  border-color: var(--ok);
+  animation: gas-pulse 1.1s ease-in-out infinite;
+}
+
+.tag.hidden {
+  display: none;
+}
+
+@keyframes gas-pulse {
+  50% {
+    box-shadow: 0 0 0 4px rgba(91, 224, 122, 0.25);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tag.gas-tag {
+    animation: none;
+  }
+}
+
 #hud-health {
   width: 150px;
   height: 14px;
@@ -201,12 +226,47 @@ body {
   font-size: 12px;
 }
 
+.tc-btn.brake {
+  width: 62px;
+  height: 80px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--cy);
+}
+
 .tc-btn.gas {
-  width: 152px;
+  width: 118px;
   height: 80px;
   font-size: 22px;
   letter-spacing: 3px;
   color: var(--ok);
+  gap: 4px;
+}
+
+.tc-btn.gas small {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  font-weight: normal;
+}
+
+/* Dauergas: durchgehend gefüllt statt nur umrandet – der Unterschied zum
+   kurzen Antippen muss auf einen Blick sichtbar sein. */
+.tc-btn.gas.latched {
+  background: var(--ok);
+  border-color: #eafff0;
+  color: var(--ink);
+  box-shadow: 0 4px 0 #2c7a42, 0 0 18px rgba(91, 224, 122, 0.55);
+  transform: none;
+}
+
+.tc-btn.gas.latched small {
+  color: rgba(12, 16, 32, 0.75);
+}
+
+.tc-btn.gas.latched.on {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #2c7a42, 0 0 18px rgba(91, 224, 122, 0.55);
 }
 
 @media (hover: hover) and (pointer: fine) {

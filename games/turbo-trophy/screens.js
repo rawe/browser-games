@@ -67,6 +67,8 @@ export function createScreens(overlayEl) {
         <button class="big" id="start-btn">SAISON STARTEN</button>
         <p class="hint">
           📱 Buttons unten – links lenken, rechts GAS &amp; Raketen.<br>
+          GAS kurz antippen = <b>Dauergas</b> (Hände frei für Raketen),
+          erneut tippen oder BREMSE beendet es. Halten geht weiterhin.<br>
           🖮 Pfeile/WASD fahren, Leertaste = Rakete vor, X = Rakete zurück.
         </p>
         <button class="buy" id="mute-btn">${audio.isMuted() ? '🔇 TON AN' : '🔊 TON AUS'}</button>
