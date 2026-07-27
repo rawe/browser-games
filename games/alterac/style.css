@@ -1518,3 +1518,328 @@ html {
     opacity: 0;
   }
 }
+
+/* ------------------------------------------------------- Ergebnisbildschirm */
+/* Der Bericht trägt mehr als die drei Zeilen, für die der Ergebniskasten
+   gebaut war. Deshalb wird er zum Blatt – nach demselben Muster wie die
+   Plan-Bibliothek: Kopf und Fuß behalten ihre Höhe, nur die Mitte scrollt.
+   Auf einem Telefon bleibt „Revanche" damit immer sichtbar, egal wie weit der
+   Spieler im Bericht gelesen hat. */
+#overlay-card.result-card {
+  max-width: 27rem;
+  max-height: min(90dvh, 46rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem calc(0.9rem + env(safe-area-inset-bottom));
+  text-align: left;
+}
+
+/* Alles außer dem Bericht behält seine Höhe – nur er gibt nach. */
+.result-card > *:not(.result-body) {
+  flex: 0 0 auto;
+}
+
+.result-head {
+  text-align: center;
+  display: grid;
+  gap: 0.15rem;
+  justify-items: center;
+}
+
+/* Im Blatt ist das Medaillon kleiner als im früheren Kasten: Dort war es das
+   einzige Bild, hier steht der Bericht darunter und will den Platz. */
+.result-card .overlay-boss {
+  --pic: 3.6rem;
+}
+
+.result-card h2 {
+  margin: 0.25rem 0 0;
+  font-size: 1.35rem;
+}
+
+.result-reason {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #8a94a8;
+}
+
+/* Auf kurzen Bildschirmen nimmt der Kopf dem Bericht sonst die halbe Höhe.
+   Der Ausgang bleibt lesbar, das Medaillon wird zum Abzeichen. */
+@media (max-height: 700px) {
+  .result-card .overlay-boss {
+    --pic: 2.6rem;
+  }
+
+  .result-card h2 {
+    font-size: 1.15rem;
+  }
+
+  .result-card .overlay-emoji {
+    font-size: 2rem;
+  }
+}
+
+.result-clock {
+  color: #f0d489;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Einziger Scrollbereich des Blatts. */
+.result-body {
+  flex: 1 1 auto;
+  min-height: 4rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  gap: 0.7rem;
+  align-content: start;
+  padding-right: 0.15rem;
+}
+
+.result-body .boss-row.fallen {
+  opacity: 0.55;
+}
+
+/* Bilanz: Gegenüberstellung, nicht Kachelraster. „3 Verluste" sagt wenig,
+   „3 gegen 9" alles – die eigene Seite steht links. */
+.tally {
+  border: 1px solid #2a3348;
+  border-radius: 0.6rem;
+  background: rgba(26, 32, 48, 0.6);
+  padding: 0.45rem 0.55rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.tally-head,
+.tally-grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.15rem 0.5rem;
+}
+
+.tally-head {
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.tally-head .tally-side:first-child {
+  text-align: right;
+}
+
+.tally-head .tally-side:last-child {
+  text-align: left;
+}
+
+.tally-val {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: #e6ebf4;
+}
+
+/* Die Zeilen laufen als Dreiergruppen durch das Raster: Wert, Bezeichnung,
+   Wert. Beide Werte stehen an der Bezeichnung, nicht am Rand – so sind die
+   Zahlen beider Seiten nah beieinander und damit vergleichbar. */
+.tally-grid > span:nth-child(3n + 1) {
+  text-align: right;
+}
+
+.tally-grid > span:nth-child(3n) {
+  text-align: left;
+}
+
+.tally-label {
+  font-size: 0.72rem;
+  color: #8a94a8;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------- Truppenbericht */
+.troops,
+.troops-enemy {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.troops h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #f0d489;
+  font-family: Georgia, 'Times New Roman', serif;
+  letter-spacing: 0.02em;
+}
+
+.troops-enemy > summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: #8a94a8;
+  padding: 0.2rem 0;
+}
+
+/* Eine Einheit: Kennzeichen, Porträt, Name/Zustand, Schaden – darunter der
+   Zeitbalken und die Kleinzahlen. Bewusst kein Tabellenlayout: Eine Tabelle
+   erzwingt auf 360 px Breite waagerechtes Scrollen. */
+.troop {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.2rem 0.45rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #2a3348;
+  border-left: 2px solid var(--fac, #5b9cff);
+  border-radius: 0.5rem;
+  background: #1c2334;
+}
+
+.troop .chip-pic {
+  --pic: 1.5rem;
+}
+
+.troop-name {
+  min-width: 0;
+  font-size: 0.78rem;
+  color: #cfd7e6;
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  overflow: hidden;
+}
+
+.troop-state {
+  font-style: normal;
+  font-size: 0.68rem;
+  color: #8a94a8;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.troop-state.down,
+.troop-state.gone {
+  color: #ff8f84;
+}
+
+.troop-dmg {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #f0d489;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Zeitbudget: der Weg einer Einheit durch die Schlacht in einem Balken. Was
+   auf 1 fehlt, ist Zeit vor ihrem Erscheinen – nur beim mächtigen
+   Verbündeten von null verschieden, und genau dort soll die Lücke zu sehen
+   sein. */
+.troop-time {
+  grid-column: 1 / -1;
+  display: flex;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: #12161f;
+  overflow: hidden;
+}
+
+.troop-time > i {
+  display: block;
+  height: 100%;
+}
+
+.tb-march {
+  background: #3f4d6b;
+}
+
+.tb-fight {
+  background: #f0d489;
+}
+
+.tb-hold {
+  background: #6ecf73;
+}
+
+.tb-down {
+  background: #7a2f2f;
+}
+
+/* „Noch nicht auf dem Feld" – schraffiert statt gefärbt, damit die Strecke
+   sichtbar nicht zur Bilanz gehört. Nur der mächtige Verbündete hat sie. */
+.tb-absent {
+  background: repeating-linear-gradient(
+    -45deg,
+    #1c2334,
+    #1c2334 3px,
+    #232a3a 3px,
+    #232a3a 6px
+  );
+}
+
+.troop-meta {
+  grid-column: 1 / -1;
+  font-size: 0.68rem;
+  color: #8a94a8;
+  font-variant-numeric: tabular-nums;
+}
+
+.troop-warn {
+  color: #ffb27a;
+  font-weight: 400;
+}
+
+.troop.idle {
+  border-left-color: #ffb27a;
+}
+
+.troop-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.6rem;
+  font-size: 0.66rem;
+  color: #8a94a8;
+}
+
+.troop-legend span {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.troop-legend i {
+  width: 0.6rem;
+  height: 0.42rem;
+  border-radius: 2px;
+}
+
+/* Sitzt am rechten Rand über der großen Zahl der Truppenzeilen und beschriftet
+   sie – einmal für die ganze Liste. */
+.troop-legend-dmg {
+  margin-left: auto;
+  color: #f0d489;
+}
+
+/* ------------------------------------------------------------------- Fuß */
+.result-foot {
+  display: grid;
+  gap: 0.45rem;
+  border-top: 1px solid #2a3348;
+  padding-top: 0.6rem;
+}
+
+.result-save {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.save-entry {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.save-side {
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.result-foot .overlay-buttons {
+  margin-top: 0;
+}

@@ -17,6 +17,8 @@ import { createPlanner } from './planner.js';
 import { aiPlan, AI_LEVELS, DEFAULT_AI_LEVEL } from './ai.js';
 import { bossCell } from './sprites.js';
 import { lockZoomGestures } from './gestures.js';
+import { showResult } from './result.js';
+import { fmtTime } from './report.js';
 
 // Pinch-/Doppeltipp-Zoom auf Mobilgeräten (v. a. iOS) sperren – gilt für alle
 // Bildschirme (Setup, Planung, Simulation). Scrollen bleibt erhalten.
@@ -38,6 +40,11 @@ let mode = 'cpu';
 let plans = { blue: null, red: null };
 let planner = null;
 let sim = null;
+// Welche Seiten dieser Partie ein Mensch geplant hat. Daraus entscheidet der
+// Ergebnisbildschirm zweierlei: ob er den Ausgang in der zweiten Person sagen
+// darf („Du siegst") und wessen Aufmarsch sich sichern lässt. Beim Testeinstieg
+// (?test=sim, beide Seiten Computer) bleibt die Liste leer.
+let humanFactions = ['blue'];
 let speed = 1;
 let paused = false;
 let resultShown = false;
@@ -250,6 +257,7 @@ document.getElementById('setup-form').addEventListener('submit', (ev) => {
   }
   view.config = config;
   mode = modeSelect.value;
+  humanFactions = mode === 'hotseat' ? ['blue', 'red'] : ['blue'];
   plans = { blue: null, red: null };
   startPlanning('blue');
 });
@@ -588,11 +596,6 @@ function buildSimPanel() {
   });
 }
 
-function fmtTime(t) {
-  const s = Math.floor(t);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
 function updateSimPanel() {
   const clock = document.getElementById('sim-clock');
   if (clock) clock.textContent = fmtTime(sim.time);
@@ -609,46 +612,28 @@ function updateSimPanel() {
   }
 }
 
-function showResult() {
+// Der Ergebnisbildschirm ist ein eigenes Modul (`result.js`) mit eigener
+// Auswertung (`report.js`) – hier bleibt nur der Anschluss an den
+// Bildschirm-Ablauf. Die Aufmärsche wandern mit, damit sich der eigene nach der
+// Schlacht sichern und teilen lässt.
+function presentResult() {
   resultShown = true;
-  const r = sim.result;
-  let title;
-  // Beim Sieg blickt der eigene Boss aus dem Overlay – derselbe Kopf, der auf
-  // der Karte die Festung bewacht hat. Fehlt der Bossatlas, bleibt es beim
-  // Pokal. Ein Unentschieden hat keinen Sieger und damit kein Gesicht.
-  let head = '<div class="overlay-emoji">🏆</div>';
-  if (r.winner === 'draw') {
-    head = '<div class="overlay-emoji">🤝</div>';
-    title = 'Unentschieden';
-  } else {
-    const fac = FACTIONS[r.winner];
-    const cell = bossCell(r.winner);
-    if (cell) {
-      head = `<div class="boss-portrait overlay-boss" style="--col:${cell.col};--fac:${fac.color};--fac-dark:${fac.dark}"></div>`;
-    }
-    title = `${fac.name} siegt!`;
-  }
-  overlayCard.innerHTML = `
-    ${head}
-    <h2 ${r.winner !== 'draw' ? `style="color:${FACTIONS[r.winner].color}"` : ''}>${title}</h2>
-    <p>${r.reason}</p>
-    <div class="overlay-buttons">
-      <button class="btn primary" id="btn-rematch">Revanche</button>
-      <button class="btn ghost" id="btn-new">Neue Einstellungen</button>
-    </div>
-  `;
-  overlayEl.hidden = false;
-  document.getElementById('btn-rematch').addEventListener('click', () => {
-    overlayEl.hidden = true;
-    plans = { blue: null, red: null };
-    startPlanning('blue');
-  });
-  document.getElementById('btn-new').addEventListener('click', () => {
-    overlayEl.hidden = true;
-    view.sim = null;
-    sim = null;
-    showScreen('setup');
-    window.scrollTo({ top: 0 });
+  showResult({
+    sim,
+    map,
+    config,
+    plans,
+    humanFactions,
+    onRematch: () => {
+      plans = { blue: null, red: null };
+      startPlanning('blue');
+    },
+    onNewSettings: () => {
+      view.sim = null;
+      sim = null;
+      showScreen('setup');
+      window.scrollTo({ top: 0 });
+    },
   });
 }
 
@@ -660,7 +645,7 @@ function frame(now) {
   if (view.phase === 'sim' && sim) {
     if (!paused && !sim.result) sim.advance(dt * speed);
     updateSimPanel();
-    if (sim.result && !resultShown) showResult();
+    if (sim.result && !resultShown) presentResult();
   }
   if (view.phase !== 'setup') renderer.draw(view, dt);
   requestAnimationFrame(frame);
@@ -705,7 +690,12 @@ document.addEventListener('visibilitychange', () => {
 // bfcache) – dabei feuert `visibilitychange` nicht zwingend.
 window.addEventListener('pageshow', repaintAfterRestore);
 
-// Testeinstieg für Entwicklung: ?test=sim startet direkt eine CPU-Schlacht.
+// Testeinstiege für die Entwicklung:
+//   ?test=sim     startet direkt eine CPU-Schlacht
+//   ?test=plan    springt in die Planung
+//   ?test=result  rechnet eine ganze Schlacht in einem Zug durch und zeigt nur
+//                 den Ergebnisbildschirm – sonst wartet man bei jeder Änderung
+//                 daran erst ein bis vier Minuten Schlacht ab.
 // Mit `&ai=<stufe>` bzw. `&ai=<blau>,<rot>` lassen sich die KI-Stufen der beiden
 // Seiten gezielt gegeneinander antreten lassen (z. B. ?test=sim&ai=hard,easy).
 const params = new URLSearchParams(location.search);
@@ -716,12 +706,26 @@ const params = new URLSearchParams(location.search);
 pendingPlanCode = params.get('plan');
 if (params.get('test') === 'sim') {
   mode = 'cpu';
+  humanFactions = []; // beide Seiten spielt der Computer
   const [blueLevel, redLevel = blueLevel] = (params.get('ai') ?? DEFAULT_AI_LEVEL).split(',');
   plans.blue = aiPlan(config, map, 'blue', () => 0.3, blueLevel);
   plans.red = aiPlan(config, map, 'red', () => 0.8, redLevel);
   startSim();
 } else if (params.get('test') === 'plan') {
   startPlanning('blue');
+} else if (params.get('test') === 'result') {
+  mode = 'cpu';
+  // `&players=2` zeigt die Hotseat-Fassung des Berichts: unparteiische
+  // Formulierung und je Seite eine Sicherungszeile.
+  humanFactions = params.get('players') === '2' ? ['blue', 'red'] : ['blue'];
+  const [blueLevel, redLevel = blueLevel] = (params.get('ai') ?? DEFAULT_AI_LEVEL).split(',');
+  plans.blue = aiPlan(config, map, 'blue', () => 0.3, blueLevel);
+  plans.red = aiPlan(config, map, 'red', () => 0.8, redLevel);
+  startSim();
+  // In großen Schritten bis zum Ausgang – die Simulation ist ereignisbasiert,
+  // die Schrittweite ändert am Ergebnis nichts.
+  while (!sim.result && sim.time < config.maxTime) sim.advance(10);
+  presentResult();
 }
 
 requestAnimationFrame(frame);
