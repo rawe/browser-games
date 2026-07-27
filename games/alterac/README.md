@@ -21,7 +21,7 @@ Eingriffe ab. Wer den gegnerischen Endboss fällt, gewinnt.
 | `sprites.js` | Porträt- und Gebäude-Atlanten aus `assets/` laden und Zellen ausgeben |
 | `terrain.js` | Landschafts-Hintergrund: gemaltes Talbild `assets/valley.webp` plus Wege, prozedurale Fassung als Rückfall |
 | `effects.js` | Partikeleffekte (Schadenszahlen, Funken, Geister, Respawn-Säulen, Boss-Sturz) |
-| `main.js`    | Bildschirm-Ablauf und Render-Schleife |
+| `main.js`    | Bildschirm-Ablauf, Render-Schleife und das Panel der Simulation (Boss-HUD mit Schild und Vorrat, Ticker) |
 | `config.js`  | Einheitentypen sowie alle Kampf- und Zeitwerte |
 
 ## Wegpunkt-Netzwerk
@@ -341,12 +341,15 @@ Fassung vollständig – inklusive der Laufzeit-Fraktionstönung des Turmsteins
 Die beiden **Bosse** haben ihren eigenen Atlas `assets/units/bosses.webp`: zwei
 Zellen à 256 px, Spalte 0 Sturmlanze, Spalte 1 Frostwolf. Er kommt ohne JSON
 aus – mit einer Zelle je Fraktion ist die Aufteilung abschließend, es gibt keine
-dritte Seite, um die er wachsen könnte. Die doppelte Zellgröße hat einen Grund:
-Das Boss-Medaillon steht auf der Karte größer als ein Trupp-Token
-(`drawBossMedallion`, rechts neben der Festung, mit goldenem Reif wie der
-Verbündete) und erscheint zusätzlich groß im Sieges-Overlay (`.overlay-boss`).
-Fällt der Boss, verblasst sein Medaillon, statt zu verschwinden. Fehlt der
-Atlas, entfällt es ersatzlos.
+dritte Seite, um die er wachsen könnte.
+
+Auf dem Canvas erscheinen die Porträts **nicht**. Beide Abnehmer sind HTML und
+holen die Grafik über das Stylesheet aus derselben Zelle: das **Boss-HUD** der
+Simulation (`.boss-pic`) und das Sieges-Overlay (`.overlay-boss`). Den
+gemeinsamen Zuschnitt hält `.boss-portrait` – er entspricht dem der
+Canvas-Tokens (`PORTRAIT_ZOOM`/`PORTRAIT_SHIFT`), damit Karte, HUD und Overlay
+dieselben Gesichter gleich beschnitten zeigen. Die doppelte Zellgröße bleibt
+nötig, weil das Overlay das Porträt groß zeigt.
 
 Jede angeworbene Einheit trägt eine fortlaufende **römische Ziffer** (in der
 Reihenfolge des Anwerbens je Fraktion). Sie erscheint als Kennzeichen in der
@@ -560,6 +563,64 @@ Boss-Werte – im aufklappbaren **Erweitert-Menü** als Zahlenfelder feinjustier
 die Fraktion eindeutig (in der Fraktionsfarbe getönter Turmkörper samt Banner
 und Basisring), die aktuellen Hitpoints (Balken), den laufenden Turmkampf
 (Kampfring) und den zerstörten Zustand (dunkle, rissige, rauchende Ruine).
+
+## Boss-HUD: beide Fürsten immer im Blick
+
+Während der Schlacht steht im Panel **eine Zeile je Fraktion** – rot oben, blau
+unten wie die Festungen auf der Karte. Sie trägt alles, was zu dieser Seite zu
+wissen ist: Porträt und Name des Fürsten, seine Lebenspunkte und darunter zwei
+Messwert-Zeilen für Schild und Vorrat. Gebaut und je Bild aktualisiert wird das
+in `main.js` (`bossBoardMarkup`/`updateBossBoard`).
+
+Drei Entscheidungen dahinter:
+
+- **Es sitzt im Panel, nicht über der Karte.** Auf einem Telefon zeigt der
+  Kartenausschnitt nie beide Festungen gleichzeitig; wer einen Turmkampf in der
+  Mitte verfolgt, verlöre den Stand der Schlacht genau dann aus dem Blick, wenn
+  er zählt. Im Panel verdeckt der Block zu keinem Zeitpunkt Gelände, und das
+  Karten-Scrollen berührt ihn nicht.
+- **Eine Zeile je Fraktion, nicht ein Kasten je Thema.** Der Vorrat stand vorher
+  als eigener Block darunter – zweimal dieselben zwei Fraktionen untereinander,
+  jede mit eigener Namenszeile und eigener Lagerzustandszeile. Zusammengelegt
+  kostet der Vorrat nur noch eine Messwert-Zeile, und die Karte bekommt den
+  gewonnenen Platz.
+- **Die Porträts sind die früheren Medaillons.** Sie standen rechts neben der
+  Festung, also nur dort, wo der Boss ohnehin steht. Der Renderer zeichnet sie
+  nicht mehr; auf der Karte tragen den Boss weiterhin Festung, Banner,
+  Lebensbalken und Schutzkuppel. Fehlt der Bossatlas, entfällt im HUD allein
+  das Bild – die Zeile trägt ihre Werte auch ohne Gesicht.
+
+**Jede Messwert-Zeile hängt an ihrem Teilsystem.** Die Schildzeile erscheint nur,
+wenn sie etwas bedeutet: ohne Türme (`towersPerFaction: 0`) oder bei
+`bossTowerShield: 0` – Türme, die nichts blocken – entfällt sie. Die
+Vorratszeile erscheint nur, wenn die Partie Lager hat (`supplyEnabled`). Sind
+beide aus, bleibt die Fraktionszeile bei Porträt, Name und Lebensbalken; das
+Zeilen-Grid kommt dann ohne den Messwert-Block aus
+(`.boss-row:not(:has(.boss-meters))`).
+
+**Der Schildbalken speist sich aus den Turm-Lebenspunkten, nicht aus
+`sim.bossShield`.** Letzteres ist ein Schalter: voller Schutz, solange irgendein
+eigener Turm steht – null, sobald der letzte fällt. Ein Balken daraus stünde bis
+zuletzt voll und spränge dann. Die Summe der Rest-LP aller eigenen Türme sinkt
+dagegen stetig, während am Turm gekämpft wird, und erreicht 0 in genau dem
+Moment, in dem der Schild bricht. Unter einem Viertel Restkraft pulsiert der
+Balken deutlicher (`SHIELD_WEAK`), bei `prefers-reduced-motion` nicht.
+
+**Die Vorratszeile trägt Zustand und Fortschritt zugleich.** Der Balken zeigt den
+Stand zur Schwelle, Symbol und Farbe den Zustand des eigenen Lagers: `⬡` inaktiv
+(gedämpft), `⬢` liefert, `⚠` blockiert (orange – die einzige Warnung, die
+auffallen soll). Ist der mächtige Verbündete erschienen, wechselt die Zeile auf
+Gold und nennt statt der Zahlen seinen Namen. Der Lagername steht nicht mehr
+dabei: Jede Fraktion hat genau ein fest zugeordnetes Lager, der Name ist also
+eine Konstante und kostete nur Breite.
+
+Der **Ticker** darunter ist der Puffer des Panels – das einzige Element, das
+nachgibt. Er belegt genau so viel, wie seine höchstens drei Meldungen brauchen
+(nach oben auf 3,6 rem gedeckelt, ohne Vorratsreserve, die zu Beginn als leeres
+Feld über der ersten Meldung stünde). Reicht die Bildschirmhöhe nicht – kleines
+Gerät, beide Messwerte aktiv –, schrumpft er unter seinen Inhalt und hängt dabei
+an der Unterkante: Die neueste Meldung bleibt stehen, oben fallen die ohnehin
+ausgeblichenen ältesten weg.
 
 ## Begegnungskämpfe auf Wegstücken
 

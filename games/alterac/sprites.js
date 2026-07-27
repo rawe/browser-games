@@ -5,9 +5,13 @@
 //
 // Die Grafiken sind reine Kosmetik. Solange sie nicht geladen sind – oder gar
 // nicht laden – zeichnet der Renderer sein bisheriges Kreis-Token mit
-// Kurzzeichen und die Festung ohne Medaillon. Das Spiel darf nie an einer
-// Grafik hängen, deshalb gibt es hier kein `await` und keinen Fehlerpfad, der
-// nach außen dringt.
+// Kurzzeichen. Das Spiel darf nie an einer Grafik hängen, deshalb gibt es hier
+// kein `await` und keinen Fehlerpfad, der nach außen dringt.
+//
+// Der Bossatlas wird hier nur noch *verortet*, nicht geladen: Seine beiden
+// Abnehmer – das Boss-HUD der Simulation und das Ergebnis-Overlay – sind HTML
+// und holen das Bild über das Stylesheet. Auf dem Canvas erscheint kein Boss-
+// Porträt mehr.
 
 import atlas from './assets/units/units.json';
 import buildingAtlas from './assets/buildings.json';
@@ -32,7 +36,6 @@ function loadAtlas(url) {
 // Fall, den es seit Jahren nicht mehr gibt. Vom Bossatlas gibt es aus demselben
 // Grund von vornherein nur die WebP.
 const units = loadAtlas(new URL('./assets/units/units.webp', import.meta.url).href);
-const bosses = loadAtlas(new URL('./assets/units/bosses.webp', import.meta.url).href);
 const buildings = loadAtlas(new URL('./assets/buildings.webp', import.meta.url).href);
 
 // Die Zellenliste des Einheitenatlas kommt aus `units.json` (vom Bildpaket
@@ -43,10 +46,8 @@ const buildings = loadAtlas(new URL('./assets/buildings.webp', import.meta.url).
 //
 // Der Bossatlas kommt ohne JSON aus. Seine Aufteilung ist mit einer Zelle je
 // Fraktion abschließend – es gibt keine dritte Seite, um die er wachsen könnte.
-// Die doppelte Zellgröße hat einen Grund: Das Boss-Medaillon steht auf der
-// Karte größer als ein Trupp-Token und erscheint zusätzlich groß im
-// Ergebnis-Overlay.
-const BOSS_CELL = 256;
+// Die doppelte Zellgröße (256 px) hat einen Grund: Der Boss erscheint groß im
+// Ergebnis-Overlay; im Boss-HUD wird dieselbe Zelle klein ausgeschnitten.
 const BOSS_COL = { blue: 0, red: 1 };
 
 // Zeichenfertige Quellangabe für eine Einheit oder null, wenn es für sie kein
@@ -58,16 +59,9 @@ export function unitSprite(faction, typeKey) {
   return { image: units.image, sx: f.x, sy: f.y, sw: f.w ?? atlas.cell, sh: f.h ?? atlas.cell };
 }
 
-// Dasselbe für den Boss einer Fraktion.
-export function bossSprite(faction) {
-  const col = BOSS_COL[faction];
-  if (!bosses.image || col === undefined) return null;
-  return { image: bosses.image, sx: col * BOSS_CELL, sy: 0, sw: BOSS_CELL, sh: BOSS_CELL };
-}
-
 // Zellenposition als Spalte/Zeile – für die HTML-Seite, die dieselben Grafiken
-// als CSS-Hintergrund verwendet (Aufstellungsliste im Planungspanel,
-// Ergebnis-Overlay). Anders als `unitSprite`/`bossSprite` hängt das nicht am
+// als CSS-Hintergrund verwendet (Aufstellungsliste im Planungspanel, Boss-HUD
+// der Simulation, Ergebnis-Overlay). Anders als `unitSprite` hängt das nicht am
 // geladenen Bild: Die Koordinaten stehen fest, das Nachladen erledigt der
 // Browser mit dem Stylesheet.
 export function spriteCell(faction, typeKey) {

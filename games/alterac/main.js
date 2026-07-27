@@ -332,97 +332,231 @@ function startSim() {
   });
 }
 
-// ------------------------------------------------------------- Vorratsanzeige
-// Je Fraktion Stand, Schwelle und ein schmaler Balken, dazu der Zustand des
-// eigenen Lagers. Jede Fraktion hat genau ein fest zugeordnetes Lager – der
-// Besitz wechselt nie, der Gegner kann es nur blockieren. Die UI wertet nichts
-// aus, sie zeigt nur `sim.supplyState`.
+// ------------------------------------------------------------------ Boss-HUD
+// Beide Fürsten bleiben die ganze Schlacht über sichtbar – das ist der Kern:
+// Der Kartenausschnitt zeigt auf einem Telefon nie beide Festungen gleichzeitig,
+// und wer gerade einen Turmkampf in der Mitte verfolgt, verlöre den Stand der
+// Schlacht sonst genau dann aus dem Blick, wenn er zählt.
+//
+// Deshalb sitzt das HUD im Panel und nicht über der Karte: Dort verdeckt es zu
+// keinem Zeitpunkt Gelände, und das Karten-Scrollen berührt es nicht.
+//
+// Die Porträts sind dieselben, die vorher als Medaillon neben der Festung
+// standen. Dort waren sie nur zu sehen, wo der Boss ohnehin steht – der
+// Renderer zeichnet sie darum nicht mehr, die Grafik kommt hier als
+// CSS-Hintergrund aus demselben Atlas wie im Ergebnis-Overlay.
+//
+// Eine Zeile trägt alles, was zu einer Fraktion zu wissen ist: Lebenspunkte des
+// Fürsten, sein Schild und ihr Vorrat samt mächtigem Verbündeten. Der Vorrat
+// stand vorher als eigener Block darunter – zwei Kästen mit denselben zwei
+// Fraktionen untereinander, jeder mit eigener Überschriftszeile. Zusammengelegt
+// kostet er nur noch eine Messwert-Zeile.
+//
+// Beide Messwert-Zeilen hängen an ihrem Teilsystem: Ohne Türme gibt es keine
+// Schildzeile, ohne Vorratslager keine Vorratszeile. Sind beide aus, bleibt die
+// Fraktionszeile bei Porträt, Name und Lebensbalken.
 
-// Die drei Zustände eines Lagers als kurzer Text. Eine Blockade zählt erst im
-// Betrieb: Ein noch nicht in Betrieb genommenes Lager bleibt „inaktiv", ganz
-// gleich wer davorsteht.
-const SUPPLY_CAMP_STATES = {
-  idle: { icon: '⬡', text: 'inaktiv' },
-  running: { icon: '⬢', text: 'liefert' },
-  blocked: { icon: '⚠', text: 'blockiert' },
-};
+// Anteil 0–1, zu dem der Schutzschild einer Fraktion noch trägt.
+//
+// `sim.bossShield` taugt dafür nicht: Es ist ein Schalter (voller Schutz,
+// solange irgendein eigener Turm steht – null, sobald der letzte fällt) und
+// ergäbe einen Balken, der bis zuletzt voll steht und dann springt. Der Schild
+// lebt aber von den Lebenspunkten der Türme, also speist ihn genau die: Der
+// Balken sinkt, während am Turm gekämpft wird, und erreicht 0 in dem Moment,
+// in dem der Schild tatsächlich bricht.
+function shieldStrength(faction) {
+  let hp = 0;
+  let maxHp = 0;
+  for (const tw of Object.values(sim.towers)) {
+    if (tw.faction !== faction) continue;
+    hp += tw.hp;
+    maxHp += tw.maxHp;
+  }
+  return maxHp > 0 ? hp / maxHp : 0;
+}
+
+const standingTowers = (faction) =>
+  Object.values(sim.towers).filter((tw) => tw.faction === faction && tw.alive).length;
+
+// Der Schildbalken erscheint nur, wenn er auch etwas bedeutet: Ohne Türme gibt
+// es keinen Schild, und ein auf 0 gestellter `bossTowerShield` lässt die Türme
+// zwar stehen, blockt aber nichts – ein Balken dafür wäre eine Lüge.
+const shieldRelevant = () =>
+  (config.towersPerFaction ?? 0) > 0 && (config.bossTowerShield ?? 0) > 0;
+
+// Das fest zugeordnete Lager einer Fraktion aus dem Simulationszustand ablesen.
+// Jede Fraktion hat genau eines, der Besitz wechselt nie – der Gegner kann es
+// nur blockieren.
+const ownCampOf = (st, faction) =>
+  (st?.camps ?? []).find((id) => st.owner?.[id] === faction) ?? null;
+
+// Die Vorratszeile erscheint nur, wenn die Partie überhaupt Lager hat. Ist das
+// System im Setup abgeschaltet, bleibt `camps` leer und die Zeile entfällt –
+// dieselbe Regel wie beim Schild, nur für das andere Teilsystem.
+const supplyRelevant = () => (sim.supplyState?.camps ?? []).length > 0;
+
+// Reihenfolge rot über blau – wie auf der Karte, wo der Frostwolf im Norden
+// und die Sturmlanze im Süden steht.
+const BOSS_ORDER = ['red', 'blue'];
+
+function bossBoardMarkup() {
+  const shield = shieldRelevant();
+  const supply = supplyRelevant();
+  // Eine Zeile ohne beide Teilsysteme braucht den Messwert-Block gar nicht –
+  // dann besteht sie nur aus Porträt, Name und Lebensbalken.
+  const meter = (kind, f, icon) => `
+    <div class="boss-meter ${kind}" data-${kind}="${f}">
+      <span class="boss-meter-icon" data-${kind}-icon="${f}">${icon}</span>
+      <div class="boss-meter-bar"><i data-${kind}-bar="${f}"></i></div>
+      <span class="boss-meter-text" data-${kind}-text="${f}"></span>
+    </div>`;
+  const rows = BOSS_ORDER.map((f) => {
+    const fac = FACTIONS[f];
+    const cell = bossCell(f);
+    // Fehlt der Bossatlas, entfällt allein das Bild – Name, Lebenspunkte,
+    // Schild und Vorrat trägt die Zeile auch ohne Gesicht.
+    const pic = cell
+      ? `<span class="boss-portrait boss-pic" style="--col:${cell.col}"></span>`
+      : '';
+    const meters =
+      shield || supply
+        ? `<div class="boss-meters">
+             ${shield ? meter('shield', f, '🛡') : ''}
+             ${supply ? meter('supply', f, '⬢') : ''}
+           </div>`
+        : '';
+    return `
+      <div class="boss-row" data-boss-row="${f}" style="--fac:${fac.color};--fac-dark:${fac.dark}">
+        ${pic}
+        <div class="boss-head">
+          <span class="boss-name">${fac.name}</span>
+          <span class="boss-hp" data-boss-hp="${f}"></span>
+        </div>
+        <div class="boss-bar"><i data-boss-bar="${f}"></i></div>
+        ${meters}
+      </div>`;
+  }).join('');
+  return `<div class="boss-board" id="boss-board" role="group"
+    aria-label="Stand beider Fürsten: Lebenspunkte, Schild und Vorrat">${rows}</div>`;
+}
+
+// Referenzen je Fraktion, damit die Render-Schleife nicht bei jedem Bild neu im
+// DOM sucht. Fehlende Teilsysteme liefern hier schlicht `null`.
+let bossRows = [];
+
+function collectBossRows() {
+  const q = (sel) => panelEl.querySelector(sel);
+  bossRows = BOSS_ORDER.map((faction) => ({
+    faction,
+    row: q(`[data-boss-row="${faction}"]`),
+    hp: q(`[data-boss-hp="${faction}"]`),
+    bar: q(`[data-boss-bar="${faction}"]`),
+    shield: q(`[data-shield="${faction}"]`),
+    shieldIcon: q(`[data-shield-icon="${faction}"]`),
+    shieldBar: q(`[data-shield-bar="${faction}"]`),
+    shieldText: q(`[data-shield-text="${faction}"]`),
+    supply: q(`[data-supply="${faction}"]`),
+    supplyIcon: q(`[data-supply-icon="${faction}"]`),
+    supplyBar: q(`[data-supply-bar="${faction}"]`),
+    supplyText: q(`[data-supply-text="${faction}"]`),
+    campId: ownCampOf(sim.supplyState, faction),
+  })).filter((r) => r.row);
+}
+
+// Schwelle, ab der der Schild als „bricht gleich" gilt und sein Pulsen
+// deutlicher wird. Ein Viertel Rest-Turmleben ist nah genug am Bruch, dass die
+// Warnung noch etwas nützt, und weit genug entfernt, dass sie nicht dauerhaft
+// blinkt.
+const SHIELD_WEAK = 0.25;
+
+// Zustände des Vorratslagers als Symbol. Der Zustand steckt im Symbol und in
+// der Farbe, der Fortschritt im Balken und im Text – so trägt die Zeile beides,
+// ohne dass der Lagername sie noch einmal so lang macht. Er ist ohnehin fest:
+// Jede Fraktion hat genau ein Lager. Eine Blockade zählt erst im Betrieb; ein
+// noch nicht in Betrieb genommenes Lager bleibt „inaktiv", ganz gleich wer
+// davorsteht.
+const SUPPLY_ICONS = { idle: '⬡', running: '⬢', blocked: '⚠' };
 
 const campStateKey = (st, campId) =>
   !st.active?.[campId] ? 'idle' : st.blocked?.[campId] ? 'blocked' : 'running';
 
-// Das fest zugeordnete Lager einer Fraktion aus dem Simulationszustand ablesen.
-const ownCampOf = (st, faction) =>
-  (st?.camps ?? []).find((id) => st.owner?.[id] === faction) ?? null;
-
-// Das Markup entsteht nur, wenn die Partie überhaupt Lager hat – ist das System
-// abgeschaltet, bleibt `camps` leer und der ganze Block entfällt.
-function supplyBoardMarkup() {
-  const st = sim.supplyState;
-  if (!(st?.camps ?? []).length) return '';
-  const rows = ['blue', 'red']
-    .map((f) => {
-      const fac = FACTIONS[f];
-      const campId = ownCampOf(st, f);
-      return `
-      <div class="supply-row" data-supply-row="${f}" style="--fac:${fac.color};--fac-dark:${fac.dark}">
-        <span class="supply-fac">${fac.name}</span>
-        <span class="supply-value" data-supply-value="${f}"></span>
-        <div class="supply-bar"><i data-supply-bar="${f}"></i></div>
-        ${campId ? `<span class="supply-camp" data-supply-camp="${f}"></span>` : ''}
-      </div>`;
-    })
-    .join('');
-  return `<div class="supply-board" id="supply-board" role="group"
-    aria-label="Vorrat und Vorratslager je Fraktion">${rows}</div>`;
+// Eine Messwert-Zeile (Schild oder Vorrat) auf einen Stand bringen. Das läuft
+// in der Render-Schleife, deshalb wird jeder Wert vor dem Schreiben verglichen:
+// Der Zähler im Text läuft innerhalb desselben Zustands weiter („4 / 10" →
+// „5 / 10"), die Klasse wechselt dagegen selten.
+function setMeter(row, kind, { fill, state, icon, text }) {
+  const bar = row[`${kind}Bar`];
+  const width = `${(Math.max(0, Math.min(1, fill)) * 100).toFixed(1)}%`;
+  if (bar.style.width !== width) bar.style.width = width;
+  const textEl = row[`${kind}Text`];
+  if (textEl.textContent !== text) textEl.textContent = text;
+  const iconEl = row[`${kind}Icon`];
+  if (iconEl.textContent !== icon) iconEl.textContent = icon;
+  const el = row[kind];
+  if (el.dataset.state === state) return;
+  el.dataset.state = state;
+  el.className = `boss-meter ${kind} ${state}`;
 }
 
-// Referenzen der Vorratszeilen (je Fraktion), damit die Render-Schleife nicht
-// bei jedem Bild neu im DOM suchen muss. Leer, wenn es keine Lager gibt.
-let supplyRows = [];
-
-function collectSupplyRows() {
+function updateBossBoard() {
+  if (!bossRows.length) return;
   const st = sim.supplyState;
-  supplyRows = ['blue', 'red']
-    .map((faction) => ({
-      faction,
-      campId: ownCampOf(st, faction),
-      row: panelEl.querySelector(`[data-supply-row="${faction}"]`),
-      value: panelEl.querySelector(`[data-supply-value="${faction}"]`),
-      bar: panelEl.querySelector(`[data-supply-bar="${faction}"]`),
-      camp: panelEl.querySelector(`[data-supply-camp="${faction}"]`),
-    }))
-    .filter((r) => r.row);
-}
+  for (const r of bossRows) {
+    const state = sim.boss[r.faction];
+    const alive = sim.bossAlive[r.faction];
+    const hp = Math.max(0, Math.round(state.hp));
+    const text = `${hp} / ${Math.round(state.maxHp)}`;
+    if (r.hp.textContent !== text) r.hp.textContent = text;
+    const frac = state.maxHp > 0 ? Math.max(0, state.hp / state.maxHp) : 0;
+    const width = `${(frac * 100).toFixed(1)}%`;
+    if (r.bar.style.width !== width) r.bar.style.width = width;
+    // Farbstufen wie beim Lebensbalken auf der Karte (`drawHpBar` in render.js),
+    // damit Karte und HUD denselben Zustand gleich einfärben.
+    const level = frac > 0.5 ? 'high' : frac > 0.25 ? 'mid' : 'low';
+    if (r.bar.dataset.level !== level) r.bar.dataset.level = level;
+    r.row.classList.toggle('fallen', !alive);
 
-function updateSupplyBoard() {
-  if (!supplyRows.length) return;
-  const st = sim.supplyState;
-  const cost = st.cost;
-  const supply = st.supply;
-  for (const { faction, row, value, bar, camp, campId } of supplyRows) {
-    const summoned = st.allySummoned?.[faction];
-    // Nach der Beschwörung steht in der Zeile der Verbündete statt des Vorrats –
-    // ob er noch lebt, verrät die Karte, nicht diese Anzeige.
-    let text;
-    if (summoned) {
-      const ally = resolveAllyType(config, faction);
-      text = `${ally.icon} ${ally.name} · erschienen`;
-    } else {
-      text = `⬢ ${Math.floor(supply[faction] ?? 0)} / ${cost}`;
+    if (r.shield) {
+      // Der Schild verschwindet mit dem Boss – ein gefallener Fürst hat keinen
+      // Zustand mehr, den es zu überwachen lohnte.
+      const strength = alive ? shieldStrength(r.faction) : 0;
+      const standing = alive ? standingTowers(r.faction) : 0;
+      setMeter(r, 'shield', {
+        fill: strength,
+        state: standing === 0 ? 'broken' : strength <= SHIELD_WEAK ? 'weak' : 'holding',
+        icon: '🛡',
+        text:
+          standing === 0
+            ? 'Schild gefallen'
+            : `${standing} ${standing === 1 ? 'Turm' : 'Türme'}`,
+      });
     }
-    if (value.textContent !== text) value.textContent = text;
-    const fill = summoned ? 1 : Math.min(1, (supply[faction] ?? 0) / cost);
-    const width = `${(fill * 100).toFixed(1)}%`;
-    if (bar.style.width !== width) bar.style.width = width;
-    row.classList.toggle('summoned', !!summoned);
-    // Lagerzeile nur bei echtem Zustandswechsel anfassen (läuft je Bild).
-    if (!camp || !campId) continue;
-    const key = campStateKey(st, campId);
-    if (camp.dataset.state === key) continue;
-    const state = SUPPLY_CAMP_STATES[key];
-    camp.dataset.state = key;
-    camp.className = `supply-camp ${key}`;
-    camp.textContent = `${state.icon} ${map.nodes[campId].name} · ${state.text}`;
+
+    if (r.supply) {
+      const summoned = st.allySummoned?.[r.faction];
+      if (summoned) {
+        // Nach der Beschwörung steht in der Zeile der Verbündete statt des
+        // Vorrats – ob er noch lebt, verrät die Karte, nicht diese Anzeige.
+        const ally = resolveAllyType(config, r.faction);
+        setMeter(r, 'supply', {
+          fill: 1,
+          state: 'summoned',
+          icon: ally.icon,
+          text: ally.name,
+        });
+      } else {
+        const key = r.campId ? campStateKey(st, r.campId) : 'idle';
+        const have = Math.floor(st.supply[r.faction] ?? 0);
+        setMeter(r, 'supply', {
+          fill: st.cost > 0 ? have / st.cost : 0,
+          // Ein ruhendes Lager sammelt nichts – dann sagt der Zustand mehr als
+          // eine Null vor der Schwelle.
+          state: key,
+          icon: SUPPLY_ICONS[key],
+          text: key === 'idle' ? 'Lager inaktiv' : `${have} / ${st.cost}`,
+        });
+      }
+    }
   }
 }
 
@@ -437,11 +571,11 @@ function buildSimPanel() {
       </div>
       <span class="sim-clock" id="sim-clock">0:00</span>
     </div>
-    ${supplyBoardMarkup()}
+    ${bossBoardMarkup()}
     <div class="ticker" id="ticker"><p class="muted">Die Schlacht beginnt …</p></div>
   `;
-  collectSupplyRows();
-  updateSupplyBoard();
+  collectBossRows();
+  updateBossBoard();
   document.getElementById('btn-pause').addEventListener('click', (ev) => {
     paused = !paused;
     ev.currentTarget.textContent = paused ? '▶' : '⏸';
@@ -462,7 +596,7 @@ function fmtTime(t) {
 function updateSimPanel() {
   const clock = document.getElementById('sim-clock');
   if (clock) clock.textContent = fmtTime(sim.time);
-  updateSupplyBoard();
+  updateBossBoard();
   if (sim.log.length !== lastLogCount) {
     lastLogCount = sim.log.length;
     const ticker = document.getElementById('ticker');
@@ -490,7 +624,7 @@ function showResult() {
     const fac = FACTIONS[r.winner];
     const cell = bossCell(r.winner);
     if (cell) {
-      head = `<div class="overlay-boss" style="--col:${cell.col};--fac:${fac.color};--fac-dark:${fac.dark}"></div>`;
+      head = `<div class="boss-portrait overlay-boss" style="--col:${cell.col};--fac:${fac.color};--fac-dark:${fac.dark}"></div>`;
     }
     title = `${fac.name} siegt!`;
   }
