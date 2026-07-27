@@ -90,7 +90,7 @@ export function createEditor({ host, tracks, onExit, onTest }) {
 
   host.innerHTML = `
     <div class="ed-top">
-      <button class="buy" id="ed-exit">&#8592; TITEL</button>
+      <button class="buy ed-quiet" id="ed-exit" title="Editor verlassen, ohne zu speichern">&#8592; TITEL</button>
       <span class="ed-brand">STRECKEN&shy;EDITOR</span>
       <button class="buy" id="ed-save">SPEICHERN</button>
     </div>
@@ -111,8 +111,8 @@ export function createEditor({ host, tracks, onExit, onTest }) {
           <button class="buy" id="ed-reset">ZURÜCKSETZEN</button>
           <button class="buy" id="ed-json-toggle">JSON</button>
         </div>
-        <p class="seg-hint">Gespeicherte Elemente benutzt das Rennen dieser Strecke automatisch.
-          Zurücksetzen stellt den Auslieferungszustand wieder her.</p>
+        <p class="seg-hint">Die Testfahrt ist nur zum Ausprobieren – ohne Preisgeld und ohne
+          Aufstieg. Zurücksetzen stellt den Auslieferungszustand wieder her.</p>
       </div>
       <div class="panel hidden" id="ed-json">
         <h3>EXPORT &amp; IMPORT</h3>
@@ -121,7 +121,18 @@ export function createEditor({ host, tracks, onExit, onTest }) {
           <button class="buy" id="ed-copy">KOPIEREN</button>
           <button class="buy" id="ed-import">ÜBERNEHMEN</button>
         </div>
-        <p class="seg-hint">Text markieren und kopieren – oder eigenes JSON einfügen und übernehmen.</p>
+        <p class="seg-hint">Text markieren und kopieren – oder eigenes JSON einfügen und übernehmen.
+          Das ist auch der Weg, eine Strecke auf ein anderes Gerät zu bringen.</p>
+      </div>
+      <div class="panel ed-finish">
+        <h3>FERTIG</h3>
+        <p class="seg-hint ed-explain">Deine Elemente werden ab dem Speichern in <b>jedem Rennen auf
+          dieser Strecke</b> gefahren – auch in der normalen Meisterschaft, nicht nur in der
+          Testfahrt.</p>
+        <button class="big" id="ed-done">SPEICHERN &amp; ZUM TITEL</button>
+        <p class="seg-hint ed-storage">💾 Gespeichert wird nur im Browser dieses Geräts. Auf einem
+          anderen Gerät sind deine Strecken nicht da, und ein geleerter Browser-Speicher löscht sie.
+          Zum Mitnehmen den Bereich <b>JSON</b> benutzen.</p>
       </div>
     </div>`;
 
@@ -605,8 +616,23 @@ export function createEditor({ host, tracks, onExit, onTest }) {
     onExit();
   });
 
+  // Nach dem Speichern steht ausdrücklich da, was das bewirkt. „Gespeichert"
+  // allein beantwortet die eigentliche Frage nicht – nämlich wo das Ergebnis
+  // dann auftaucht.
+  const savedMessage = () =>
+    `${trackDef.name} gespeichert (${elements.length} Element(e)) – wird ab jetzt in jedem Rennen `
+    + 'auf dieser Strecke gefahren.';
+
   $('ed-save').addEventListener('click', () => {
-    if (persist()) status(`${trackDef.name} gespeichert – ${elements.length} Element(e).`, 'ok');
+    if (persist()) status(savedMessage(), 'ok');
+  });
+
+  // Der Hauptausgang: speichern und zurück zum Titel, von wo aus die Saison
+  // startet. Bewusst unten am Ende der Bedienung und als große Schaltfläche –
+  // der kleine Zurück-Knopf oben wird auf dem Handy übersehen.
+  $('ed-done').addEventListener('click', () => {
+    if (!persist()) return;
+    onExit();
   });
 
   $('ed-test').addEventListener('click', () => {
