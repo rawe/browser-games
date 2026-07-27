@@ -1,10 +1,14 @@
 // Eingabe: Tastatur und Touch-Buttons auf einen gemeinsamen Steuerzustand
-// abbilden. Raketen sind Einzelauslöser und laufen über `onFire`.
+// abbilden. Ausrüstung sind Einzelauslöser und laufen über `onUse(id)`.
+//
+// Die Ausrüstungsknöpfe und ihre Tastenkürzel entstehen aus `ITEMS`
+// (items.js) – ein weiteres Item braucht hier keine Zeile Code.
 //
 // Gas ist ein Sonderfall: Der Touch-Button arbeitet als Dauergas-Schalter
 // (Zustandsmaschine in `throttle.js`), damit man beim Auslösen einer Rakete
 // nicht vom Gas muss. Die Tastatur bleibt beim klassischen Halten.
 
+import { ITEMS } from './items.js';
 import { createThrottle } from './throttle.js';
 
 const HOLD_KEYS = {
@@ -14,7 +18,14 @@ const HOLD_KEYS = {
   arrowdown: 'brake', s: 'brake',
 };
 
-export function createInput({ onFire, onActivate, isRacing, onLatch }) {
+/** Tastenkürzel → Item-ID, aus der Item-Liste aufgebaut. */
+const ITEM_KEYS = Object.fromEntries(
+  ITEMS.filter((item) => item.key).map((item) => [item.key.toLowerCase(), item.id]),
+);
+// Rückwärtskompatibel: Shift löst weiterhin die Heck-Rakete aus.
+ITEM_KEYS.shift ??= 'rear';
+
+export function createInput({ onUse, onActivate, isRacing, onLatch }) {
   const controls = { left: false, right: false, gas: false, brake: false };
   const keyGas = { down: false };
   const throttle = createThrottle();
@@ -22,6 +33,7 @@ export function createInput({ onFire, onActivate, isRacing, onLatch }) {
 
   const gasBtn = el('btn-gas');
   const gasState = el('gas-state');
+  const itemBtns = [];
   const now = () => performance.now();
 
   let lastLatched = false;
@@ -94,29 +106,54 @@ export function createInput({ onFire, onActivate, isRacing, onLatch }) {
     button.addEventListener('mouseleave', cancel);
   }
 
-  function bindTap(button, rear) {
+  function bindTap(button, id) {
     button.addEventListener('touchstart', (e) => {
       e.preventDefault();
       onActivate();
       button.classList.add('on');
-      onFire(rear);
+      onUse?.(id);
     }, { passive: false });
     button.addEventListener('touchend', (e) => {
       e.preventDefault();
       button.classList.remove('on');
     });
+    button.addEventListener('touchcancel', () => button.classList.remove('on'));
     button.addEventListener('mousedown', () => {
       onActivate();
-      onFire(rear);
+      onUse?.(id);
     });
+  }
+
+  /**
+   * Einen Knopf je Item bauen: Symbol, Kurzbezeichnung und Restbestand.
+   * Den Bestand schreibt das HUD in `#ammo-<id>`, es schaltet die Knöpfe bei
+   * leerem Bestand auch auf `disabled`.
+   */
+  function buildItemButtons(host) {
+    for (const item of ITEMS) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'tc-btn item';
+      button.id = `btn-item-${item.id}`;
+      button.dataset.item = item.id;
+      button.setAttribute('aria-label', `${item.name} einsetzen`);
+      button.innerHTML = `
+        <span class="item-top">
+          <span class="item-icon">${item.icon}</span>
+          <span class="item-count" id="ammo-${item.id}">0</span>
+        </span>
+        <span class="item-label">${item.label}</span>`;
+      host.append(button);
+      bindTap(button, item.id);
+      itemBtns.push(button);
+    }
   }
 
   bindHold(el('btn-left'), 'left');
   bindHold(el('btn-right'), 'right');
   bindHold(el('btn-brake'), 'brake');
   bindGas(gasBtn);
-  bindTap(el('btn-fire-front'), false);
-  bindTap(el('btn-fire-rear'), true);
+  buildItemButtons(el('tc-items'));
 
   window.addEventListener('keydown', (e) => {
     if (e.repeat) return;
@@ -129,11 +166,10 @@ export function createInput({ onFire, onActivate, isRacing, onLatch }) {
       sync();
       return;
     }
-    if (key === ' ') {
-      if (isRacing()) e.preventDefault(); // sonst scrollt das Overlay
-      onFire(false);
-    } else if (key === 'x' || key === 'shift') {
-      onFire(true);
+    const item = ITEM_KEYS[key];
+    if (item) {
+      if (key === ' ' && isRacing()) e.preventDefault(); // sonst scrollt das Overlay
+      onUse?.(item);
     }
   });
 
@@ -162,6 +198,7 @@ export function createInput({ onFire, onActivate, isRacing, onLatch }) {
       keyGas.down = false;
       throttle.reset();
       for (const id of ['btn-left', 'btn-right', 'btn-brake']) el(id).classList.remove('on');
+      for (const button of itemBtns) button.classList.remove('on');
       sync();
     },
   };

@@ -12,6 +12,14 @@
 // Alle Elementfunktionen arbeiten in Weltkoordinaten und kommen ohne `race`
 // aus – der Streckeneditor benutzt dieselben Zeichenroutinen für Vorschau und
 // Auswahl.
+//
+// Ausrüstung
+// ----------
+// Zielsuchraketen (`m.kind === 'homing'`) bekommen eine eigene Optik samt
+// Suchkopf und Zielmarke, ein aktiver Turbo (`car.turbo`) eine Flammenfahne mit
+// Nachzieheffekt, abgelegte Öllachen (`el.dropped`) einen Frischeglanz und ein
+// Verblassen zum Ende ihrer Standzeit. Alle diese Felder werden defensiv
+// gelesen – fehlen sie, sieht alles aus wie zuvor.
 
 import { ROAD_WIDTH, WORLD, posAt } from './trackGeometry.js';
 import { gateState } from './elements.js';
@@ -153,8 +161,29 @@ function hazardBar(ctx, x, y, w, h, step = 7) {
 
 /* ========================= Öllache ========================= */
 
+/**
+ * Restlebensdauer einer abgelegten Lache als 0…1. Fest platzierte Lachen (und
+ * solche ohne die neuen Felder) liefern immer 1 – sie bleiben unverändert.
+ */
+function oilLife(el) {
+  if (!el.dropped || !(el.maxLife > 0)) return 1;
+  return clamp((el.life ?? 0) / el.maxLife, 0, 1);
+}
+
 function drawOil(ctx, el, time) {
-  const r = el.radius ?? 28;
+  const base = el.radius ?? 28;
+  const dropped = el.dropped === true;
+  const left = oilLife(el);
+  // Erst im letzten Viertel verblassen und schrumpfen – vorher liegt die Lache
+  // voll da, danach sieht man ihr das Versickern an.
+  const fade = left > 0.25 ? 1 : 0.28 + (left / 0.25) * 0.72;
+  // Frisch abgelegt kurz kräftiger glänzen lassen.
+  const fresh = dropped ? clamp((left - 0.78) / 0.22, 0, 1) : 0;
+  const r = base * (dropped ? 0.86 + 0.14 * fade : 1);
+
+  const outerScale = alphaScale;
+  alphaScale = outerScale * fade;
+
   inLocal(ctx, el, () => {
     // Umriss einmal pro Frame aus dem Ortshash aufbauen – bleibt stabil, damit
     // die Lache nicht flimmert.
@@ -197,8 +226,8 @@ function drawOil(ctx, el, time) {
     rim.addColorStop(0.58, '#5be07a');
     rim.addColorStop(0.82, '#ffd23f');
     rim.addColorStop(1, '#ff4f7b');
-    A(ctx, 0.85);
-    ctx.lineWidth = 3.5;
+    A(ctx, 0.85 + fresh * 0.15);
+    ctx.lineWidth = 3.5 + fresh * 2;
     ctx.lineJoin = 'round';
     ctx.strokeStyle = rim;
     blobPath(ctx, pts);
@@ -223,8 +252,43 @@ function drawOil(ctx, el, time) {
     ctx.beginPath();
     ctx.ellipse(r * 0.28, r * 0.2, r * 0.13, r * 0.06, 0.4, 0, TAU);
     ctx.fill();
+
+    if (dropped) {
+      // Frisch abgelegt: nasser Glanz und ein auslaufender Druckring – man
+      // sieht, dass die Lache eben erst gefallen ist.
+      if (fresh > 0.01) {
+        A(ctx, 0.5 * fresh);
+        ctx.fillStyle = '#e8f2ff';
+        ctx.save();
+        ctx.scale(0.5, 0.44);
+        blobPath(ctx, pts);
+        ctx.fill();
+        ctx.restore();
+        A(ctx, 0.45 * fresh);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#ffd23f';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, r * (1.05 + (1 - fresh) * 0.5), r * (0.9 + (1 - fresh) * 0.44),
+          0, 0, TAU);
+        ctx.stroke();
+      }
+
+      // Restauslösungen als kleine Tropfen am oberen Rand – zeigt, wie oft die
+      // Lache noch jemanden erwischt.
+      const uses = Math.max(0, Math.min(5, el.uses ?? 0));
+      for (let i = 0; i < uses; i++) {
+        A(ctx, 0.75);
+        ctx.fillStyle = '#54d6ff';
+        ctx.beginPath();
+        ctx.arc((i - (uses - 1) / 2) * 7, -r * 0.92, 1.8, 0, TAU);
+        ctx.fill();
+      }
+    }
     A(ctx, 1);
   });
+
+  alphaScale = outerScale;
+  A(ctx, 1);
 }
 
 /* ========================= Sprungschanze ========================= */
@@ -707,6 +771,91 @@ function drawSpinTrail(ctx, car, time) {
   A(ctx, 1);
 }
 
+/**
+ * Stärke der Turbo-Optik 0…1. Sie nimmt mit den Restticks ab; während eines mit
+ * Turbo abgehobenen Sprungs bleibt sie auf einem Sockelwert, damit die Flammen
+ * bis zur Landung brennen. Ohne `turbo`-Feld ist das Ergebnis 0 – dann sieht
+ * das Fahrzeug exakt aus wie bisher.
+ */
+function turboStrength(car) {
+  const ticks = car.turbo ?? 0;
+  const max = car.turboMax > 0 ? car.turboMax : ticks;
+  let s = ticks > 0 && max > 0 ? clamp(ticks / max, 0, 1) : 0;
+  if (car.air > 0 && car.turboJump) s = Math.max(s, 0.6);
+  return s;
+}
+
+/** Tropfenförmige Flammenzunge, die am Heck (x0) nach hinten ausläuft. */
+function flamePath(ctx, x0, y, len, half) {
+  ctx.beginPath();
+  ctx.moveTo(x0, y - half);
+  ctx.quadraticCurveTo(x0 - len * 0.55, y - half * 0.85, x0 - len, y);
+  ctx.quadraticCurveTo(x0 - len * 0.55, y + half * 0.85, x0, y + half);
+  ctx.closePath();
+}
+
+/**
+ * Turbo-Fahne im lokalen Fahrzeugsystem (+x = Fahrtrichtung): Nachzieheffekt,
+ * Tempostreifen, zwei Flammenzungen und ein paar Funken. Wird vor der
+ * Karosserie gezeichnet, damit alles hinter dem Wagen liegt.
+ */
+function drawTurboBoost(ctx, car, s, time) {
+  // Nachzieheffekt: zwei blasse Kopien der Karosserie hinter dem Wagen.
+  const outer = alphaScale;
+  for (let i = 2; i >= 1; i--) {
+    alphaScale = outer * 0.2 * s / i;
+    ctx.save();
+    ctx.translate(-i * (5 + 4 * s), 0);
+    carBody(ctx, car);
+    ctx.restore();
+  }
+  alphaScale = outer;
+
+  // Tempostreifen seitlich – laufen nach hinten aus dem Bild.
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = '#dff3ff';
+  for (let i = 0; i < 4; i++) {
+    const y = (i < 2 ? -1 : 1) * (9.5 + (i % 2) * 4.5);
+    const ph = (time * 0.2 + i * 0.31) % 1;
+    const x0 = -6 - ph * 32;
+    A(ctx, (0.5 - ph * 0.42) * s);
+    ctx.beginPath();
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x0 - 11 - 10 * s, y);
+    ctx.stroke();
+  }
+
+  // Zwei Flammenzungen aus den Auspuffrohren, Länge flackert.
+  const flick = 0.78 + 0.22 * Math.sin(time * 0.9) * Math.sin(time * 0.37);
+  const len = (13 + 25 * s) * flick;
+  for (const side of [-3.6, 3.6]) {
+    A(ctx, 0.3 * s);
+    ctx.fillStyle = '#ff4f7b';
+    flamePath(ctx, -14, side, len * 1.18, 7);
+    ctx.fill();
+    A(ctx, 0.62 * s);
+    ctx.fillStyle = '#ffd23f';
+    flamePath(ctx, -14, side, len, 4.6);
+    ctx.fill();
+    A(ctx, 0.9 * s);
+    ctx.fillStyle = '#fff4c8';
+    flamePath(ctx, -14, side, len * 0.48, 2.6);
+    ctx.fill();
+  }
+
+  // Funken – wenige, dafür deterministisch aus dem Tick-Hash.
+  for (let i = 0; i < 5; i++) {
+    const ph = (time * 0.16 + i * 0.23) % 1;
+    const x = -16 - ph * (24 + 22 * s);
+    const y = (hash01(i * 5.1 + Math.floor(time * 0.16 + i * 0.23)) - 0.5) * (9 + ph * 15);
+    A(ctx, (1 - ph) * 0.8 * s);
+    ctx.fillStyle = i % 2 === 0 ? '#ffd23f' : '#fff6e0';
+    ctx.fillRect(x, y, 2.4, 2.4);
+  }
+  A(ctx, 1);
+}
+
 function drawCar(ctx, car, time) {
   if (car.respawn > 0) return;
   if (car.invuln > 0 && Math.floor(time / 5) % 2 === 0) return; // blinkt nach Respawn
@@ -714,12 +863,19 @@ function drawCar(ctx, car, time) {
   if (car.oil > 0) drawSpinTrail(ctx, car, time);
 
   const h = airHeight(car);
+  const boost = turboStrength(car);
+  // Ein mit Turbo abgehobener Sprung fliegt höher: Schatten größer und weiter
+  // versetzt, das Fahrzeug entsprechend stärker angehoben und vergrößert.
+  const rocket = h > 0 && car.turboJump ? 1 : 0;
+  const lift = 1 + 0.45 * rocket;
+
   if (h > 0) {
     // Schlagschatten versetzt unter dem Fahrzeug – zeigt die Flughöhe an.
-    A(ctx, 0.36 - 0.14 * h);
+    const sw = (1 - 0.2 * h) * (1 + 0.3 * rocket);
+    A(ctx, (0.36 - 0.14 * h) * (1 + 0.15 * rocket));
     ctx.fillStyle = '#000';
     ctx.beginPath();
-    ctx.ellipse(car.x + h * 10, car.y + h * 13, 15 * (1 - 0.2 * h), 9 * (1 - 0.2 * h),
+    ctx.ellipse(car.x + h * 10 * lift, car.y + h * 13 * lift, 15 * sw, 9 * sw,
       car.angle, 0, TAU);
     ctx.fill();
     A(ctx, 1);
@@ -729,11 +885,130 @@ function drawCar(ctx, car, time) {
   const wobble = car.oil > 0 ? Math.sin(time * 0.45) * 0.3 * Math.min(1, car.oil / 20) : 0;
 
   ctx.save();
-  ctx.translate(car.x - h * 10, car.y - h * 13);
+  ctx.translate(car.x - h * 10 * lift, car.y - h * 13 * lift);
   ctx.rotate(car.angle + wobble);
-  if (h > 0) ctx.scale(1 + h * 0.5, 1 + h * 0.5);
+  if (h > 0) ctx.scale(1 + h * (0.5 + 0.25 * rocket), 1 + h * (0.5 + 0.25 * rocket));
+  if (boost > 0) drawTurboBoost(ctx, car, boost, time);
   carBody(ctx, car);
   ctx.restore();
+  A(ctx, 1);
+}
+
+/* ========================= Raketen ========================= */
+
+/** Gerade Abgasfahne der ungelenkten Raketen – kurz und schnurgerade. */
+function drawStraightTrail(ctx, m, time) {
+  const cos = Math.cos(m.angle);
+  const sin = Math.sin(m.angle);
+  for (let i = 1; i <= 4; i++) {
+    const t = i / 4;
+    const back = 7 + i * 6;
+    A(ctx, (1 - t) * 0.45);
+    ctx.fillStyle = i % 2 === 0 ? '#c9ccd4' : '#8f959f';
+    ctx.beginPath();
+    ctx.arc(m.x - cos * back, m.y - sin * back,
+      1.4 + t * 2.6 + Math.sin(time * 0.4 + i) * 0.3, 0, TAU);
+    ctx.fill();
+  }
+  A(ctx, 1);
+}
+
+/** Kurvige Kondensspur der Zielsuchrakete – schlängelt sich hinter ihr her. */
+function drawHomingTrail(ctx, m, time) {
+  const cos = Math.cos(m.angle);
+  const sin = Math.sin(m.angle);
+  for (let i = 1; i <= 7; i++) {
+    const t = i / 7;
+    const back = 6 + i * 6.5;
+    const lat = Math.sin(time * 0.34 - i * 0.8) * (1.5 + i * 1.7);
+    A(ctx, (1 - t) * 0.6);
+    ctx.fillStyle = i % 2 === 0 ? '#54d6ff' : '#d6f2ff';
+    ctx.beginPath();
+    ctx.arc(m.x - cos * back - sin * lat, m.y - sin * back + cos * lat,
+      1.5 + t * 3.4, 0, TAU);
+    ctx.fill();
+  }
+  A(ctx, 1);
+}
+
+/** Eine Rakete zeichnen – `m.kind` entscheidet über Farbgebung und Spur. */
+function drawMissile(ctx, m, time) {
+  const homing = m.kind === 'homing';
+  if (homing) drawHomingTrail(ctx, m, time);
+  else if (m.kind) drawStraightTrail(ctx, m, time);
+
+  ctx.save();
+  ctx.translate(m.x, m.y);
+  ctx.rotate(m.angle);
+  if (homing) {
+    // Dunkler Rumpf mit Leitwerk und cyanem Rückgrat – klar vom hellen
+    // Standardgeschoss zu unterscheiden.
+    A(ctx, 0.35);
+    ctx.fillStyle = '#54d6ff';
+    ctx.beginPath();
+    ctx.arc(0, 0, 9 + Math.sin(time * 0.35) * 1.2, 0, TAU);
+    ctx.fill();
+    A(ctx, 1);
+    ctx.fillStyle = '#1b2230';
+    ctx.fillRect(-9, -3.5, 18, 7);
+    ctx.fillStyle = '#54d6ff';
+    ctx.fillRect(-9, -1, 15, 2);
+    ctx.fillStyle = '#2f3a4c';
+    ctx.fillRect(-9, -6, 5, 3);
+    ctx.fillRect(-9, 3, 5, 3);
+    // Suchkopf: pulsierendes Auge an der Spitze.
+    const pulse = 0.55 + 0.45 * Math.abs(Math.sin(time * 0.3));
+    A(ctx, pulse);
+    ctx.fillStyle = '#ff4f7b';
+    ctx.beginPath();
+    ctx.arc(8, 0, 3.6, 0, TAU);
+    ctx.fill();
+    A(ctx, 1);
+    ctx.fillStyle = '#fff0f4';
+    ctx.beginPath();
+    ctx.arc(8.6, -0.6, 1.4, 0, TAU);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = '#eee';
+    ctx.fillRect(-7, -2.5, 14, 5);
+    ctx.fillStyle = '#ff5a2e';
+    ctx.fillRect(4, -2.5, 4, 5);
+  }
+  ctx.restore();
+  A(ctx, 1);
+}
+
+/**
+ * Zielmarke auf den verfolgten Fahrzeugen. Mehrere Raketen auf dasselbe Ziel
+ * ergeben nur eine Marke; fliegende Ziele bekommen sie am angehobenen Wagen.
+ */
+function drawLockOns(ctx, missiles, time) {
+  let targets = null;
+  for (const m of missiles) {
+    if (m.kind !== 'homing' || !m.target || m.target.respawn > 0) continue;
+    (targets ??= new Set()).add(m.target);
+  }
+  if (!targets) return;
+  const blink = 0.45 + 0.35 * Math.abs(Math.sin(time * 0.22));
+  for (const car of targets) {
+    const h = airHeight(car);
+    const lift = h > 0 && car.turboJump ? 1.45 : 1;
+    ctx.save();
+    ctx.translate(car.x - h * 10 * lift, car.y - h * 13 * lift);
+    ctx.rotate(time * 0.045);
+    const r = 17 + Math.sin(time * 0.25) * 1.6;
+    A(ctx, blink);
+    ctx.strokeStyle = '#ff4f7b';
+    ctx.lineWidth = 1.8;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 4; i++) {
+      const a0 = (i * TAU) / 4 + 0.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, a0, a0 + TAU / 4 - 0.4);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
   A(ctx, 1);
 }
 
@@ -770,13 +1045,19 @@ export function createRenderer(canvas, minimapCanvas) {
         mctx.lineTo(off + end.x * s, off + end.y * s);
         mctx.stroke();
       } else if (el.type === 'oil') {
+        // Abgelegte Lachen dezent anders: pinker Ring, der mit der Restzeit
+        // ausblasst – fest platzierte bleiben lila.
+        const dropped = el.dropped === true;
+        const left = oilLife(el);
+        mctx.globalAlpha = dropped ? 0.35 + 0.65 * left : 1;
         mctx.fillStyle = '#12161f';
         mctx.beginPath();
-        mctx.arc(x, y, 2.2, 0, TAU);
+        mctx.arc(x, y, dropped ? 2 : 2.2, 0, TAU);
         mctx.fill();
-        mctx.strokeStyle = '#9d6bff';
-        mctx.lineWidth = 0.8;
+        mctx.strokeStyle = dropped ? '#ff4f7b' : '#9d6bff';
+        mctx.lineWidth = dropped ? 1.1 : 0.8;
         mctx.stroke();
+        mctx.globalAlpha = 1;
       } else if (el.type === 'ramp') {
         mctx.fillStyle = '#ffd23f';
         mctx.beginPath();
@@ -819,8 +1100,18 @@ export function createRenderer(canvas, minimapCanvas) {
     for (const car of race.cars) {
       if (car.respawn > 0) continue;
       const r = car.isPlayer ? 3 : 2.4;
+      const cx = off + car.x * s;
+      const cy = off + car.y * s;
       mctx.fillStyle = car.color;
-      mctx.fillRect(off + car.x * s - r, off + car.y * s - r, r * 2, r * 2);
+      mctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+      // Aktiver Turbo: gelber Blinkrahmen – auch beim Gegner sofort sichtbar.
+      if (car.turbo > 0) {
+        mctx.globalAlpha = 0.55 + 0.45 * Math.abs(Math.sin(race.time * 0.3));
+        mctx.strokeStyle = '#ffd23f';
+        mctx.lineWidth = 1;
+        mctx.strokeRect(cx - r - 1.4, cy - r - 1.4, (r + 1.4) * 2, (r + 1.4) * 2);
+        mctx.globalAlpha = 1;
+      }
     }
   }
 
@@ -856,16 +1147,8 @@ export function createRenderer(canvas, minimapCanvas) {
     for (const car of race.cars) if (!flying(car) && upper(car)) drawCar(ctx, car, race.time);
     for (const car of race.cars) if (flying(car)) drawCar(ctx, car, race.time);
 
-    for (const m of race.missiles) {
-      ctx.save();
-      ctx.translate(m.x, m.y);
-      ctx.rotate(m.angle);
-      ctx.fillStyle = '#eee';
-      ctx.fillRect(-7, -2.5, 14, 5);
-      ctx.fillStyle = '#ff5a2e';
-      ctx.fillRect(4, -2.5, 4, 5);
-      ctx.restore();
-    }
+    drawLockOns(ctx, race.missiles, race.time);
+    for (const m of race.missiles) drawMissile(ctx, m, race.time);
     for (const p of race.particles) {
       ctx.globalAlpha = Math.max(0, p.life / p.max);
       ctx.fillStyle = p.color;

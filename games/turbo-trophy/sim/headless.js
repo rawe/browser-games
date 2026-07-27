@@ -11,9 +11,10 @@
 
 import { tracks } from '../tracks.js';
 import { createCareer } from '../career.js';
-import { createRace, playerCar, standings, stepRace } from '../race.js';
+import { createRace, playerCar, standings, stepRace, useItem } from '../race.js';
 import { createAiState, driveAi, profileFor } from '../ai.js';
-import { gapAlong, posAt } from '../trackGeometry.js';
+import { normalizeAmmo } from '../items.js';
+import { gapAlong, offsetPoint, posAt } from '../trackGeometry.js';
 
 const REFERENCE_PROFILE = profileFor('mittel');
 
@@ -34,8 +35,14 @@ const careerFor = (stage, difficulty) => ({
   engine: stage,
   handling: stage,
   armor: Math.max(0, stage - 1),
-  ammoFront: 2 + stage,
-  ammoRear: 1 + Math.floor(stage / 2),
+  // Arsenal, wie es ein Spieler zu diesem Zeitpunkt plausibel gekauft hätte.
+  ammo: normalizeAmmo({
+    front: 2 + stage,
+    rear: 1 + Math.floor(stage / 2),
+    homing: Math.max(0, stage - 1),
+    turbo: Math.max(0, stage - 1),
+    oil: Math.max(0, stage - 1),
+  }),
 });
 
 /** Ein Rennen simulieren und Kennzahlen zurückgeben. */
@@ -146,6 +153,11 @@ export function simulateRace({
     bridgeTicks: race.stats.bridgeTicks,
     airTicks: race.stats.airTicks,
     crossLevelPasses: race.stats.crossLevelPasses,
+    // Arsenal (Issue #27)
+    homingHits: race.stats.homingHits,
+    turboUses: race.stats.turboUses,
+    turboRams: race.stats.turboRams,
+    oilDrops: race.stats.oilDrops,
     maxBlocked,
     botLaps: bots.map((c) => c.lap),
     convoyShare: share('convoy'),
@@ -219,6 +231,123 @@ export function simulateOvertake({
   };
 }
 
+/** Alle Fahrzeuge entwaffnen – im Szenario soll nur das Gemessene wirken. */
+function disarm(race) {
+  for (const car of race.cars) car.ammo = normalizeAmmo({});
+}
+
+/** Nicht beteiligte Fahrzeuge aus dem Weg räumen. */
+function park(cars) {
+  for (const car of cars) {
+    car.finished = true;
+    car.x = -5000;
+    car.y = -5000;
+    car.s = 0;
+  }
+}
+
+/**
+ * Gezieltes Szenario für die Turbo-Ramme (Issue #27): ein Fahrzeug nimmt mit
+ * aktivem Turbo die Sprungschanze; im Moment des Abhebens wird das Opfer genau
+ * auf den vorausberechneten Landepunkt gesetzt. Geprüft wird die Wirkung der
+ * Landung, nicht wie oft sie im Rennen vorkommt – dafür ist der Fall zu selten.
+ *
+ * `error` verschiebt das Opfer gegen den Landepunkt, um zu sehen, wie genau
+ * man treffen muss.
+ */
+export function simulateTurboRam({ stage = 0, seed = 1, error = 0, ticks = 60 * 12 } = {}) {
+  const race = createRace(tracks[stage], careerFor(stage, 'mittel'), { seed });
+  const ramp = race.track.elements.find((el) => el.type === 'ramp');
+  if (!ramp) return { possible: false };
+
+  const bots = race.cars.filter((c) => !c.isPlayer);
+  const jumper = bots[0];
+  const victim = bots[1];
+  park([playerCar(race), ...bots.slice(2)]);
+  disarm(race);
+
+  race.countdown = 0;
+  const place = (car, s, speed) => {
+    const p = posAt(race.track, s);
+    Object.assign(car, { x: p.x, y: p.y, angle: p.angle, seg: p.seg, s, lat: 0, speed });
+    car.ai.offset = 0;
+  };
+  place(jumper, ramp.s - 120, jumper.maxSpeed);
+  jumper.turbo = 300;
+  jumper.turboMax = 300;
+  // Das Opfer wartet erst einmal weit hinten, bis der Sprung beginnt.
+  place(victim, ramp.s + 900, 0);
+  victim.maxSpeed = 0.01;
+
+  const hpBefore = victim.hp;
+  let placed = false;
+  let airTicks = 0;
+  for (let t = 0; t < ticks; t++) {
+    stepRace(race, { left: false, right: false, gas: false, brake: false });
+    // Während des Flugs den Landepunkt jeden Tick nachführen – das Fahrzeug
+    // beschleunigt in der Luft weiter, eine einmalige Vorhersage beim Abheben
+    // liegt darum daneben. Im letzten Flugtick trifft die Schätzung exakt.
+    if (jumper.air > 0) {
+      if (!placed) airTicks = jumper.air;
+      placed = true;
+      // Auf den Seitenversatz des Springers setzen, nicht auf die Ideallinie –
+      // sonst geht der Sprung seitlich daneben.
+      const q = offsetPoint(race.track, jumper.s + jumper.air * jumper.speed + error, jumper.lat);
+      Object.assign(victim, { x: q.x, y: q.y, angle: q.angle, seg: q.seg, speed: 0 });
+    }
+    if (race.stats.turboRams > 0) break;
+  }
+  return {
+    possible: true,
+    error,
+    jumped: placed,
+    airTicks,
+    rammed: race.stats.turboRams > 0,
+    victimDamage: Math.round(hpBefore - victim.hp),
+    attackerDamage: Math.round(100 - jumper.hp),
+  };
+}
+
+/**
+ * Gezieltes Szenario für die Zielsuchrakete (Issue #27): das Ziel steht
+ * seitlich versetzt, also nicht in Schussrichtung. Eine gerade Rakete verfehlt
+ * dort, eine zielsuchende muss treffen. `homing = false` liefert den
+ * Vergleichswert für dieselbe Aufstellung.
+ */
+export function simulateHoming({ stage = 0, seed = 1, offset = 34, gap = 200, homing = true, ticks = 140 } = {}) {
+  const race = createRace(tracks[stage], careerFor(stage, 'mittel'), { seed });
+  const bots = race.cars.filter((c) => !c.isPlayer);
+  const shooter = bots[0];
+  const target = bots[1];
+  park([playerCar(race), ...bots.slice(2)]);
+  disarm(race);
+
+  race.countdown = 0;
+  const start = race.track.total * 0.5;
+  const put = (car, s, lat) => {
+    const p = offsetPoint(race.track, s, lat);
+    Object.assign(car, { x: p.x, y: p.y, angle: p.angle, seg: p.seg, s, lat, speed: 0 });
+    car.ai.offset = lat;
+    car.maxSpeed = 0.01; // praktisch stehend, damit nur der Flug zählt
+  };
+  put(shooter, start, 0);
+  put(target, start + gap, offset);
+
+  const kind = homing ? 'homing' : 'front';
+  shooter.ammo[kind] = 1;
+  const hpBefore = target.hp;
+  const fired = useItem(race, shooter, kind);
+  const hadTarget = race.missiles[0]?.target === target;
+  for (let t = 0; t < ticks && race.missiles.length; t++) {
+    stepRace(race, { left: false, right: false, gas: false, brake: false });
+  }
+  return {
+    homing, offset, gap, fired, hadTarget,
+    hit: target.hp < hpBefore,
+    damage: Math.round(hpBefore - target.hp),
+  };
+}
+
 /** Mehrere Seeds über eine Strecke mitteln. */
 export function simulateSeries({ stage = 0, difficulty = 'mittel', seeds = 5, firstSeed = 1, ...rest } = {}) {
   const runs = [];
@@ -252,5 +381,9 @@ export function simulateSeries({ stage = 0, difficulty = 'mittel', seeds = 5, fi
     bridgeTicks: mean((r) => r.bridgeTicks),
     airTicks: mean((r) => r.airTicks),
     crossLevelPasses: mean((r) => r.crossLevelPasses),
+    homingHits: mean((r) => r.homingHits),
+    turboUses: mean((r) => r.turboUses),
+    turboRams: mean((r) => r.turboRams),
+    oilDrops: mean((r) => r.oilDrops),
   };
 }

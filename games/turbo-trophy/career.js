@@ -1,12 +1,11 @@
-// Meisterschaft: Konto, Tuning-Stufen, Munition, KI-Schwierigkeit.
+// Meisterschaft: Konto, Tuning-Stufen, Ausrüstung, KI-Schwierigkeit.
 // Reine Datenlogik ohne DOM.
 
 import { DEFAULT_DIFFICULTY } from './ai.js';
+import { ITEMS, itemFor, normalizeAmmo, startingAmmo } from './items.js';
 
 export const MAX_LEVEL = 4;
-export const MAX_AMMO = 8;
 export const UPGRADE_COSTS = [600, 900, 1300, 1800];
-export const AMMO_COSTS = { front: 250, rear: 170 };
 
 // Preisgeld und Meisterschaftspunkte nach Zielposition (Index 0 = Sieg).
 export const PRIZES = [2000, 1200, 800, 300];
@@ -23,8 +22,8 @@ export function createCareer(difficulty = DEFAULT_DIFFICULTY) {
     handling: 0,
     armor: 0,
     hp: 100,
-    ammoFront: 2,
-    ammoRear: 1,
+    // Ausrüstungsbestand nach Item-ID – siehe items.js.
+    ammo: startingAmmo(),
     points: 0,
     stage: 0,
   };
@@ -53,14 +52,22 @@ export function buyUpgrade(career, key) {
   return true;
 }
 
-export function buyAmmo(career, slot) {
-  const key = slot === 'rear' ? 'ammoRear' : 'ammoFront';
-  const cost = AMMO_COSTS[slot];
-  if (career[key] >= MAX_AMMO || career.money < cost) return false;
-  career.money -= cost;
-  career[key]++;
+/** Ein Ausrüstungsstück kaufen. `id` ist eine Item-ID aus `items.js`. */
+export function buyItem(career, id) {
+  const item = itemFor(id);
+  if (!item) return false;
+  const have = career.ammo[id] ?? 0;
+  if (have >= item.max || career.money < item.cost) return false;
+  career.money -= item.cost;
+  career.ammo[id] = have + 1;
   return true;
 }
+
+/** Kann dieses Item gerade gekauft werden? Für die Shop-Darstellung. */
+export const canBuy = (career, id) => {
+  const item = itemFor(id);
+  return Boolean(item) && (career.ammo[id] ?? 0) < item.max && career.money >= item.cost;
+};
 
 /** Rennergebnis in die Karriere übernehmen: Geld, Punkte, Restzustand. */
 export function applyResult(career, { place, car }) {
@@ -68,7 +75,9 @@ export function applyResult(career, { place, car }) {
   career.money += prize;
   career.points += POINTS[place];
   career.hp = Math.max(6, Math.round(car.hp));
-  career.ammoFront = car.ammoFront;
-  career.ammoRear = car.ammoRear;
+  // Verbrauchte Ausrüstung wird nicht nachgefüllt – nachkaufen kostet.
+  career.ammo = normalizeAmmo(car.ammo);
   return prize;
 }
+
+export { ITEMS };

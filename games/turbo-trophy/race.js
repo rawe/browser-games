@@ -6,13 +6,14 @@
 import { buildTrack, gapAlong, posAt, project, ROAD_WIDTH, WORLD } from './trackGeometry.js';
 import { createAiState, driveAi, profileFor } from './ai.js';
 import {
-  buildElements, gateBlocks, gateState, inOil, levelAt, onRamp,
+  buildElements, expireDropped, gateBlocks, gateState, inOil, levelAt, onRamp,
   GROUND, JUMP_TICKS,
 } from './elements.js';
+import { normalizeAmmo, MISSILE, TURBO } from './items.js';
 import { createRng } from './rng.js';
-import { fire } from './weapons.js';
+import { useItem } from './weapons.js';
 
-export { fire };
+export { useItem };
 
 export const PLAYER_COLOR = '#ff4f7b';
 
@@ -69,8 +70,10 @@ export function createRace(trackDef, career, options = {}) {
       respawn: 0,
       invuln: 0,
       fireCooldown: 0,
-      ammoFront: 2,
-      ammoRear: 1,
+      ammo: normalizeAmmo(),
+      turbo: 0,      // Restticks des Turboschubs
+      turboMax: 0,   // Ausgangswert dazu
+      turboJump: false, // der laufende Sprung ist mit Turbo abgehoben
       engine: 0,
       handling: 0,
       armor: 0,
@@ -95,8 +98,15 @@ export function createRace(trackDef, career, options = {}) {
       name: rival.name,
       color: rival.color,
       skill: 1 + rank * profile.spread,
-      ammoFront: 1 + career.stage,
-      ammoRear: 1,
+      // Die Gegner rüsten mit dem Meisterschaftsfortschritt auf – sonst
+      // stünde der Spieler im Finale mit Zielsuchraketen allein da.
+      ammo: normalizeAmmo({
+        front: 1 + career.stage,
+        rear: 1,
+        homing: career.stage >= 2 ? 1 : 0,
+        turbo: Math.min(3, career.stage),
+        oil: career.stage >= 1 ? 1 : 0,
+      }),
       armor: Math.min(3, career.stage),
     }));
   });
@@ -106,8 +116,7 @@ export function createRace(trackDef, career, options = {}) {
     color: PLAYER_COLOR,
     isPlayer: true,
     hp: career.hp,
-    ammoFront: career.ammoFront,
-    ammoRear: career.ammoRear,
+    ammo: normalizeAmmo(career.ammo),
     engine: career.engine,
     handling: career.handling,
     armor: career.armor,
@@ -132,6 +141,11 @@ export function createRace(trackDef, career, options = {}) {
       contacts: 0, aiContacts: 0, overtakes: 0, aiOvertakes: 0,
       // Streckenelemente (Issue #26) – Grundlage der Akzeptanzprüfung.
       jumps: 0,          // Sprünge über Schanzen
+      // Arsenal (Issue #27)
+      homingHits: 0,     // Treffer von Zielsuchraketen
+      turboUses: 0,      // eingesetzte Turboschübe
+      turboRams: 0,      // Landungen eines Turbo-Sprungs auf einem Gegner
+      oilDrops: 0,       // abgelegte Öllachen
       oilHits: 0,        // Fahrzeuge, die ins Schleudern geraten sind
       gateStops: 0,      // Ticks, in denen eine Schranke ein Fahrzeug aufhält
       gateSwitches: 0,   // Zustandswechsel aller Schranken im Rennen
@@ -155,7 +169,12 @@ export function standings(race) {
 }
 
 const turnRateOf = (race, car) => (car.isPlayer ? 0.052 + car.handling * 0.011 : race.profile.turn);
-const accelOf = (race, car) => (car.isPlayer ? 0.085 + car.engine * 0.012 : race.profile.accel);
+
+// Turbo greift an denselben Stellen wie das Tuning – Beschleunigung und
+// Höchstgeschwindigkeit –, nur befristet und deutlich kräftiger.
+const accelOf = (race, car) =>
+  (car.isPlayer ? 0.085 + car.engine * 0.012 : race.profile.accel) * (car.turbo > 0 ? TURBO.accel : 1);
+const topSpeedOf = (car) => car.maxSpeed * (car.turbo > 0 ? TURBO.speed : 1);
 
 function explode(race, x, y, count) {
   for (let i = 0; i < count; i++) {
@@ -189,6 +208,24 @@ function damage(race, car, amount, fromMissile) {
 }
 
 /**
+ * Landung eines Turbo-Sprungs auf einem anderen Fahrzeug (Issue #27).
+ * Wer unten liegt, kassiert heftig; der Angreifer bekommt einen Teil ab –
+ * so bleibt die Ramme ein Risiko und keine kostenlose Waffe.
+ */
+function turboRam(race, car) {
+  for (const other of race.cars) {
+    if (other === car || other.respawn > 0 || other.air > 0) continue;
+    if (other.level !== car.level) continue;
+    if (Math.hypot(other.x - car.x, other.y - car.y) > CAR_RADIUS * 2.2) continue;
+    damage(race, other, TURBO.ramDamage, true);
+    damage(race, car, TURBO.ramSelf, false);
+    race.stats.turboRams++;
+    race.events.push({ type: 'ram' });
+    return;
+  }
+}
+
+/**
  * Wirkung der Streckenelemente auf ein Fahrzeug. Wird mitten in `stepCar`
  * aufgerufen, direkt nach der Bewegung und vor deren Auswertung.
  *
@@ -205,6 +242,8 @@ function stepElements(race, car, prevX, prevY, prevS, pr) {
     if (car.air === 0) {
       car.speed *= 0.94; // Landung kostet etwas Tempo
       race.events.push({ type: 'land' });
+      if (car.turboJump) turboRam(race, car);
+      car.turboJump = false;
     }
   }
 
@@ -217,8 +256,11 @@ function stepElements(race, car, prevX, prevY, prevS, pr) {
       case 'ramp':
         // Abheben nur mit Schwung – langsam drüberrollen tut nichts.
         if (car.air === 0 && car.speed >= RAMP_MIN_SPEED && onRamp(track, el, pr.s, pr.lat)) {
-          car.airMax = Math.round(JUMP_TICKS * el.power * Math.min(1.4, car.speed / 3));
+          // Mit Turbo geht der Sprung deutlich weiter – und wird zur Waffe.
+          const boost = car.turbo > 0 ? TURBO.jump : 1;
+          car.airMax = Math.round(JUMP_TICKS * el.power * boost * Math.min(1.4, car.speed / 3));
           car.air = car.airMax;
+          car.turboJump = car.turbo > 0;
           car.speed *= 1.04;
           race.stats.jumps++;
           race.events.push({ type: 'jump' });
@@ -228,9 +270,13 @@ function stepElements(race, car, prevX, prevY, prevS, pr) {
       case 'oil':
         // In der Luft übersprungen – deshalb sind Schanze und Lache
         // zusammen ein taktisches Mittel.
-        if (car.air === 0 && car.oil === 0 && inOil(el, car.x, car.y)) {
+        if (car.air > 0 || car.oil > 0) break;
+        // Wer selbst abgelegt hat, rutscht kurz nicht darauf aus.
+        if (el.dropped && (el.uses <= 0 || (el.owner === car && race.time < el.safeUntil))) break;
+        if (inOil(el, car.x, car.y)) {
           car.oil = OIL_TICKS;
           car.spin = (race.rng() < 0.5 ? -1 : 1) * (0.22 + race.rng() * 0.16);
+          if (el.dropped) el.uses--;
           race.stats.oilHits++;
           race.events.push({ type: 'skid' });
         }
@@ -277,6 +323,8 @@ function stepCar(race, car, controls) {
       car.invuln = INVULN_TICKS;
       car.air = 0;
       car.oil = 0;
+      car.turbo = 0;
+      car.turboJump = false;
       car.level = levelAt(track, track.elements, car.s);
       if (car.ai) {
         car.ai.offset = 0;
@@ -313,7 +361,9 @@ function stepCar(race, car, controls) {
   const prevY = car.y;
   const prevS = car.s;
 
-  const vmax = car.maxSpeed;
+  if (car.turbo > 0) car.turbo--;
+
+  const vmax = topSpeedOf(car);
   if (gas) car.speed += accelOf(race, car) * Math.max(0.15, 1 - car.speed / vmax);
   else car.speed *= 0.979;
   if (brake) car.speed *= 0.93;
@@ -411,6 +461,19 @@ function stepCollisions(race) {
 function stepMissiles(race) {
   for (let i = race.missiles.length - 1; i >= 0; i--) {
     const m = race.missiles[i];
+
+    // Zielsuchend: Flugbahn jeden Tick etwas Richtung Ziel drehen. Die
+    // begrenzte Drehrate macht sie ausweichbar – sonst träfe sie immer.
+    if (m.kind === 'homing') {
+      if (m.target && (m.target.respawn > 0 || m.target.level !== m.level)) m.target = null;
+      if (m.target) {
+        let delta = Math.atan2(m.target.y - m.y, m.target.x - m.x) - m.angle;
+        delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+        const turn = MISSILE.homing.turn;
+        m.angle += Math.max(-turn, Math.min(turn, delta));
+      }
+    }
+
     m.x += Math.cos(m.angle) * m.speed;
     m.y += Math.sin(m.angle) * m.speed;
     m.life--;
@@ -426,7 +489,8 @@ function stepMissiles(race) {
       if (car.respawn > 0 || (car === m.owner && m.grace > 0)) continue;
       if (car.level !== m.level || car.air > 0) continue; // andere Ebene, kein Treffer
       if (Math.hypot(car.x - m.x, car.y - m.y) < MISSILE_HIT_RADIUS) {
-        damage(race, car, 42, true);
+        damage(race, car, m.damage ?? 42, true);
+        if (m.kind === 'homing') race.stats.homingHits++;
         hit = true;
         break;
       }
@@ -455,6 +519,7 @@ function stepParticles(race) {
 function trackElementStats(race) {
   const elements = race.track.elements;
   if (!elements?.length) return;
+  expireDropped(elements); // abgelegte Lachen versickern lassen
   for (const car of race.cars) {
     if (car.respawn > 0) continue;
     if (car.level !== GROUND) race.stats.bridgeTicks++;

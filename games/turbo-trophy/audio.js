@@ -53,5 +53,11 @@ export function createAudio() {
     land() { tone('sine', 220, 90, 0.14, 0.09); },
     skid() { tone('sawtooth', 320, 150, 0.3, 0.07); },
     gate() { tone('square', 300, 0, 0.12, 0.08); },
+
+    // Arsenal: der Turbo klingt aufsteigend, die Ramme dumpf und schwer.
+    homing() { tone('square', 700, 1250, 0.26, 0.09); },
+    turbo() { tone('sawtooth', 180, 640, 0.4, 0.1); },
+    ram() { tone('sawtooth', 110, 34, 0.5, 0.24); },
+    drop() { tone('sine', 180, 70, 0.18, 0.08); },
   };
 }

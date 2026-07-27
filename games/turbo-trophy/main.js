@@ -2,13 +2,13 @@
 // verdrahten und die feste 60-Hz-Schleife antreiben.
 
 import { tracks } from './tracks.js';
-import { createCareer, applyResult, buyAmmo, buyRepair, buyUpgrade, QUALIFY_PLACES } from './career.js';
-import { createRace, fire, playerCar, standings, stepRace } from './race.js';
+import { createCareer, applyResult, buyItem, buyRepair, buyUpgrade, QUALIFY_PLACES } from './career.js';
+import { createRace, playerCar, standings, stepRace, useItem } from './race.js';
 import { createRenderer } from './render.js';
 import { createHud } from './hud.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
-import { createScreens } from './screens.js';
+import { createScreens, ITEM_BUY_PREFIX } from './screens.js';
 import { createEditor } from './editor.js';
 import { elementsFor } from './trackStorage.js';
 
@@ -26,9 +26,9 @@ let testing = false; // Testfahrt aus dem Editor – ohne Folgen für die Karrie
 let mode = 'title'; // title | shop | race | results | champion | editor
 
 const input = createInput({
-  onFire: (rear) => {
+  onUse: (id) => {
     // Der Sound hängt am Renn-Event, damit Spieler und KI gleich klingen.
-    if (mode === 'race' && race) fire(race, playerCar(race), rear);
+    if (mode === 'race' && race) useItem(race, playerCar(race), id);
   },
   onActivate: () => audio.unlock(),
   isRacing: () => mode === 'race',
@@ -72,10 +72,11 @@ function showEditor() {
 
 function buy(kind) {
   const bought = kind === 'repair' ? buyRepair(career)
-    : kind === 'ammoFront' ? buyAmmo(career, 'front')
-    : kind === 'ammoRear' ? buyAmmo(career, 'rear')
+    : kind.startsWith(ITEM_BUY_PREFIX) ? buyItem(career, kind.slice(ITEM_BUY_PREFIX.length))
     : buyUpgrade(career, kind);
-  if (bought) audio.cash();
+  if (!bought) return;
+  audio.cash();
+  hud.showCareerAmmo(career);
 }
 
 function showShop() {
@@ -167,6 +168,8 @@ const SOUNDS = {
   fire: audio.fire, boom: audio.explosion, beep: audio.beep, go: audio.go,
   // Streckenelemente – unbekannte Ereignisse bleiben stumm.
   jump: audio.jump, land: audio.land, skid: audio.skid,
+  // Arsenal
+  homing: audio.homing, turbo: audio.turbo, ram: audio.ram, drop: audio.drop,
 };
 
 let lastFrame = performance.now();

@@ -192,6 +192,54 @@ export function levelAt(track, elements, s) {
 /** Liegt (x, y) in der Öllache? */
 export const inOil = (el, x, y) => Math.hypot(x - el.x, y - el.y) <= el.radius;
 
+/* ---------- Zur Laufzeit abgelegte Elemente ---------- */
+
+/**
+ * Öllache, die ein Fahrzeug während des Rennens ablegt (Issue #27).
+ *
+ * Bewusst dasselbe Element wie eine fest platzierte Lache – Physik, KI-Reaktion
+ * und Darstellung greifen dadurch unverändert. Zusätzlich trägt sie eine
+ * Lebensdauer, eine Zahl verbleibender Auslösungen und ihren Verursacher.
+ *
+ * Liefert `null`, wenn die Stelle nicht auf der Fahrbahn liegt – neben der
+ * Strecke abgelegtes Öl träfe ohnehin niemanden.
+ */
+export function dropOil(track, x, y, hint, owner, time, options = {}) {
+  const { radius = 26, life = 60 * 22, uses = 3, grace = 45 } = options;
+  const pr = project(track, x, y, hint ?? 0);
+  if (pr.dist > ROAD_WIDTH / 2) return null;
+  return {
+    type: 'oil',
+    at: pr.s / track.total,
+    s: pr.s,
+    lat: pr.lat,
+    radius,
+    x,
+    y,
+    angle: 0,
+    // Kennzeichen der abgelegten Variante – die Darstellung unterscheidet daran.
+    dropped: true,
+    life,
+    maxLife: life,
+    uses,
+    owner,
+    safeUntil: time + grace, // so lange rutscht der Verursacher nicht selbst aus
+  };
+}
+
+/**
+ * Abgelegte Elemente altern lassen und Verbrauchtes entfernen. Verändert die
+ * übergebene Liste an Ort und Stelle.
+ */
+export function expireDropped(elements) {
+  for (let i = elements.length - 1; i >= 0; i--) {
+    const el = elements[i];
+    if (!el.dropped) continue;
+    el.life--;
+    if (el.life <= 0 || el.uses <= 0) elements.splice(i, 1);
+  }
+}
+
 /**
  * Wird die Schanze gerade überfahren? Geprüft wird entlang der Strecke
  * (Bogenlänge) und quer dazu – so bleibt der Test unabhängig von der

@@ -39,6 +39,16 @@ deterministischen Zufallsgenerator (`rng.js`) – gleicher Seed, gleicher Lauf.
 - `simulateOvertake({ stage, difficulty, blockers })` – gezieltes Szenario:
   ein bewusst langsames Auto (oder eine Kolonne) vor einem schnelleren Bot.
   Prüft direkt, ob überholt wird und wie lange es dauert.
+- `simulateTurboRam({ error })` – Turbo-Sprung auf ein anderes Fahrzeug. Das
+  Opfer wird im Moment des Abhebens auf den vorausberechneten Landepunkt
+  gesetzt, `error` verschiebt es dagegen. So lässt sich die Wirkung messen,
+  obwohl der Fall im Rennen viel zu selten auftritt.
+- `simulateHoming({ offset, gap, homing })` – Rakete auf ein seitlich
+  versetztes Ziel. Mit `homing: false` als Vergleichswert: eine gerade Rakete
+  verfehlt dort, eine zielsuchende trifft.
+
+Diese drei Szenarien entwaffnen alle Fahrzeuge und parken die Unbeteiligten –
+gemessen wird nur, was geprüft werden soll.
 
 ## Kennzahlen
 
@@ -55,6 +65,10 @@ deterministischen Zufallsgenerator (`rng.js`) – gleicher Seed, gleicher Lauf.
 | Öl | Auslösungen von Öllachen |
 | Schranke | Zustandswechsel / Ticks, in denen eine Sperre jemanden aufhält |
 | Brücke s | Zeit, die Fahrzeuge auf der oberen Höhenebene verbringen |
+| Zielsuch | Treffer von Zielsuchraketen |
+| Turbo | eingesetzte Turboschübe |
+| Rammen | Landungen eines Turbo-Sprungs auf einem Gegner |
+| Öl abgel. | zur Laufzeit abgelegte Öllachen |
 
 Für die Streckenelemente aus Issue #26 prüft `--check` zusätzlich, dass
 Schanzen tatsächlich befahren werden, Öllachen wirken, Schranken während des
