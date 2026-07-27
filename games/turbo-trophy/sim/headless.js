@@ -11,12 +11,44 @@
 
 import { tracks } from '../tracks.js';
 import { createCareer } from '../career.js';
-import { createRace, playerCar, standings, stepRace, useItem } from '../race.js';
+import { CAR_RADIUS, createRace, playerCar, standings, stepRace, useItem } from '../race.js';
 import { createAiState, driveAi, profileFor } from '../ai.js';
 import { normalizeAmmo } from '../items.js';
 import { gapAlong, offsetPoint, posAt } from '../trackGeometry.js';
 
+/**
+ * Zwei Maßstäbe für den Spielerwagen – beide fahren mit dem KI-Code, aber mit
+ * festem Profil, damit sie sich nicht mitverändern, wenn an den Stufen
+ * geschraubt wird.
+ *
+ * `reference` ist ein durchschnittlicher Fahrer und zeigt, ob die Stufen
+ * überhaupt auseinanderliegen.
+ *
+ * `ace` steht für jemanden, der das Spiel kann: Dauergas, saubere Linie, keine
+ * Fahrfehler, deutlich weniger Tempoverlust in Kurven. Genau daran ist die
+ * Rückmeldung zu Issue #24 gescheitert – gegen den Durchschnittsfahrer sahen
+ * die Stufen sauber gestaffelt aus, ein guter Spieler hat auf SCHWER trotzdem
+ * in der ersten Runde das ganze Feld kassiert. Ohne diesen zweiten Maßstab
+ * misst die Simulation an der Realität vorbei.
+ */
 const REFERENCE_PROFILE = profileFor('mittel');
+
+export const ACE_PROFILE = {
+  ...profileFor('schwer'),
+  id: 'ass',
+  name: 'ASS',
+  curveBrake: 0.5,  // hält in Kurven viel mehr Tempo als jede Stufe
+  lineError: 0,     // kein Pendeln um die Ideallinie
+  mistake: 0,       // keine Fahrfehler
+  reaction: 5,      // reagiert praktisch sofort
+  aggression: 1.4,
+  rubberband: 0,    // der Spieler bekommt keinen Gummibandeffekt
+};
+
+export const DRIVERS = {
+  reference: REFERENCE_PROFILE,
+  ace: ACE_PROFILE,
+};
 
 // Ab so vielen Ticks hinter einem langsameren Auto gilt ein Bot als „klebt fest“.
 const CONVOY_TICKS = 120;
@@ -52,7 +84,9 @@ export function simulateRace({
   seed = 1,
   career: careerPatch = {},
   maxTicks = MAX_TICKS,
-  driver = 'reference', // 'reference' = Vergleichsfahrer, 'parked' = stehendes Hindernis
+  // 'reference' = Durchschnittsfahrer, 'ace' = starker Spieler,
+  // 'parked' = stehendes Hindernis
+  driver = 'reference',
 } = {}) {
   const career = { ...careerFor(stage, difficulty), ...careerPatch, difficulty };
   const trackDef = tracks[stage];
@@ -72,8 +106,8 @@ export function simulateRace({
   let maxBlocked = 0;
   while (!race.over && ticks < maxTicks) {
     let controls = IDLE;
-    if (driver === 'reference') {
-      const ctrl = driveAi(race, me, REFERENCE_PROFILE);
+    if (DRIVERS[driver]) {
+      const ctrl = driveAi(race, me, DRIVERS[driver]);
       controls = {
         left: ctrl.steer < -0.12,
         right: ctrl.steer > 0.12,
@@ -139,6 +173,7 @@ export function simulateRace({
     cars,
     playerPlace: cars.find((c) => c.isPlayer).place,
     playerFinished: cars.find((c) => c.isPlayer).finished,
+    playerAvgSpeed: cars.find((c) => c.isPlayer).avgSpeed,
     botAvgSpeed: bots.reduce((sum, c) => sum + samples.get(c).speedSum, 0) / (bots.length * racing),
     botFinishSeconds: bots.filter((c) => c.finished).map((c) => samples.get(c).finishTick / 60),
     overtakes: race.stats.overtakes,
@@ -228,6 +263,79 @@ export function simulateOvertake({
     seconds: allAt >= 0 ? allAt / 60 : Infinity,
     contacts: race.stats.contacts,
     offroad: bots.some((c) => c.offroad),
+  };
+}
+
+/**
+ * Stehendes Hindernis mitten auf der Strecke. Der Spielerwagen wird auf der
+ * Ideallinie festgenagelt, die Bots fahren ihre Runden und müssen jedes Mal
+ * daran vorbei.
+ *
+ * Gemessen wird nicht, *ob* sie ausweichen wollen, sondern ob sie es schaffen:
+ * Jede Vorbeifahrt zählt als Begegnung, und wer das Hindernis dabei berührt,
+ * geht als Rammer in die Quote ein. Genau das war die Rückmeldung zu Issue #24
+ * – der Ausweichversuch war da, kam aber zu spät.
+ *
+ * `lat` verschiebt das Hindernis quer zur Strecke (0 = Ideallinie).
+ */
+export function simulateParked({
+  stage = 0, difficulty = 'mittel', seed = 1, lat = 0, at = 0.5, ticks = 60 * 120,
+} = {}) {
+  const race = createRace(tracks[stage], careerFor(stage, difficulty), { seed });
+  const track = race.track;
+  const bots = race.cars.filter((c) => !c.isPlayer);
+  disarm(race); // Waffen aus – gemessen wird das Fahren, nicht das Schießen
+
+  const me = playerCar(race);
+  const parkS = track.total * at;
+  const spot = offsetPoint(track, parkS, lat);
+  // `finished` hält den Wagen aus der Wertung und aus der Steuerung heraus,
+  // die hohe Trefferpunktzahl verhindert, dass er weggeschossen respawnt.
+  me.finished = true;
+  me.hp = 1e6;
+  me.maxSpeed = 0;
+  const pin = () => Object.assign(me, {
+    x: spot.x, y: spot.y, angle: spot.angle, seg: spot.seg, s: parkS, lat, speed: 0,
+  });
+  pin();
+
+  race.countdown = 0;
+  const seen = bots.map(() => ({ near: false, hit: false, minDist: Infinity }));
+  let encounters = 0;
+  let rams = 0;
+  let closest = Infinity;
+
+  for (let t = 0; t < ticks; t++) {
+    stepRace(race, { left: false, right: false, gas: false, brake: false });
+    pin(); // Kollisionen schieben das Hindernis sonst nach und nach weg
+
+    bots.forEach((bot, i) => {
+      const st = seen[i];
+      if (bot.respawn > 0) return;
+      const gap = gapAlong(track, bot.s, parkS); // > 0 = Hindernis liegt voraus
+      if (gap > 0 && gap < 300) st.near = true;
+      if (!st.near) return;
+      const dist = Math.hypot(bot.x - me.x, bot.y - me.y);
+      st.minDist = Math.min(st.minDist, dist);
+      if (dist < CAR_RADIUS * 2) st.hit = true;
+      if (gap < -60) { // vorbei – Begegnung auswerten
+        encounters++;
+        if (st.hit) rams++;
+        closest = Math.min(closest, st.minDist);
+        Object.assign(st, { near: false, hit: false, minDist: Infinity });
+      }
+    });
+  }
+
+  return {
+    track: track.def.name,
+    difficulty,
+    seed,
+    encounters,
+    rams,
+    ramShare: encounters ? rams / encounters : 0,
+    closest,
+    laps: bots.map((c) => c.lap),
   };
 }
 
@@ -362,6 +470,7 @@ export function simulateSeries({ stage = 0, difficulty = 'mittel', seeds = 5, fi
     runs,
     playerPlace: mean((r) => r.playerPlace),
     playerWins: runs.filter((r) => r.playerPlace === 1).length / runs.length,
+    playerAvgSpeed: mean((r) => r.playerAvgSpeed),
     seconds: mean((r) => r.seconds),
     botAvgSpeed: mean((r) => r.botAvgSpeed),
     aiOvertakes: mean((r) => r.aiOvertakes),

@@ -9,7 +9,9 @@
 import { tracks } from '../tracks.js';
 import { DIFFICULTIES } from '../ai.js';
 import { ELEMENT_TYPES } from '../elements.js';
-import { simulateHoming, simulateOvertake, simulateSeries, simulateTurboRam } from './headless.js';
+import {
+  simulateHoming, simulateOvertake, simulateParked, simulateSeries, simulateTurboRam,
+} from './headless.js';
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => {
   const [k, v] = a.replace(/^--/, '').split('=');
@@ -57,6 +59,24 @@ for (const stage of stages) {
 }
 table(results);
 
+// Zweiter Durchgang mit dem starken Fahrer am Steuer. Er ist der Maßstab für
+// die Frage aus der Rückmeldung zu Issue #24 – „selbst auf SCHWER überhole ich
+// das ganze Feld in Runde eins“. Der Durchschnittsfahrer oben kann das nicht
+// beantworten, weil er selbst nur mittelmäßig fährt.
+const aces = [];
+for (const stage of stages) {
+  for (const difficulty of levels) aces.push(simulateSeries({ stage, difficulty, seeds, driver: 'ace' }));
+}
+console.log('\nGegen einen starken Fahrer (Referenzprofil „ASS“: Dauergas, saubere Linie, keine Fehler)');
+console.log(['Strecke', 'Stufe', 'Platz Ass', 'Siege', 'Ø Tempo Ass', 'Ø Tempo Bots']
+  .map((h, i) => pad(h, [12, 8, 10, 7, 12, 13][i])).join(' '));
+for (const r of aces) {
+  console.log([
+    pad(r.track, 12), pad(r.difficulty, 8), pad(r.playerPlace.toFixed(2), 10),
+    pad(pct(r.playerWins), 7), pad(r.playerAvgSpeed.toFixed(2), 12), pad(r.botAvgSpeed.toFixed(2), 13),
+  ].join(' '));
+}
+
 if (!args.check) process.exit(0);
 
 /* ---------- Akzeptanzkriterien aus Issue #24 ---------- */
@@ -82,6 +102,7 @@ const meanOf = (list, key) => {
 const checks = [];
 const add = (name, ok, detail) => checks.push({ name, ok, detail });
 const byLevel = (id) => results.filter((r) => r.difficulty === id);
+const aceLevel = (id) => aces.filter((r) => r.difficulty === id);
 const avg = (rows, key) => rows.reduce((s, r) => s + r[key], 0) / (rows.length || 1);
 
 if (levels.length === DIFFICULTIES.length) {
@@ -91,13 +112,32 @@ if (levels.length === DIFFICULTIES.length) {
     speeds.map((v, i) => `${DIFFICULTIES[i].id}=${v.toFixed(2)}`).join('  '));
 
   const places = DIFFICULTIES.map((d) => avg(byLevel(d.id), 'playerPlace'));
-  add('Referenzfahrer wird Stufe für Stufe schlechter',
+  add('Durchschnittsfahrer wird Stufe für Stufe schlechter',
     places.every((v, i) => i === 0 || v > places[i - 1] + 0.3),
     places.map((v, i) => `${DIFFICULTIES[i].id}=${v.toFixed(2)}`).join('  '));
 
-  add('Auch „schwer" bleibt schlagbar (Referenzfahrer nicht immer Letzter)',
-    avg(byLevel('schwer'), 'playerPlace') < 3.9,
-    `Ø Platz ${avg(byLevel('schwer'), 'playerPlace').toFixed(2)}`);
+  // Der Kern der Rückmeldung zu Issue #24: Gemessen wird an einem starken
+  // Fahrer, nicht am Durchschnitt. Gegen den Durchschnittsfahrer sah die
+  // Staffelung schon vorher gut aus – gewonnen hat trotzdem der Spieler.
+  const wins = DIFFICULTIES.map((d) => avg(aceLevel(d.id), 'playerWins'));
+  const aceWins = (id) => avg(aceLevel(id), 'playerWins');
+  const acePlace = (id) => avg(aceLevel(id), 'playerPlace');
+
+  add('Stufen wirken auch auf einen starken Fahrer',
+    wins.every((v, i) => i === 0 || v < wins[i - 1] - 0.1),
+    wins.map((v, i) => `${DIFFICULTIES[i].id}=${pct(v)} Siege`).join('  '));
+
+  add('Auf SCHWER gewinnt auch ein starker Fahrer nicht mehr durch (< 45 % Siege)',
+    aceWins('schwer') < 0.45,
+    `${pct(aceWins('schwer'))} Siege, Ø Platz ${acePlace('schwer').toFixed(2)}`);
+
+  add('SCHWER bleibt schlagbar (starker Fahrer schafft das Podium)',
+    acePlace('schwer') < 3.2 && aceWins('schwer') > 0.05,
+    `Ø Platz ${acePlace('schwer').toFixed(2)}, ${pct(aceWins('schwer'))} Siege`);
+
+  add('LEICHT bleibt ein Einstieg (Durchschnittsfahrer gewinnt)',
+    avg(byLevel('leicht'), 'playerWins') > 0.8,
+    `${pct(avg(byLevel('leicht'), 'playerWins'))} Siege des Durchschnittsfahrers`);
 }
 
 add('Schnellerer Bot überholt den langsameren (≥ 90 % der Duelle)',
@@ -138,6 +178,28 @@ const fewestLaps = Math.min(...parked.map((r) => r.minBotLaps));
 add('Stehendes Hindernis blockiert die Bots nicht dauerhaft',
   worstBlocked < 600 && fewestLaps >= 3,
   `längste Blockade ${(worstBlocked / 60).toFixed(1)} s, wenigste Runden ${fewestLaps} in 150 s`);
+
+// Ausweichen heißt vorbeikommen, nicht nur den Blinker setzen: Aus der
+// Rückmeldung zu Issue #24 – „die Bots versuchen auszuweichen, ich werde
+// trotzdem gerammt“. Hier zählt jede Vorbeifahrt an einem festgenagelten
+// Fahrzeug, und jede Berührung dabei geht in die Quote ein.
+const dodges = [];
+for (const stage of stages) {
+  for (const difficulty of levels) {
+    // Auch seitlich versetzt prüfen – auf der Ideallinie ist der Fall am
+    // eindeutigsten, am Rand wird die Lücke auf einer Seite eng.
+    for (const lat of [0, 22, -22]) {
+      dodges.push(simulateParked({ stage, difficulty, seed: 1, lat }));
+    }
+  }
+}
+const passes = dodges.reduce((s, d) => s + d.encounters, 0);
+const rams = dodges.reduce((s, d) => s + d.rams, 0);
+const nearest = Math.min(...dodges.map((d) => d.closest));
+add('Bots fahren an einem stehenden Fahrzeug vorbei, statt es zu rammen (< 5 %)',
+  passes > 100 && rams / passes < 0.05,
+  `${rams} Berührungen in ${passes} Vorbeifahrten (${pct(rams / Math.max(1, passes))}), ` +
+  `engster Abstand ${nearest.toFixed(1)} (Berührung ab 26)`);
 
 /* ---------- Akzeptanzkriterien aus Issue #26 (Streckenelemente) ---------- */
 
