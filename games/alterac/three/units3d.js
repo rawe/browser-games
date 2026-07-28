@@ -49,8 +49,15 @@ const C = {
   skin: 0xd9b08c,
   fur: 0xb8a794,
   wood: 0x5d4c40,
+  boot: 0x6b5c50, // Stiefel/Handschuhe des Spähers – dunkelste noch lesbare Lederstufe
+  eye: 0x2a2623, // Augen – bewusst unter der ACES-Grenze, winzige Flächen sollen dunkel bleiben
+
   bark: 0x594840,
   barkDark: 0x44362e,
+  // Haupt-Trunk-Flächen von Ivus: heller Treibholz-Ton, der auch unter dem
+  // kalten Szenenlicht klar als Braun liest – C.bark rutscht dort ins Schwarze
+  // und bleibt nur noch für Vertiefungen/Beine, C.barkDark für schmale Fugen.
+  barkLight: 0x7a6a58,
   pine: 0x365a4c,
   pineBright: 0x4a7d58,
   ice: 0xa9cbe8,
@@ -203,8 +210,12 @@ export function createUnits3D({ map, heightAt }) {
   // Alle Baupläne liefern dieselben Teilnamen (torso, armL/armR, legL/legR),
   // damit der Posen-Code generisch bleiben kann.
 
-  // Mittlerer Soldat (~13 hoch, ~420 Dreiecke): Helm, Kettenhemd, Schwert und
-  // Rundschild; Wappenrock und Schildfläche tragen die Fraktionsfarbe.
+  // Mittlerer Soldat (~13 hoch, ~550 Dreiecke): Kettenhemd mit Wappenrock,
+  // Helm mit Wangenschutz und Fraktions-Kamm, vorgehaltenes Schwert und
+  // Rundschild auf Brusthöhe. Die Materialien sind bewusst gestuft (Kette,
+  // Stahl, Leder, Stiefel), damit die Figur auch im kalten Licht nicht zu
+  // einer Fläche verschmilzt; die Fraktion kommt über Wappenrock, Schildfläche
+  // und Helmkamm.
   function buildMedium(faction) {
     const rand = seededRand(faction === 'blue' ? 210 : 211);
     const F = FACTION_COLOR[faction];
@@ -213,54 +224,83 @@ export function createUnits3D({ map, heightAt }) {
     const fig = new THREE.Group();
     fig.rotation.order = 'YXZ';
 
-    fig.add(
-      part('legL', [-1.25, 5.0, 0], [
-        p('box', [1.5, 4.4, 1.6], C.mail, { p: [-1.25, 2.9, 0] }),
-        p('box', [1.8, 1.2, 2.3], C.leatherDark, { p: [-1.25, 0.6, 0.25] }),
-      ]),
-      part('legR', [1.25, 5.0, 0], [
-        p('box', [1.5, 4.4, 1.6], C.mail, { p: [1.25, 2.9, 0] }),
-        p('box', [1.8, 1.2, 2.3], C.leatherDark, { p: [1.25, 0.6, 0.25] }),
-      ])
-    );
+    // Beine: Kettenschenkel, Stahl-Knieplatte, dunkle Stiefel – dieselbe
+    // Stufung wie beim Späher, damit die Silhouette unten nicht zuläuft.
+    const leg = (x) => [
+      p('box', [1.55, 3.0, 1.65], C.mail, { p: [x, 3.8, 0] }), // Kettenschenkel
+      p('box', [1.35, 0.85, 0.5], C.steel, { p: [x, 2.9, 0.8] }), // Knieplatte
+      p('box', [1.65, 2.4, 2.05], C.boot, { p: [x, 1.2, 0.2] }), // Stiefel
+    ];
+    fig.add(part('legL', [-1.25, 5.0, 0], leg(-1.25)), part('legR', [1.25, 5.0, 0], leg(1.25)));
 
     const torsoPivot = [0, 5.2, 0];
     const torso = part('torso', torsoPivot, [
-      p('box', [4.6, 4.6, 2.8], C.mail, { p: [0, 7.5, 0] }),
-      p('box', [4.8, 0.9, 3.0], C.leatherDark, { p: [0, 5.45, 0] }),
+      p('box', [4.6, 4.6, 2.8], C.mail, { p: [0, 7.5, 0] }), // Kettenhemd
+      p('box', [4.8, 0.9, 3.0], C.leatherDark, { p: [0, 5.45, 0] }), // Gürtel
+      p('box', [0.9, 0.65, 0.3], PALETTE.gold, { p: [0, 5.45, 1.5], jitter: 0.05 }), // Schnalle
       p('box', [4.2, 2.2, 2.6], FD, { p: [0, 4.2, 0] }), // Waffenrock
       p('box', [2.6, 4.2, 0.4], F, { p: [0, 7.4, 1.5] }), // Wappenrock vorn
-      p('box', [2.6, 4.2, 0.4], FD, { p: [0, 7.4, -1.5] }),
-      p('box', [2.6, 1.8, 2.7], C.steel, { p: [-3.0, 9.7, 0], r: [0, 0, 0.15] }), // Schultern
-      p('box', [2.6, 1.8, 2.7], C.steel, { p: [3.0, 9.7, 0], r: [0, 0, -0.15] }),
-      p('box', [1.8, 1.7, 1.7], C.skin, { p: [0, 10.55, 0.25] }),
-      p('cyl', [1.35, 1.5, 1.6, 7], C.steel, { p: [0, 11.5, 0] }), // Helm
-      p('cone', [0.5, 1.0, 6], C.steel, { p: [0, 12.7, 0] }),
-      p('box', [0.5, 1.2, 0.5], C.steel, { p: [0, 10.6, 1.05] }), // Nasal
+      p('box', [2.3, 1.9, 0.4], F, { p: [0, 4.1, 1.4] }), // Wappenrock über dem Rock
+      p('box', [2.3, 0.55, 0.44], FD, { p: [0, 3.3, 1.41] }), // Bordüre unten
+      p('box', [2.6, 4.2, 0.4], FD, { p: [0, 7.4, -1.5] }), // Rückenbahn
+      // Schulterplatten mit schmaler FD-Zierlinie, damit sich der Stahl vom
+      // Kettenhemd absetzt.
+      p('box', [2.7, 1.9, 2.8], C.steel, { p: [-3.05, 9.75, 0], r: [0, 0, 0.15] }),
+      p('box', [2.7, 1.9, 2.8], C.steel, { p: [3.05, 9.75, 0], r: [0, 0, -0.15] }),
+      p('box', [2.8, 0.45, 2.9], FD, { p: [-3.05, 9.15, 0], r: [0, 0, 0.15] }),
+      p('box', [2.8, 0.45, 2.9], FD, { p: [3.05, 9.15, 0], r: [0, 0, -0.15] }),
+      // Kopf: größere Gesichtsbox mit Augen, flach ausgestellte Helmglocke,
+      // Wangenschutz und schmaler Nasal – das Gesicht bleibt von schräg oben
+      // frei sichtbar.
+      p('box', [2.0, 1.9, 1.8], C.skin, { p: [0, 10.6, 0.2] }), // Gesicht
+      p('box', [0.38, 0.34, 0.16], C.eye, { p: [-0.45, 10.7, 1.12], jitter: 0.03 }), // Augen
+      p('box', [0.38, 0.34, 0.16], C.eye, { p: [0.45, 10.7, 1.12], jitter: 0.03 }),
+      p('cyl', [1.25, 1.7, 1.6, 7], C.steel, { p: [0, 12.1, 0.1] }), // Helmglocke
+      p('box', [0.5, 1.3, 1.2], C.steelDark, { p: [-1.05, 10.9, 0.55] }), // Wangenschutz
+      p('box', [0.5, 1.3, 1.2], C.steelDark, { p: [1.05, 10.9, 0.55] }),
+      p('box', [0.32, 1.1, 0.35], C.steel, { p: [0, 10.95, 1.2] }), // Nasal
+      p('box', [0.34, 0.75, 2.6], F, { p: [0, 12.9, -0.05] }), // Helmkamm (Fraktion)
     ]);
     fig.add(torso);
 
+    // Schwertarm: Kettenärmel, Stahl-Armschiene, Lederfaust. Die Klinge sitzt
+    // um 1.0 rad nach vorn-oben gekippt an der Faust – in Ruhe (armRest 0.15)
+    // zeigt sie vorgestreckt auf Brusthöhe nach vorn, beim 'slash'-Ausholen
+    // (-1.7) steht sie senkrecht über dem Kopf und im Hieb (0.95) schneidet
+    // sie vorn-unten durch – nie hinter der Schulter.
     const armR = part('armR', [3.0, 9.15, 0], [
-      p('box', [1.25, 3.4, 1.35], C.mail, { p: [3.0, 7.5, 0] }),
-      p('box', [1.3, 1.1, 1.3], C.leather, { p: [3.0, 5.6, 0] }),
-      p('cyl', [0.26, 0.26, 1.4, 6], C.leatherDark, { p: [3.0, 5.6, 0.5] }),
-      p('box', [1.5, 0.28, 0.5], C.steel, { p: [3.0, 6.35, 0.5] }),
-      p('box', [0.85, 4.6, 0.2], C.blade, { p: [3.0, 8.7, 0.5] }),
-      p('cone', [0.44, 0.9, 4], C.blade, { p: [3.0, 11.4, 0.5] }),
+      p('box', [1.3, 2.3, 1.4], C.mail, { p: [3.0, 8.15, 0] }), // Kettenärmel
+      p('box', [1.45, 1.8, 1.55], C.steel, { p: [3.05, 6.35, 0.15] }), // Armschiene
+      p('box', [1.15, 1.05, 1.25], C.boot, { p: [3.05, 5.2, 0.35] }), // Lederfaust
+      p('box', [0.42, 1.5, 0.42], C.leatherDark, { p: [3.05, 5.2, 0.45], r: [1.0, 0, 0] }), // Griff
+      p('box', [0.6, 0.55, 0.6], C.steel, { p: [3.05, 4.69, -0.35], r: [1.0, 0, 0] }), // Knauf
+      p('box', [1.9, 0.28, 0.55], C.steel, { p: [3.05, 5.66, 1.16], r: [1.0, 0, 0] }), // Parierstange
+      p('box', [0.95, 4.4, 0.24], C.blade, { p: [3.05, 6.85, 3.02], r: [1.0, 0, 0] }), // Klinge
+      p('cone', [0.5, 1.1, 4], C.blade, { p: [3.05, 8.31, 5.29], r: [1.0, 0, 0] }), // Spitze
     ]);
+    // Schildarm: Der Rundschild sitzt am Unterarm auf Brusthöhe (Mitte ~7.8),
+    // leicht nach außen und oben gekippt – Stahlrand, FD-Rand, F-Fläche und
+    // Stahlbuckel staffeln sich entlang der Schildnormalen. Beim Verteidigen
+    // (armLx 1.05) wandert er angehoben vor die Brustseite.
+    const shieldTilt = [Math.PI / 2 - 0.22, 0, 0.28];
     const armL = part('armL', [-3.0, 9.15, 0], [
-      p('box', [1.25, 3.4, 1.35], C.mail, { p: [-3.0, 7.5, 0] }),
-      p('cyl', [2.6, 2.6, 0.35, 8], FD, { p: [-3.4, 6.7, 0.85], r: [Math.PI / 2, 0, 0] }),
-      p('cyl', [2.1, 2.1, 0.4, 8], F, { p: [-3.4, 6.7, 0.9], r: [Math.PI / 2, 0, 0] }),
-      p('cyl', [0.6, 0.6, 0.5, 6], C.steel, { p: [-3.4, 6.7, 1.05], r: [Math.PI / 2, 0, 0] }),
+      p('box', [1.3, 2.3, 1.4], C.mail, { p: [-3.0, 8.15, 0] }), // Kettenärmel
+      p('box', [1.45, 1.8, 1.55], C.steel, { p: [-3.05, 6.35, 0.15] }), // Armschiene
+      p('box', [1.15, 1.05, 1.25], C.boot, { p: [-3.05, 5.2, 0.35] }), // Lederfaust
+      p('cyl', [2.7, 2.7, 0.3, 7], C.steel, { p: [-3.8, 8.0, 1.45], r: shieldTilt }), // Stahlrand
+      p('cyl', [2.35, 2.35, 0.3, 7], FD, { p: [-3.83, 8.02, 1.54], r: shieldTilt }), // FD-Rand
+      p('cyl', [1.9, 1.9, 0.32, 7], F, { p: [-3.86, 8.04, 1.64], r: shieldTilt }), // Fläche
+      p('cone', [0.9, 1.0, 6], C.steel, { p: [-3.94, 8.11, 1.92], r: shieldTilt }), // Buckel
     ]);
     attachToTorso(torso, torsoPivot, armR);
     attachToTorso(torso, torsoPivot, armL);
     return fig;
   }
 
-  // Leichter Späher (~11 hoch, ~330 Dreiecke): Kapuze mit Fellkragen, Leder,
-  // zwei Dolche, von Natur aus geduckt (torsoRest); Schärpe in Fraktionsfarbe.
+  // Leichter Späher (~11 hoch, ~470 Dreiecke): zurückgeschlagene Kapuze mit
+  // freiem Gesicht, Fellkragen, Lederkluft in drei Helligkeitsstufen, Köcher
+  // auf dem Rücken und zwei vorgehaltene Dolche; die Fraktion kommt über die
+  // anliegende Diagonal-Schärpe.
   function buildLight(faction) {
     const rand = seededRand(faction === 'blue' ? 220 : 221);
     const F = FACTION_COLOR[faction];
@@ -269,47 +309,70 @@ export function createUnits3D({ map, heightAt }) {
     const fig = new THREE.Group();
     fig.rotation.order = 'YXZ';
 
-    fig.add(
-      part('legL', [-1.0, 4.6, 0], [
-        p('box', [1.2, 4.2, 1.3], C.leather, { p: [-1.0, 2.7, 0] }),
-        p('box', [1.4, 1.0, 1.9], C.leatherDark, { p: [-1.0, 0.5, 0.2] }),
-      ]),
-      part('legR', [1.0, 4.6, 0], [
-        p('box', [1.2, 4.2, 1.3], C.leather, { p: [1.0, 2.7, 0] }),
-        p('box', [1.4, 1.0, 1.9], C.leatherDark, { p: [1.0, 0.5, 0.2] }),
-      ])
-    );
+    // Beine: dunkle Hose, fast schwarze Stiefel mit Fellrand – bewusst dunkler
+    // als die Tunika, damit sich die Silhouette in Stufen liest.
+    const leg = (x) => [
+      p('box', [1.2, 2.4, 1.3], C.leatherDark, { p: [x, 3.55, 0] }), // Hose
+      p('box', [1.45, 0.55, 1.55], C.fur, { p: [x, 2.25, 0.05], jitter: 0.16 }), // Fellrand
+      p('box', [1.3, 1.8, 1.4], C.boot, { p: [x, 1.1, 0.05] }), // Stiefelschaft
+      p('box', [1.35, 0.9, 1.9], C.boot, { p: [x, 0.45, 0.3] }), // Fußkappe
+    ];
+    fig.add(part('legL', [-1.0, 4.6, 0], leg(-1.0)), part('legR', [1.0, 4.6, 0], leg(1.0)));
 
     const torsoPivot = [0, 4.6, 0];
     const torso = part('torso', torsoPivot, [
-      p('box', [3.6, 4.0, 2.2], C.leather, { p: [0, 6.6, 0] }),
-      p('box', [3.8, 0.8, 2.4], C.leatherDark, { p: [0, 4.9, 0] }),
-      p('box', [1.1, 4.4, 0.35], F, { p: [0, 6.7, 1.15], r: [0, 0, 0.6] }), // Schärpe
-      p('box', [2.2, 1.8, 0.3], FD, { p: [0, 3.9, 1.0] }), // Lendenschurz
-      p('cyl', [1.9, 2.2, 1.1, 7], C.fur, { p: [0, 8.75, 0], jitter: 0.16 }), // Fellkragen
-      p('box', [1.7, 1.7, 1.7], C.skin, { p: [0, 9.55, 0.3] }),
-      p('cone', [1.9, 2.6, 6], C.hood, { p: [0, 10.9, -0.1] }), // Kapuze
-      p('box', [2.1, 1.4, 1.9], C.hood, { p: [0, 9.9, -0.35] }),
+      p('box', [3.6, 3.4, 2.2], C.leather, { p: [0, 6.9, 0] }), // Tunika
+      p('box', [3.8, 1.1, 2.4], C.leatherDark, { p: [0, 4.85, 0] }), // Rocksaum
+      p('box', [3.9, 0.55, 2.5], C.leatherDark, { p: [0, 5.55, 0] }), // Gürtel
+      p('box', [0.6, 0.45, 0.2], C.steel, { p: [0, 5.55, 1.3] }), // Schnalle
+      // Schärpe: zwei dünne, anliegende Diagonalbahnen (vorn F, hinten FD) von
+      // der rechten Schulter zur linken Hüfte; die Enden tauchen unter Kragen
+      // bzw. Gürtel ab, nichts schwebt.
+      p('box', [1.05, 3.4, 0.22], F, { p: [0, 7.15, 1.22], r: [0, 0, -0.7] }),
+      p('box', [1.05, 3.4, 0.22], FD, { p: [0, 7.15, -1.22], r: [0, 0, -0.7] }),
+      p('cyl', [1.7, 2.0, 1.0, 7], C.fur, { p: [0, 8.75, -0.2], jitter: 0.18 }), // Fellkragen
+      p('box', [1.8, 1.8, 1.6], C.skin, { p: [0, 9.9, 0.4] }), // Gesicht
+      p('box', [0.34, 0.3, 0.14], C.eye, { p: [-0.42, 10.15, 1.22], jitter: 0.03 }), // Augen
+      p('box', [0.34, 0.3, 0.14], C.eye, { p: [0.42, 10.15, 1.22], jitter: 0.03 }),
+      // Kapuze: kleiner, nach hinten gekippter Kegel plus Nacken- und Stirnteil –
+      // die Öffnung bleibt vorn, das Gesicht frei.
+      p('cone', [1.55, 1.9, 6], C.hood, { p: [0, 11.35, -0.45], r: [-0.4, 0, 0] }),
+      p('box', [2.0, 1.7, 1.3], C.hood, { p: [0, 10.05, -0.8] }), // Nackenteil
+      p('box', [1.9, 0.4, 0.5], C.hood, { p: [0, 10.7, 0.95] }), // Stirnrand
+      // Köcher schräg auf dem Rücken – das Späher-Erkennungszeichen.
+      p('cyl', [0.32, 0.36, 2.7, 5], C.leatherDark, { p: [0.85, 8.1, -1.55], r: [-0.2, 0, -0.5] }),
+      p('cone', [0.13, 0.45, 4], C.blade, { p: [1.55, 9.5, -1.8], r: [-0.2, 0, -0.5] }), // Pfeilspitzen
+      p('cone', [0.13, 0.45, 4], C.blade, { p: [1.28, 9.3, -1.65], r: [-0.2, 0, -0.5] }),
+      p('cone', [0.13, 0.45, 4], C.blade, { p: [1.7, 9.2, -1.95], r: [-0.2, 0, -0.5] }),
     ]);
     fig.add(torso);
 
-    const dagger = (x) => [
-      p('box', [1.0, 2.8, 1.1], C.leather, { p: [x, 6.7, 0] }),
-      p('box', [1.05, 0.9, 1.05], C.skin, { p: [x, 5.15, 0] }),
-      p('cyl', [0.2, 0.2, 0.9, 6], C.leatherDark, { p: [x, 5.15, 0.4] }),
-      p('box', [0.95, 0.22, 0.4], C.steelDark, { p: [x, 5.65, 0.4] }),
-      p('box', [0.55, 2.1, 0.14], C.blade, { p: [x, 6.8, 0.4] }),
-      p('cone', [0.28, 0.6, 4], C.blade, { p: [x, 8.15, 0.4] }),
+    // Arm mit Dolch: Die Klinge sitzt um ~0.95 rad nach vorn gekippt an der
+    // Faust. Der Stich-Angriff schwenkt den Arm um X von -0.55 (ausholen) bis
+    // 1.35 (Stoß) – die Klinge zeigt dabei immer nach vorn: erhoben beim
+    // Ausholen, vorn-unten im Stoß, und in Ruhe (armRest 0.3) schräg vor.
+    const arm = (x) => [
+      p('box', [1.15, 1.6, 1.25], C.leather, { p: [x, 7.6, 0] }), // Ärmel
+      p('box', [1.05, 2.0, 1.15], C.boot, { p: [x, 6.15, 0.3], r: [-0.3, 0, 0] }), // Armstulpe
+      p('box', [0.95, 0.9, 0.95], C.skin, { p: [x, 5.1, 0.7] }), // Faust
+      p('box', [0.34, 0.34, 0.34], C.steelDark, { p: [x, 4.75, 0.21], r: [0.95, 0, 0] }), // Knauf
+      p('box', [1.0, 0.2, 0.38], C.steelDark, { p: [x, 5.42, 1.15], r: [0.95, 0, 0] }), // Parierstange
+      p('box', [0.5, 2.3, 0.16], C.blade, { p: [x, 6.15, 2.16], r: [0.95, 0, 0] }), // Klinge
+      p('cone', [0.27, 0.6, 4], C.blade, { p: [x, 6.97, 3.32], r: [0.95, 0, 0] }), // Spitze
     ];
-    const armR = part('armR', [2.25, 8.15, 0], dagger(2.25));
-    const armL = part('armL', [-2.25, 8.15, 0], dagger(-2.25));
+    const armR = part('armR', [2.25, 8.15, 0], arm(2.25));
+    const armL = part('armL', [-2.25, 8.15, 0], arm(-2.25));
     attachToTorso(torso, torsoPivot, armR);
     attachToTorso(torso, torsoPivot, armL);
     return fig;
   }
 
-  // Schwerer Koloss (~15 hoch, ~500 Dreiecke): massige Platte, Stachelschultern,
-  // Fellumhang-Andeutung, Zweihandhammer; Waffenrock/Tabard in Fraktionsfarbe.
+  // Schwerer Koloss (~15.5 hoch, ~620 Dreiecke): gestufte Plattenrüstung
+  // (heller Brustpanzer, dunkle Beinschienen, Stiefel), ausladende Stier-Hörner,
+  // Visierschlitz statt offenem Gesicht, Fellkragen über beiden Schultern plus
+  // Umhangplatte hinten. Der Zweihandhammer lehnt schräg nach vorn-außen an der
+  // rechten Faust – der zweifarbige Stachelkopf steht frei über und außerhalb
+  // der Schultersilhouette. Fraktion über Tabard, Waffenrock und Schulter-Fugen.
   function buildHeavy(faction) {
     const rand = seededRand(faction === 'blue' ? 230 : 231);
     const F = FACTION_COLOR[faction];
@@ -318,95 +381,175 @@ export function createUnits3D({ map, heightAt }) {
     const fig = new THREE.Group();
     fig.rotation.order = 'YXZ';
 
-    fig.add(
-      part('legL', [-1.8, 5.6, 0], [
-        p('box', [2.2, 5.0, 2.3], C.steelDark, { p: [-1.8, 3.2, 0] }),
-        p('box', [2.5, 1.4, 2.9], C.leatherDark, { p: [-1.8, 0.7, 0.25] }),
-      ]),
-      part('legR', [1.8, 5.6, 0], [
-        p('box', [2.2, 5.0, 2.3], C.steelDark, { p: [1.8, 3.2, 0] }),
-        p('box', [2.5, 1.4, 2.9], C.leatherDark, { p: [1.8, 0.7, 0.25] }),
-      ])
-    );
+    // Beine: dunkle Beinschiene, helle Kniekachel, Stiefel mit Fußkappe –
+    // dieselbe Dreier-Stufung wie bei Späher und Soldat, nur wuchtiger.
+    const leg = (x) => [
+      p('box', [2.3, 3.2, 2.4], C.steelDark, { p: [x, 4.1, 0] }), // Beinschiene
+      p('box', [2.0, 1.0, 0.55], C.steel, { p: [x, 3.1, 1.25] }), // Kniekachel
+      p('box', [2.4, 2.4, 2.5], C.boot, { p: [x, 1.2, 0.1] }), // Stiefelschaft
+      p('box', [2.5, 1.0, 3.0], C.boot, { p: [x, 0.5, 0.4] }), // Fußkappe
+    ];
+    fig.add(part('legL', [-1.8, 5.6, 0], leg(-1.8)), part('legR', [1.8, 5.6, 0], leg(1.8)));
 
     const torsoPivot = [0, 5.8, 0];
     const torso = part('torso', torsoPivot, [
-      p('box', [6.6, 5.2, 3.8], C.steel, { p: [0, 8.6, 0] }),
-      p('box', [6.8, 1.1, 4.0], C.leatherDark, { p: [0, 6.1, 0] }),
-      p('box', [5.6, 2.6, 3.4], FD, { p: [0, 4.9, 0] }), // Waffenrock
-      p('box', [3.4, 4.8, 0.45], F, { p: [0, 8.4, 2.0] }), // Tabard
-      p('box', [7.0, 6.2, 0.9], C.fur, { p: [0, 8.8, -2.25], jitter: 0.16 }), // Fellumhang
-      p('box', [3.4, 2.4, 3.6], C.steel, { p: [-4.2, 11.4, 0], r: [0, 0, 0.2] }), // Schultern
-      p('box', [3.4, 2.4, 3.6], C.steel, { p: [4.2, 11.4, 0], r: [0, 0, -0.2] }),
-      p('cone', [0.7, 1.9, 5], C.steelDark, { p: [-4.5, 13.3, 0] }), // Stacheln
-      p('cone', [0.7, 1.9, 5], C.steelDark, { p: [4.5, 13.3, 0] }),
-      p('box', [1.9, 1.6, 1.8], C.skin, { p: [0, 11.85, 0.55] }),
-      p('cyl', [1.55, 1.7, 1.9, 7], C.steelDark, { p: [0, 12.9, 0.2] }), // Helm
-      p('cone', [0.5, 1.4, 5], C.steelDark, { p: [-1.5, 13.6, 0.2], r: [0, 0, 0.9] }), // Hörner
-      p('cone', [0.5, 1.4, 5], C.steelDark, { p: [1.5, 13.6, 0.2], r: [0, 0, -0.9] }),
+      // Rumpf: oben schmaler als früher, damit die größeren Schulterplatten die
+      // Silhouette dominieren; Gürtel mit Stahlschnalle trennt Panzer und Rock.
+      p('box', [5.8, 4.8, 3.6], C.steel, { p: [0, 8.9, 0] }), // Brustpanzer
+      p('box', [6.2, 1.3, 3.9], C.leatherDark, { p: [0, 6.3, 0] }), // Gürtel
+      p('box', [1.5, 0.95, 0.4], C.steel, { p: [0, 6.3, 2.0], jitter: 0.05 }), // Schnalle
+      p('box', [5.5, 2.4, 3.4], FD, { p: [0, 4.9, 0] }), // Waffenrock
+      p('box', [3.2, 4.4, 0.45], F, { p: [0, 9.0, 1.95] }), // Tabard auf der Brust
+      p('box', [2.7, 2.1, 0.42], F, { p: [0, 4.75, 1.85] }), // Tabard über dem Rock
+      p('box', [2.8, 0.6, 0.46], FD, { p: [0, 3.85, 1.86] }), // Bordüre unten
+      // Fell: Umhangplatte hinten plus Kragen, der über beide Schultern nach
+      // vorn herumreicht – so liest sich das Fell auch frontal.
+      p('box', [7.2, 6.6, 0.9], C.fur, { p: [0, 8.7, -2.35], jitter: 0.18 }), // Umhang
+      // Kragen sitzt tiefer und weiter hinten als der Kopf, damit Gesichtsband
+      // und Sehschlitze frontal frei bleiben.
+      p('cyl', [2.2, 3.0, 1.4, 7], C.fur, { p: [0, 11.15, -0.15], jitter: 0.18 }), // Fellkragen
+      p('box', [2.4, 1.3, 1.5], C.fur, { p: [-2.0, 10.5, 1.6], r: [0, 0.35, 0], jitter: 0.2 }),
+      p('box', [2.4, 1.3, 1.5], C.fur, { p: [2.0, 10.5, 1.6], r: [0, -0.35, 0], jitter: 0.2 }),
+      // Schulterplatten: größer, höher und stärker gekippt als der Rumpf breit
+      // ist; die FD-Zierfuge darunter setzt sie sichtbar vom Panzer ab.
+      p('box', [3.8, 2.6, 4.0], C.steel, { p: [-4.4, 12.0, 0], r: [0, 0, 0.35] }),
+      p('box', [3.8, 2.6, 4.0], C.steel, { p: [4.4, 12.0, 0], r: [0, 0, -0.35] }),
+      p('box', [3.9, 0.55, 4.1], FD, { p: [-4.35, 10.75, 0], r: [0, 0, 0.35] }), // Zierfuge
+      p('box', [3.9, 0.55, 4.1], FD, { p: [4.35, 10.75, 0], r: [0, 0, -0.35] }),
+      p('cone', [0.95, 2.6, 5], C.steel, { p: [-5.15, 14.2, 0], r: [0, 0, 0.35] }), // Stacheln
+      p('cone', [0.95, 2.6, 5], C.steel, { p: [5.15, 14.2, 0], r: [0, 0, -0.35] }),
+      // Kopf: sitzt komplett über der Fellkragen-Oberkante (~11.85), damit
+      // Gesichtsband und Sehschlitze frontal frei bleiben – Kieferschutz unten,
+      // Haut nur als schmales Band, darüber die Helmglocke mit Stier-Hörnern.
+      p('box', [2.1, 1.0, 1.9], C.steelDark, { p: [0, 11.9, 0.55] }), // Kieferschutz
+      p('box', [1.9, 0.85, 1.7], C.skin, { p: [0, 12.65, 0.55] }), // Gesichtsband
+      p('box', [0.55, 0.3, 0.2], C.eye, { p: [-0.48, 12.7, 1.43], jitter: 0.03 }), // Sehschlitze
+      p('box', [0.55, 0.3, 0.2], C.eye, { p: [0.48, 12.7, 1.43], jitter: 0.03 }),
+      p('cyl', [1.6, 1.85, 1.8, 7], C.steel, { p: [0, 13.9, 0.3] }), // Helmglocke
+      p('cone', [0.75, 2.0, 5], C.steel, { p: [-2.25, 14.25, 0.3], r: [0, 0, 1.15] }), // Hörner
+      p('cone', [0.75, 2.0, 5], C.steel, { p: [2.25, 14.25, 0.3], r: [0, 0, -1.15] }),
     ]);
     fig.add(torso);
 
+    // Hammerarm: Der Stiel lehnt schräg nach vorn-außen in der Faust, der Kopf
+    // steht in Ruhe (armRest 0.2) frei bei ~(7.4, 14, 4.5) – klar über und
+    // außerhalb der Schulterplatte. Beim 'smash' (-2.3..1.15 um X) wandert er
+    // hinter den Rücken, im Bogen über den Kopf (Scheitel ~18, unter ui 20)
+    // und schlägt vorn auf Brusthöhe ein.
+    const hr = [0.37, 0, -0.33]; // Stiel-Neigung (vorn-außen)
     const armR = part('armR', [4.3, 11.0, 0], [
-      p('box', [1.8, 4.4, 1.9], C.steel, { p: [4.3, 8.8, 0] }),
-      p('box', [2.0, 1.5, 2.0], C.steelDark, { p: [4.3, 6.3, 0.2] }),
-      p('cyl', [0.35, 0.35, 7.6, 6], C.wood, { p: [4.3, 8.0, 0.75] }), // Hammerstiel
-      p('box', [3.3, 2.2, 2.3], C.steelDark, { p: [4.3, 11.6, 0.75] }), // Hammerkopf
-      p('box', [3.5, 0.6, 2.5], C.steel, { p: [4.3, 11.6, 0.75] }),
+      p('box', [2.0, 2.6, 2.1], C.steel, { p: [4.3, 9.6, 0] }), // Oberarm
+      p('box', [1.9, 2.4, 2.0], C.steelDark, { p: [4.3, 7.5, 0.25] }), // Armschiene
+      p('box', [1.7, 1.5, 1.7], C.boot, { p: [4.3, 6.3, 0.5] }), // Faust
+      p('cyl', [0.5, 0.5, 11.5, 6], C.wood, { p: [5.64, 9.97, 1.92], r: hr }), // Stiel
+      p('cyl', [0.62, 0.62, 0.8, 6], C.steel, { p: [4.72, 7.45, 0.95], r: hr }), // Griffzwinge
+      p('cyl', [0.65, 0.65, 0.9, 6], C.steel, { p: [6.85, 13.3, 3.22], r: hr }), // Kopfzwinge
+      p('box', [0.85, 0.6, 0.85], C.steelDark, { p: [3.79, 4.93, -0.03], r: hr }), // Knauf
+      p('box', [3.8, 2.4, 2.4], C.steelDark, { p: [7.4, 14.8, 3.8], r: hr }), // Hammerkopf
+      p('box', [4.0, 0.9, 2.6], C.steel, { p: [7.4, 14.8, 3.8], r: hr }), // Stahlband
+      // Stacheln auf den Schlagflächen (entlang der Kopfachse ausgerichtet).
+      p('cone', [0.42, 1.1, 4], C.steel, { p: [9.43, 13.9, 4.2], r: [0.37, 0, -1.9] }),
+      p('cone', [0.42, 1.1, 4], C.steel, { p: [9.43, 14.4, 2.9], r: [0.37, 0, -1.9] }),
+      p('cone', [0.65, 1.5, 5], C.steel, { p: [5.22, 15.49, 4.07], r: [0.37, 0, 1.24] }),
     ]);
+    // Zweithand: angewinkelt nach vorn-innen, die Faust liegt auf Höhe des
+    // unteren Stielendes – beim Smash schwingt sie mit (-2.05..1.0) und liest
+    // sich als packende Hand, ohne starr am Stiel zu hängen.
     const armL = part('armL', [-4.3, 11.0, 0], [
-      p('box', [1.8, 4.4, 1.9], C.steel, { p: [-4.3, 8.8, 0] }),
-      p('box', [2.2, 1.7, 2.2], C.steelDark, { p: [-4.3, 6.2, 0.2] }),
+      p('box', [2.0, 2.7, 2.1], C.steel, { p: [-4.3, 9.5, 0] }), // Oberarm
+      p('box', [1.8, 2.5, 1.9], C.steelDark, { p: [-3.8, 7.3, 0.75], r: [-0.5, 0, 0.28] }), // Armschiene
+      p('box', [1.6, 1.4, 1.6], C.boot, { p: [-3.35, 6.3, 1.75] }), // Faust
     ]);
     attachToTorso(torso, torsoPivot, armR);
     attachToTorso(torso, torsoPivot, armL);
     return fig;
   }
 
-  // Ivus der Waldlord (~23 hoch, ~560 Dreiecke): borkiger Rumpf, Nadelkrone,
-  // Ast-Arme, glimmende Augen; blaues Banntuch als Fraktionsakzent.
+  // Ivus der Waldlord (~23 hoch, ~650 Dreiecke): heller Treibholz-Stamm mit
+  // dunklen Borkenfugen, Baum-Gesicht (Brauen-Wulst über glimmenden Augen),
+  // krumme Ast-Arme mit Zweig-Fingern und Nadelbüscheln, verschneite
+  // Nadelkrone; das blaue Banntuch ist um den Stamm geschnürt.
   function buildIvus() {
     const rand = seededRand(240);
     const F = FACTION_COLOR.blue;
+    const FD = FACTION_DARK.blue;
     const p = (kind, args, hex, opts) => prim(rand, kind, args, hex, opts);
     const fig = new THREE.Group();
     fig.rotation.order = 'YXZ';
 
+    // Beine: helles Treibholz wie der Stamm, dunklere Töne nur als Akzent
+    // (Astknubbel und Wurzelzehen), damit die untere Hälfte nicht zuläuft.
     fig.add(
       part('legL', [-1.9, 6.0, 0], [
-        p('cyl', [1.1, 1.8, 6.2, 6], C.bark, { p: [-1.9, 3.0, 0], jitter: 0.2 }),
-        p('cone', [0.7, 1.6, 5], C.barkDark, { p: [-2.6, 0.6, 1.1], r: [1.2, 0, 0] }),
-        p('cone', [0.7, 1.6, 5], C.barkDark, { p: [-1.2, 0.6, 1.1], r: [1.2, 0, 0] }),
+        p('cyl', [1.1, 1.8, 6.2, 6], C.barkLight, { p: [-1.9, 3.0, 0], jitter: 0.24 }),
+        p('oct', [0.75, 0], C.bark, { p: [-2.5, 4.4, 0.9], jitter: 0.18 }), // Astknubbel
+        p('cone', [0.7, 1.6, 5], C.bark, { p: [-2.6, 0.6, 1.1], r: [1.2, 0, 0] }), // Wurzelzehen
+        p('cone', [0.7, 1.6, 5], C.bark, { p: [-1.2, 0.6, 1.1], r: [1.2, 0, 0] }),
       ]),
       part('legR', [1.9, 6.0, 0], [
-        p('cyl', [1.1, 1.8, 6.2, 6], C.bark, { p: [1.9, 3.0, 0], jitter: 0.2 }),
-        p('cone', [0.7, 1.6, 5], C.barkDark, { p: [2.6, 0.6, 1.1], r: [1.2, 0, 0] }),
-        p('cone', [0.7, 1.6, 5], C.barkDark, { p: [1.2, 0.6, 1.1], r: [1.2, 0, 0] }),
+        p('cyl', [1.1, 1.8, 6.2, 6], C.barkLight, { p: [1.9, 3.0, 0], jitter: 0.24 }),
+        p('oct', [0.75, 0], C.bark, { p: [2.5, 4.6, 0.8], jitter: 0.18 }),
+        p('cone', [0.7, 1.6, 5], C.bark, { p: [2.6, 0.6, 1.1], r: [1.2, 0, 0] }),
+        p('cone', [0.7, 1.6, 5], C.bark, { p: [1.2, 0.6, 1.1], r: [1.2, 0, 0] }),
       ])
     );
 
     const torsoPivot = [0, 6.0, 0];
     const torso = part('torso', torsoPivot, [
-      p('cyl', [2.7, 3.7, 9.2, 7], C.bark, { p: [0, 10.4, 0], jitter: 0.22 }),
-      p('box', [2.2, 2.6, 0.9], C.pineBright, { p: [-1.6, 9.0, 2.6], r: [0.2, 0.4, 0] }), // Moos
-      p('box', [1.8, 2.0, 0.8], C.pineBright, { p: [1.8, 11.6, -2.3], r: [0, -0.5, 0.2] }),
-      p('box', [2.4, 2.6, 1.4], C.barkDark, { p: [0, 14.6, 2.4] }), // Gesichtsknorren
-      p('cone', [3.5, 4.6, 7], C.pine, { p: [0, 17.8, 0], jitter: 0.14 }), // Nadelkrone
+      // Stamm in hellem Treibholz-Ton, kräftiges Zittern als Borkenstruktur.
+      p('cyl', [2.7, 3.7, 9.2, 7], C.barkLight, { p: [0, 10.4, 0], jitter: 0.24 }),
+      // Eingesenkte Borkenfugen brechen die Zylinderfläche auf.
+      p('box', [0.5, 6.8, 0.6], C.bark, { p: [-2.4, 10.0, 1.6], r: [0, 0.5, 0.06], jitter: 0.15 }),
+      p('box', [0.45, 5.6, 0.6], C.bark, { p: [2.6, 9.6, -1.0], r: [0, -0.4, -0.05], jitter: 0.15 }),
+      p('box', [0.5, 6.2, 0.6], C.bark, { p: [0.4, 10.4, -2.9], r: [0, 0.1, 0.08], jitter: 0.15 }),
+      // Moos an Schulter und Flanke – groß genug, um im Viewer zu lesen.
+      p('box', [2.8, 3.0, 0.9], C.pineBright, { p: [-2.2, 13.2, 1.3], r: [0, 0.7, 0.15] }),
+      p('box', [2.6, 2.2, 0.9], C.pineBright, { p: [2.5, 10.4, -1.4], r: [0, -0.6, 0] }),
+      // Gesicht: helles Gesichtsfeld, vorspringender Brauen-Wulst, Nasenknubbel.
+      p('box', [2.7, 2.6, 1.1], C.barkLight, { p: [0, 14.2, 2.35], jitter: 0.18 }),
+      p('box', [3.0, 0.8, 1.3], C.barkDark, { p: [0, 15.35, 2.6], r: [0.25, 0, 0] }),
+      p('box', [0.7, 1.15, 0.65], C.bark, { p: [0, 14.15, 3.0], r: [0.1, 0, 0], jitter: 0.2 }),
+      // Nadelkrone mit Schneehauben – bindet Ivus an die verschneiten Bäume.
+      p('cone', [3.5, 4.6, 7], C.pine, { p: [0, 17.8, 0], jitter: 0.14 }),
       p('cone', [2.6, 3.8, 7], C.pine, { p: [0, 19.9, 0], jitter: 0.14 }),
       p('cone', [1.5, 3.0, 6], C.pineBright, { p: [0, 21.9, 0], jitter: 0.14 }),
-      p('box', [1.8, 4.2, 0.35], F, { p: [0, 10.6, 3.15] }), // Banntuch der Allianz
+      p('cone', [0.85, 1.5, 5], PALETTE.snowHigh, { p: [0, 22.7, 0], jitter: 0.06 }), // Schneespitze
+      p('oct', [0.85, 0], PALETTE.snowHigh, { p: [-2.1, 16.6, 2.0], s: [1.5, 0.5, 1.1], r: [0.35, 0.5, 0], jitter: 0.06 }),
+      p('oct', [0.8, 0], PALETTE.snowHigh, { p: [2.3, 16.4, -1.4], s: [1.4, 0.5, 1.0], r: [-0.3, -0.4, 0], jitter: 0.06 }),
+      p('oct', [0.7, 0], PALETTE.snowHigh, { p: [1.5, 19.0, 1.4], s: [1.4, 0.5, 1.0], r: [0.4, -0.6, 0], jitter: 0.06 }),
+      p('oct', [0.65, 0], PALETTE.snowHigh, { p: [-1.4, 19.2, -1.2], s: [1.3, 0.5, 1.0], r: [-0.35, 0.6, 0], jitter: 0.06 }),
+      // Aststummel mit Nadelbüscheln lockern den Übergang Stamm→Krone auf.
+      p('cyl', [0.3, 0.45, 2.4, 5], C.bark, { p: [3.0, 15.4, 0.7], r: [0, 0, -1.3], jitter: 0.2 }),
+      p('cone', [0.75, 1.5, 5], C.pine, { p: [4.0, 15.0, 0.8], r: [Math.PI, 0, 0] }),
+      p('cyl', [0.28, 0.4, 2.2, 5], C.bark, { p: [-2.9, 15.7, -0.9], r: [0.3, 0, 1.3], jitter: 0.2 }),
+      p('cone', [0.65, 1.3, 5], C.pineBright, { p: [-3.8, 15.3, -1.2], r: [Math.PI, 0, 0.3] }),
+      // Banntuch der Allianz: mit dunkler Schnur um den Stamm geschnürt,
+      // FD-Bordüre oben, unten eine Kerbe aus zwei getrennten Bahnen.
+      p('cyl', [3.2, 3.3, 0.5, 7, 1, true], C.barkDark, { p: [0, 12.4, 0], jitter: 0.1 }), // Schnur
+      p('box', [2.3, 0.7, 0.4], FD, { p: [0, 11.85, 3.15], r: [0.08, 0, 0] }), // Bordüre
+      p('box', [2.0, 2.9, 0.32], F, { p: [0, 10.1, 3.3], r: [0.1, 0, 0] }), // Tuch
+      p('box', [0.8, 1.3, 0.32], F, { p: [-0.55, 8.2, 3.42], r: [0.1, 0, 0] }), // Kerbe links
+      p('box', [0.8, 1.3, 0.32], F, { p: [0.55, 8.2, 3.42], r: [0.1, 0, 0] }), // Kerbe rechts
     ]);
+    // Glimmende Augen unter dem Brauen-Wulst plus schmaler Mundschlitz.
     glowPart(torso, torsoPivot, [
-      p('box', [0.55, 0.55, 0.35], 0xaef0b4, { p: [-0.65, 15.0, 3.15] }),
-      p('box', [0.55, 0.55, 0.35], 0xaef0b4, { p: [0.65, 15.0, 3.15] }),
+      p('box', [0.75, 0.75, 0.4], 0xaef0b4, { p: [-0.8, 14.55, 3.0] }),
+      p('box', [0.75, 0.75, 0.4], 0xaef0b4, { p: [0.8, 14.55, 3.0] }),
+      p('box', [1.15, 0.22, 0.35], 0xaef0b4, { p: [0, 13.4, 2.95] }),
     ], matGlowGreen);
     fig.add(torso);
 
+    // Krummer Ast statt Brett: zwei versetzte, sich verjüngende Segmente mit
+    // Knick-Knubbel, Zweig-Fingern und Nadelbüscheln am Handgelenk.
     const branchArm = (side) => [
-      p('box', [1.5, 6.6, 1.5], C.bark, { p: [side * 4.4, 10.6, 0], r: [0, 0, -side * 0.22], jitter: 0.2 }),
-      p('box', [1.2, 4.6, 1.2], C.bark, { p: [side * 5.3, 6.0, 0.4], r: [0.15, 0, -side * 0.1], jitter: 0.2 }),
-      p('cone', [0.5, 1.8, 5], C.pine, { p: [side * 5.6, 3.4, 0.7], r: [Math.PI, 0, 0] }),
-      p('cone', [0.4, 1.4, 5], C.pine, { p: [side * 4.7, 3.9, 0.2], r: [Math.PI, 0, 0.4] }),
+      p('cyl', [0.7, 0.95, 4.8, 5], C.barkLight, { p: [side * 4.5, 11.5, 0], r: [0, 0, -side * 0.3], jitter: 0.24 }), // Oberast
+      p('oct', [0.85, 0], C.bark, { p: [side * 5.5, 9.2, 0.3], jitter: 0.2 }), // Astknick
+      p('cyl', [0.42, 0.62, 4.0, 5], C.barkLight, { p: [side * 5.8, 7.0, 0.8], r: [0.3, 0, side * 0.12], jitter: 0.22 }), // Unterast
+      p('cone', [0.26, 1.7, 4], C.bark, { p: [side * 5.4, 4.4, 1.0], r: [Math.PI, 0, -side * 0.25] }), // Zweig-Finger
+      p('cone', [0.24, 1.5, 4], C.bark, { p: [side * 6.2, 4.6, 1.2], r: [Math.PI, 0, side * 0.3] }),
+      p('cone', [0.22, 1.3, 4], C.bark, { p: [side * 5.9, 4.7, 0.4], r: [Math.PI - 0.3, 0, 0] }),
+      p('cone', [0.7, 1.6, 5], C.pine, { p: [side * 5.6, 5.4, 1.4], r: [Math.PI, 0, 0] }), // Nadelbüschel
+      p('cone', [0.5, 1.2, 4], C.pineBright, { p: [side * 6.1, 5.6, 0.6], r: [Math.PI, 0, side * 0.4] }),
     ];
     const armR = part('armR', [3.9, 13.6, 0], branchArm(1));
     const armL = part('armL', [-3.9, 13.6, 0], branchArm(-1));
@@ -415,8 +558,11 @@ export function createUnits3D({ map, heightAt }) {
     return fig;
   }
 
-  // Lokholar der Eislord (~22 hoch, ~380 Dreiecke): kantige Eisbrocken in
-  // halbtransparentem Material, kalt glimmender Kern; rotes Banner als Akzent.
+  // Lokholar der Eislord (~22 hoch, Krone bis ~23, ~500 Dreiecke): kantige
+  // Eisbrocken in halbtransparentem Material mit gezackter Kontur – Rückenkamm,
+  // Schulterspitzen und Eiskrone lesen auch als Fernsilhouette. Der glimmende
+  // Kern bricht durch Glimm-Ritzen an den Torso-Fugen nach außen; das rote
+  // Horden-Banner hängt als zerrissener Wimpel an der linken Schulter.
   function buildLokholar() {
     const rand = seededRand(241);
     const F = FACTION_COLOR.red;
@@ -425,44 +571,79 @@ export function createUnits3D({ map, heightAt }) {
     const fig = new THREE.Group();
     fig.rotation.order = 'YXZ';
 
+    // Massige Beine: breite Waden-Brocken über flachen Fuß-Platten, dazu je
+    // zwei Eiszapfen an Wade/Knöchel, die nach unten zeigen.
+    const iceLeg = (side) => [
+      p('oct', [1.9, 0], C.ice, { p: [side * 2.0, 4.2, 0], s: [1, 1.7, 1], jitter: 0.16 }), // Schenkel
+      p('oct', [1.8, 0], C.ice, { p: [side * 2.1, 2.0, 0.1], s: [1.35, 1.15, 1.35], jitter: 0.16 }), // Wade
+      p('oct', [1.5, 0], C.iceBright, { p: [side * 2.0, 0.9, 0.5], s: [1.4, 0.7, 1.6], jitter: 0.16 }), // Fußplatte
+      p('cone', [0.45, 1.8, 4], C.iceBright, { p: [side * 3.3, 1.6, 0.6], r: [Math.PI, 0, side * 0.2] }), // Wadenzapfen
+      p('cone', [0.4, 1.5, 4], C.iceBright, { p: [side * 1.1, 1.4, -0.7], r: [Math.PI - 0.2, 0, 0] }), // Knöchelzapfen
+    ];
     fig.add(
-      part('legL', [-2.0, 6.5, 0], [
-        p('oct', [1.9, 0], C.ice, { p: [-2.0, 3.6, 0], s: [1, 1.8, 1], jitter: 0.16 }),
-        p('oct', [1.4, 0], C.iceBright, { p: [-2.0, 0.9, 0.3], jitter: 0.16 }),
-      ], matIce),
-      part('legR', [2.0, 6.5, 0], [
-        p('oct', [1.9, 0], C.ice, { p: [2.0, 3.6, 0], s: [1, 1.8, 1], jitter: 0.16 }),
-        p('oct', [1.4, 0], C.iceBright, { p: [2.0, 0.9, 0.3], jitter: 0.16 }),
-      ], matIce)
+      part('legL', [-2.0, 6.5, 0], iceLeg(-1), matIce),
+      part('legR', [2.0, 6.5, 0], iceLeg(1), matIce)
     );
 
     const torsoPivot = [0, 6.5, 0];
     const torso = part('torso', torsoPivot, [
-      p('ico', [4.4, 0], C.ice, { p: [0, 11.6, 0], s: [1, 1.5, 0.9], jitter: 0.18 }),
-      p('oct', [3.0, 0], C.iceBright, { p: [0, 14.9, 1.0], jitter: 0.18 }),
-      p('oct', [2.6, 0], C.ice, { p: [-1.4, 13.6, -1.8], jitter: 0.18 }),
-      p('oct', [2.4, 0], C.iceBright, { p: [-4.9, 16.3, 0], jitter: 0.18 }), // Schulterbrocken
-      p('oct', [2.4, 0], C.iceBright, { p: [4.9, 16.3, 0], jitter: 0.18 }),
-      p('oct', [1.9, 0], C.iceBright, { p: [0, 18.9, 0], s: [1, 1.5, 1], jitter: 0.18 }), // Haupt
-      p('cone', [0.55, 2.2, 4], C.iceBright, { p: [-1.1, 20.6, -0.3], r: [0, 0, 0.5] }),
-      p('cone', [0.55, 2.2, 4], C.iceBright, { p: [1.1, 20.6, -0.3], r: [0, 0, -0.5] }),
+      p('ico', [4.4, 0], C.ice, { p: [0, 11.6, 0], s: [1.05, 1.5, 0.95], jitter: 0.18 }), // Leib
+      p('oct', [3.0, 0], C.iceBright, { p: [0, 14.7, 1.2], s: [1.15, 1.1, 0.8], jitter: 0.18 }), // Brustplatte
+      p('oct', [2.6, 0], C.ice, { p: [-1.2, 13.4, -2.0], jitter: 0.18 }), // Rückenbrocken
+      p('oct', [2.5, 0], C.iceBright, { p: [-5.0, 16.5, 0], s: [1.1, 0.9, 1], jitter: 0.18 }), // Schulterbrocken
+      p('oct', [2.5, 0], C.iceBright, { p: [5.0, 16.5, 0], s: [1.1, 0.9, 1], jitter: 0.18 }),
+      // Schulterspitzen: kräftige, nach oben-außen gekippte Zacken.
+      p('cone', [0.8, 3.4, 4], C.iceBright, { p: [-5.6, 18.9, -0.6], r: [0, 0, 0.45] }),
+      p('cone', [0.8, 3.4, 4], C.iceBright, { p: [5.6, 18.9, -0.6], r: [0, 0, -0.45] }),
+      p('cone', [0.55, 2.4, 4], C.iceBright, { p: [-4.3, 18.6, 0.4], r: [0.15, 0, 0.2] }),
+      p('cone', [0.55, 2.4, 4], C.iceBright, { p: [4.3, 18.6, 0.4], r: [0.15, 0, -0.2] }),
+      // Rückenkamm: vier gestaffelte, nach hinten gekippte Eiszapfen.
+      p('cone', [0.7, 3.6, 4], C.iceBright, { p: [0, 18.0, -2.2], r: [-0.55, 0, 0] }),
+      p('cone', [0.6, 3.0, 4], C.iceBright, { p: [0, 16.2, -2.8], r: [-0.75, 0, 0.1] }),
+      p('cone', [0.55, 2.6, 4], C.iceBright, { p: [0, 14.2, -3.2], r: [-0.9, 0, -0.1] }),
+      p('cone', [0.45, 2.2, 4], C.iceBright, { p: [0, 12.2, -3.4], r: [-1.05, 0, 0] }),
+      // Haupt mit Eiskrone: drei große Hörner statt Mini-Kegel.
+      p('oct', [2.0, 0], C.iceBright, { p: [0, 19.3, 0.15], s: [1.05, 1.35, 1.05], jitter: 0.18 }),
+      p('cone', [0.7, 3.2, 4], C.iceBright, { p: [0, 21.3, -0.5], r: [-0.2, 0, 0] }), // Mittelhorn
+      p('cone', [0.6, 2.6, 4], C.iceBright, { p: [-1.4, 20.8, -0.2], r: [-0.1, 0, 0.5] }),
+      p('cone', [0.6, 2.6, 4], C.iceBright, { p: [1.4, 20.8, -0.2], r: [-0.1, 0, -0.5] }),
+      // Schräge Brauen-Zacken über den Augen – finsterer Blick.
+      p('cone', [0.32, 1.5, 4], C.iceBright, { p: [-1.15, 20.5, 1.2], r: [0.55, 0, 0.9] }),
+      p('cone', [0.32, 1.5, 4], C.iceBright, { p: [1.15, 20.5, 1.2], r: [0.55, 0, -0.9] }),
     ], matIce);
+    // Kern und Ritzen: das Licht bricht aus dem Inneren durch die Eisplatten –
+    // der Kern sitzt weit vorn, damit er durchs transparente Eis liest, die
+    // Ritzen liegen auf den Torso-Fugen (eine frontal, eine schräg, eine seitlich).
     glowPart(torso, torsoPivot, [
-      p('ico', [1.7, 0], 0xcfe9ff, { p: [0, 12.2, 0] }), // Kern, schimmert durchs Eis
-      p('box', [0.5, 0.5, 0.4], 0xcfe9ff, { p: [-0.65, 19.2, 1.35] }),
-      p('box', [0.5, 0.5, 0.4], 0xcfe9ff, { p: [0.65, 19.2, 1.35] }),
+      p('ico', [2.6, 0], 0xcfe9ff, { p: [0, 12.4, 0.8] }), // Kern
+      p('box', [0.4, 3.2, 0.35], 0xcfe9ff, { p: [1.1, 12.8, 3.3], r: [0.08, 0, -0.22] }), // Ritze frontal
+      p('box', [0.35, 2.2, 0.3], 0xcfe9ff, { p: [-1.6, 11.2, 3.4], r: [0.12, 0, 0.35] }),
+      p('box', [0.35, 2.8, 0.3], 0xcfe9ff, { p: [3.4, 13.0, 1.2], r: [0, -0.55, 0.3] }), // Ritze Flanke
+      p('box', [0.7, 0.7, 0.5], 0xcfe9ff, { p: [-0.8, 19.6, 1.5] }), // Augen
+      p('box', [0.7, 0.7, 0.5], 0xcfe9ff, { p: [0.8, 19.6, 1.5] }),
     ], matGlowIce);
-    // Undurchsichtiges Horden-Banner, damit der blaugraue Eisleib nicht mit der
-    // Allianzfarbe verwechselt wird.
+    // Undurchsichtiger Horden-Wimpel an der linken Schulterspitze (damit der
+    // blaugraue Eisleib nicht mit der Allianzfarbe verwechselt wird): FD-Quer-
+    // stange und Bordüre, schräg wehende F-Bahn, unten eine Kerbe aus zwei Bahnen.
     glowPart(torso, torsoPivot, [
-      p('box', [1.9, 4.8, 0.35], F, { p: [0, 12.0, 3.4] }),
-      p('box', [2.1, 0.7, 0.45], FD, { p: [0, 14.3, 3.4] }),
+      p('box', [2.6, 0.5, 0.5], FD, { p: [-3.3, 16.9, 2.9], r: [0.1, 0, 0.3] }), // Querstange
+      p('box', [2.3, 0.65, 0.4], FD, { p: [-3.15, 16.2, 3.1], r: [0.1, 0, 0.28] }), // Bordüre
+      p('box', [2.1, 3.4, 0.34], F, { p: [-2.75, 14.2, 3.35], r: [0.12, 0, 0.24] }), // Bahn
+      p('box', [0.75, 1.7, 0.34], F, { p: [-3.35, 11.8, 3.6], r: [0.12, 0, 0.3] }), // Kerbe außen
+      p('box', [0.75, 1.5, 0.34], F, { p: [-2.0, 12.0, 3.55], r: [0.12, 0, 0.16] }), // Kerbe innen
     ], matBody);
     fig.add(torso);
 
+    // Lange Brocken-Arme (Reichweite grob wie bei Ivus) mit Klauen-Händen aus
+    // drei Eiszapfen – schwingen beim Überkopfschlag frei an Krone und Kamm vorbei.
     const iceArm = (side) => [
-      p('oct', [2.0, 0], C.ice, { p: [side * 5.0, 13.6, 0], s: [1, 1.7, 1], jitter: 0.18 }),
-      p('oct', [2.4, 0], C.iceBright, { p: [side * 5.1, 10.6, 0.5], jitter: 0.18 }),
+      p('oct', [2.1, 0], C.ice, { p: [side * 5.2, 13.2, 0.2], s: [1, 1.6, 1], jitter: 0.18 }), // Oberarm
+      p('oct', [1.7, 0], C.iceBright, { p: [side * 5.5, 10.4, 0.6], jitter: 0.18 }), // Ellbogen
+      p('oct', [1.8, 0], C.ice, { p: [side * 5.6, 8.4, 0.9], s: [1, 1.5, 1], jitter: 0.18 }), // Unterarm
+      p('oct', [1.6, 0], C.iceBright, { p: [side * 5.6, 6.2, 1.2], jitter: 0.18 }), // Handbrocken
+      p('cone', [0.5, 2.6, 4], C.iceBright, { p: [side * 4.8, 4.6, 1.6], r: [Math.PI - 0.3, 0, side * 0.15] }), // Klauen
+      p('cone', [0.55, 3.0, 4], C.iceBright, { p: [side * 5.7, 4.4, 1.4], r: [Math.PI - 0.2, 0, -side * 0.1] }),
+      p('cone', [0.5, 2.4, 4], C.iceBright, { p: [side * 6.4, 4.7, 1.0], r: [Math.PI - 0.25, 0, -side * 0.35] }),
     ];
     const armR = part('armR', [4.9, 15.8, 0], iceArm(1), matIce);
     const armL = part('armL', [-4.9, 15.8, 0], iceArm(-1), matIce);
