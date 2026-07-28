@@ -40,29 +40,29 @@ export const PALETTE = {
   // Licht & Himmel
   skyTop: 0x131a2e,
   skyHorizon: 0x3d4a6b,
-  fog: 0x2a3350,
-  moonlight: 0x9fb4de, // kaltes Hauptlicht (tief stehender Mond)
-  ambientSky: 0x36415e,
-  ambientGround: 0x1c2130,
+  fog: 0x353f60,
+  moonlight: 0xaec2ea, // kaltes Hauptlicht (tief stehender Mond)
+  ambientSky: 0x4a5878,
+  ambientGround: 0x39415a,
   fireLight: 0xff9a3d, // warme Akzente (Feuerschalen, Fenster)
 
   // Gelände
   snowHigh: 0xdde6f2,
   snowLow: 0xb8c6dc,
-  snowShadow: 0x8d9dc0,
-  rock: 0x5c637a,
-  rockDark: 0x3d4356,
+  snowShadow: 0x9dabc9,
+  rock: 0x757e96,
+  rockDark: 0x565e76, // bewusst über der ACES-Absauf-Schwelle (~0x50), sonst saufen Schattenflanken schwarz ab
   path: 0x9aa3b8, // festgetretener Schnee der Wege
   ice: 0xa9cbe8,
-  pine: 0x27423a,
-  pineDark: 0x1b2f2b,
-  trunk: 0x4a3a30,
+  pine: 0x31504a,
+  pineDark: 0x263e38,
+  trunk: 0x584740,
 
   // Bauwerke
-  stone: 0x7d8499,
-  stoneDark: 0x545b70,
-  woodDark: 0x4d3d33,
-  roof: 0x3a4152,
+  stone: 0x8b92a8,
+  stoneDark: 0x6a7288,
+  woodDark: 0x66554a,
+  roof: 0x5d6480,
   ember: 0xffb75e,
 
   // Fraktionen (aus map.js FACTIONS abgeleitet, hier als Hex-Zahl)

@@ -34,24 +34,25 @@ import { toRoman } from '../config.js';
 // Gemeinsame Materialfarben der Figuren (neutral – die Fraktion kommt wie bei
 // den 2D-Porträts nur über Stoff-/Akzentflächen in FACTION_COLOR/FACTION_DARK).
 const C = {
-  mail: 0x8b93a6,
+  mail: 0x99a1b4,
   steel: 0x9aa2b5,
-  steelDark: 0x666e84,
+  steelDark: 0x757d93,
   blade: 0xdde4f0,
-  // Die Brauntöne liegen bewusst heller als „natürlich": Unter dem rein kalten
-  // Licht der Szene (Mond + blaugraue Hemisphäre) reflektiert Braun kaum etwas
-  // und säuft mit dem ACES-Tone-Mapping zu Schwarz ab – schneegepudertes,
-  // ausgeblichenes Leder und Fell bleiben dagegen lesbar.
-  leather: 0x8f6f52,
-  leatherDark: 0x6a5340,
-  hood: 0x66503c,
+  // Die Braun- und Dunkeltöne liegen deutlich heller als „natürlich": Unter dem
+  // rein kalten Licht der Szene (Mond + blaugraue Hemisphäre) reflektiert Braun
+  // kaum etwas, und alles unter ~0x50 pro Kanal säuft mit dem ACES-Tone-Mapping
+  // zu Schwarz ab – so bleiben die Figuren auch auf der lichtabgewandten Seite
+  // lesbar.
+  leather: 0xa08063,
+  leatherDark: 0x7d654f,
+  hood: 0x78604a,
   skin: 0xd9b08c,
-  fur: 0xa89684,
-  wood: 0x4d3d33,
-  bark: 0x4a3a30,
-  barkDark: 0x352822,
-  pine: 0x2c4a3f,
-  pineBright: 0x3f6b4a,
+  fur: 0xb8a794,
+  wood: 0x5d4c40,
+  bark: 0x594840,
+  barkDark: 0x44362e,
+  pine: 0x365a4c,
+  pineBright: 0x4a7d58,
   ice: 0xa9cbe8,
   iceBright: 0xd6ecfa,
 };

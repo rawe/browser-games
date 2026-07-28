@@ -209,13 +209,12 @@ export function createAtmosphere3D({ scene, camera }) {
   // ------------------------------------------------------------------- Licht
   // Die Hemisphäre hebt Schattenseiten auf lesbares Blaugrau, der „Mond" aus
   // Nordwest setzt harte kalte Kanten. Intensitäten liegen bewusst über 1,
-  // weil das ACES-Tone-Mapping (renderer3d, Exposure 1.05) sonst absäuft.
-  // Die Intensitäten sind auf Lesbarkeit kalibriert: Einheiten müssen aus
-  // jeder Richtung als Figuren erkennbar sein (nicht nur als Silhouetten),
-  // ohne dass die Nacht zur Dämmerung wird – geprüft am dunkelsten Fall,
-  // einer mondabgewandten Figur auf freiem Feld.
-  const hemi = new THREE.HemisphereLight(PALETTE.ambientSky, PALETTE.ambientGround, 2.0);
-  const moon = new THREE.DirectionalLight(PALETTE.moonlight, 2.0);
+  // weil das ACES-Tone-Mapping (renderer3d, Exposure 1.28) sonst absäuft.
+  // Kalibriert auf „blaue Stunde mit Biss": deutlich heller als reine Nacht,
+  // damit Felswände, Türme und Schattenseiten nicht schwarz absaufen –
+  // geprüft am dunkelsten Fall, einer mondabgewandten Figur auf freiem Feld.
+  const hemi = new THREE.HemisphereLight(PALETTE.ambientSky, PALETTE.ambientGround, 2.6);
+  const moon = new THREE.DirectionalLight(PALETTE.moonlight, 2.3);
   moon.position.set(-430, 290, -470); // Nordwest, tief über den Graten
   moon.castShadow = true;
   moon.shadow.mapSize.set(QUALITY.shadowMapSize, QUALITY.shadowMapSize);
@@ -234,15 +233,15 @@ export function createAtmosphere3D({ scene, camera }) {
   // Gegenlicht aus Süden: reißt die mondabgewandten Seiten (Figuren von hinten,
   // Süd-Fassaden) aus dem Schwarz, kühl getönt, damit es nicht als zweite
   // sichtbare Lichtquelle auffällt, sondern nur als Aufhellung liest.
-  const fire = new THREE.DirectionalLight(0x8fa3cc, 0.8);
+  const fire = new THREE.DirectionalLight(0x93a8d4, 1.15);
   fire.position.set(140, 190, 640);
   group.add(hemi, moon, moon.target, fire);
 
   // ------------------------------------------------------------------- Nebel
-  // FogExp2 mit 0.0013: bei 600 Einheiten bleiben ~55 % Restsicht, bei 900
-  // noch ~25 % – die jeweils ferne Talhälfte versinkt stimmungsvoll, der
+  // FogExp2 mit 0.0011: bei 600 Einheiten bleiben ~65 % Restsicht, bei 900
+  // noch ~37 % – die jeweils ferne Talhälfte versinkt stimmungsvoll, der
   // Nahbereich (Kampfdistanz < 400) bleibt klar lesbar.
-  scene.fog = new THREE.FogExp2(PALETTE.fog, 0.0013);
+  scene.fog = new THREE.FogExp2(PALETTE.fog, 0.0011);
 
   // ----------------------------------------------------------- Schneetreiben
   // EIN Points-System in einer kamerazentrierten Box: Flocken, die die Box
