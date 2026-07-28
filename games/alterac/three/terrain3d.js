@@ -772,8 +772,11 @@ export function createTerrain3D({ map }) {
   // uDetailLift hebt jede Detailtextur um ca. den Kehrwert ihres mittleren
   // Grauwerts an: die Bilder liegen im Mittel deutlich unter Weiß, reines
   // Multiplizieren würde das gesamte Terrain abdunkeln. Schnee ist fast weiß
-  // (×1.15), Pfad und Fels sind mitteltonig (×1.7 / ×1.6) – Feinabgleich
-  // erfolgt per Sichtprüfung.
+  // (×1.15), Fels ist mitteltonig (×1.6). Der Pfad liegt mit ×2.05 bewusst
+  // ÜBER seinem Kehrwert (~1.7): Unter ihm dunkelt zusätzlich die
+  // Makro-Abschattung der gebackenen Canvas – erst der höhere Faktor lässt
+  // die festgetretene Struktur lesbar, ohne dass der Weg heller als der
+  // umgebende Schnee wird (per Sichtprüfung in Nah- und Fernsicht kalibriert).
   const detailUniforms = {
     uSnowTex: { value: null },
     uPathTex: { value: null },
@@ -782,7 +785,7 @@ export function createTerrain3D({ map }) {
     uSnowRep: { value: new THREE.Vector2(GW / DETAIL_SNOW_TILE, GH / DETAIL_SNOW_TILE) },
     uPathRep: { value: new THREE.Vector2(GW / DETAIL_PATH_TILE, GH / DETAIL_PATH_TILE) },
     uRockRep: { value: new THREE.Vector2(GW / DETAIL_ROCK_TILE, GH / DETAIL_ROCK_TILE) },
-    uDetailLift: { value: new THREE.Vector3(1.15, 1.7, 1.6) },
+    uDetailLift: { value: new THREE.Vector3(1.15, 2.05, 1.6) },
     uHasDetail: { value: 0 },
   };
 
