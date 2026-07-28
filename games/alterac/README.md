@@ -25,6 +25,38 @@ Eingriffe ab. Wer den gegnerischen Endboss fällt, gewinnt.
 | `result.js`  | Ergebnisbildschirm: Bericht als Blatt über der Karte, samt Sichern und Teilen des Aufmarschs |
 | `main.js`    | Bildschirm-Ablauf, Render-Schleife und das Panel der Simulation (Boss-HUD mit Schild und Vorrat, Ticker) |
 | `config.js`  | Einheitentypen sowie alle Kampf- und Zeitwerte |
+| `three/`     | 3D-Ansicht der Schlacht (Three.js, lazy geladen): `renderer3d.js` (Szene, Kamera, Einbindung), `world.js` (Koordinaten, Stilkanon, Budget), `terrain3d.js`, `buildings3d.js`, `units3d.js`, `atmosphere3d.js`, `effects3d.js`, `textures.js` (optionale Bild-Texturen) |
+
+## Die 3D-Ansicht der Schlacht
+
+Im Setup schaltet **„Schlacht in 3D"** die Simulation auf eine frei befahrbare
+3D-Szene des Tals um (Three.js als npm-Dependency, gebündelt über Vite). Die
+Planung bleibt bewusst auf der 2D-Karte – Wegpunkte antippen ist dort präziser,
+und der geplante Pfad ist als Draufsicht am besten lesbar. Erst die Schlacht,
+in die der Spieler ohnehin nicht mehr eingreift, wird zur Kamerafahrt.
+
+Grundsätze, die alle `three/`-Module einhalten:
+
+- **Reine Darstellung.** Der 3D-Renderer liest – wie `render.js` – nur
+  `view.sim` und `sim.events`. Er hat keinen eigenen Spielzustand; Simulation,
+  Determinismus und Headless-Turnier bleiben unberührt. Scheitert WebGL oder
+  der Lazy-Import, läuft die Schlacht still in 2D weiter.
+- **Gemeinsamer Stilkanon.** `world.js` definiert Koordinatenabbildung
+  (Kartenpixel = Weltmeter, y→z), Farbpalette (düstere Abenddämmerung, kalter
+  Schnee, warme Feuerakzente) und das Leistungsbudget. Zielgerät ist ein iPad:
+  Low-Poly mit Vertex-Farben und flat shading, instanzierte Wiederholobjekte,
+  gedeckelter Pixelratio, eine Schattenkaskade, wenige Punktlichter.
+- **Ein Höhenfeld ist die Wahrheit.** `terrain3d.js` liefert `heightAt(x, y)`
+  in Kartenkoordinaten; Bauwerke, Einheiten und Effekte stellen alles darüber
+  auf das Gelände. Wege und Wegpunkt-Umgebungen sind im Höhenfeld geglättet,
+  damit die per `edgePoint` interpolierten Märsche nie über Buckel springen.
+- **Bilder sind Kosmetik.** `three/textures.js` lädt optionale Texturen aus
+  `assets/3d/` über einen Vite-Glob – vorhandene Dateien werten die Szene auf,
+  fehlende fallen lautlos auf prozedurale Fassungen zurück (dasselbe Prinzip
+  wie bei Porträt- und Gebäude-Atlanten). Die Promptdaten zum Erzeugen stehen
+  in `prompt-3d-texturen.md` (unversioniert).
+
+Für Entwicklung: `?test=sim&3d=1` startet direkt eine CPU-Schlacht in 3D.
 
 ## Wegpunkt-Netzwerk
 

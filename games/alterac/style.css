@@ -382,6 +382,24 @@ html {
   touch-action: pan-y;
 }
 
+/* 3D-Ansicht der Schlacht: füllt den Kartenbereich vollflächig, ohne Scrollen –
+   die Kamera fährt stattdessen durch die Landschaft (MapControls). */
+#map3d-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  overscroll-behavior: contain;
+}
+
+#map3d {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none; /* alle Gesten gehören der 3D-Kamera */
+}
+
 /* ------------------------------------------------------------------ Panel */
 #panel {
   flex: 0 1 auto;
