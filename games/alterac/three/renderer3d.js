@@ -28,7 +28,10 @@ export function createRenderer3D({ canvas, map }) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  // Exposure zusammen mit den Lichtwerten in atmosphere3d.js kalibriert:
+  // hoch genug, dass Einheiten auf dem Nachtfeld lesbar bleiben, niedrig
+  // genug, dass Feuer und Fenster weiterhin als warme Akzente herausstechen.
+  renderer.toneMappingExposure = 1.22;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(50, 1, 1, 4000);
@@ -76,6 +79,7 @@ export function createRenderer3D({ canvas, map }) {
     time += dt;
     controls.update();
     clampCamera();
+    terrain.update?.(time, dt);
     buildings.update(view, time, dt);
     units.update(view, time, dt);
     atmosphere.update(time, dt);

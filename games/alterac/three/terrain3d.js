@@ -6,6 +6,10 @@
 //     heightAt(x, y),   // Terrainhöhe (Welt-Y) an KARTENkoordinate (x, y);
 //                       // schnell, allokationsfrei, außerhalb der Karte
 //                       // liefert sie den geklemmten Randwert
+//     update(time, dt), // Fackel-Flackern: setzt nur die uTime-Uniform der
+//                       // Flammen-Points und die Opacity des Bodenscheins –
+//                       // allokationsfrei. Der Renderer ruft update auf,
+//                       // wenn vorhanden (dt wird derzeit nicht gebraucht).
 //     dispose(),        // Geometrien/Materialien/Texturen freigeben
 //   }
 //
@@ -529,6 +533,111 @@ function makeRockGeometry() {
   return g;
 }
 
+// ------------------------------------------------------------------- Fackeln
+// Feuerschein ohne PointLights: Der Glutkopf glüht über einen Emissive-Zusatz
+// im Material, die Flamme ist ein additiver Punkt-Sprite, der Bodenschein eine
+// additive Scheibe. Das Flackern der Flammen läuft komplett im Vertex-Shader
+// (Attribut aPhase + Uniform uTime) – pro Frame fällt nur eine Uniform an.
+const TORCH_POLE_H = 6.6; // Pfahlhöhe in Welteinheiten
+const TORCH_HEAD_Y = 6.85; // Höhe des Glutkopf-Zentrums über dem Fuß
+
+const FLAME_VERT = /* glsl */ `
+  attribute float aPhase;
+  attribute float aSize;
+  uniform float uTime;
+  varying float vFlicker;
+  void main() {
+    // Grundflackern 0.7 + 0.3·sin, überlagert mit einer inkommensurablen
+    // zweiten Frequenz – die Schwebung wiederholt sich nie sichtbar.
+    float f = 0.7 + 0.3 * sin(uTime * 9.0 + aPhase);
+    f *= 0.78 + 0.22 * sin(uTime * 15.83 + aPhase * 1.7);
+    vFlicker = f;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    // Perspektivische Größe (aSize in ~Welteinheiten); das Flackern moduliert
+    // auch die Ausdehnung leicht, damit die Flamme „atmet".
+    gl_PointSize = clamp(aSize * (0.75 + 0.25 * f) * (620.0 / -mv.z), 2.0, 110.0);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+const FLAME_FRAG = /* glsl */ `
+  uniform sampler2D uMap;
+  varying float vFlicker;
+  void main() {
+    vec4 t = texture2D(uMap, gl_PointCoord);
+    // Spitze bei ~0.5 Alpha – Akzent, keine Lichtquelle.
+    gl_FragColor = vec4(t.rgb, t.a * vFlicker * 0.5);
+  }
+`;
+
+// Weicher radialer Verlauf als Canvas-Textur – für Flammen-Sprite und
+// Bodenschein; die Farbe steckt in den Stops, additive Mischung nutzt Alpha.
+function makeGlowTexture(size, stops) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  for (const [t, col] of stops) g.addColorStop(t, col);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// EINE Geometrie für alle Fackeln (InstancedMesh): schlanker Holzpfahl,
+// dunkler Eisenkorb, Glutkopf als Oktaeder. aGlow markiert die Glut-Vertices –
+// das Material hebt sie auf Emissive (glüht auch unbeleuchtet) und der
+// Schatten-Pass verwirft sie (der Kopf soll keinen Schatten werfen).
+// 30 Dreiecke je Fackel, weit unter dem Budget von 120.
+function makeTorchGeometry() {
+  const rand = seededRand(6363);
+  const cWood = new THREE.Color(PALETTE.woodDark);
+  const cWoodDark = new THREE.Color(PALETTE.woodDark).multiplyScalar(0.55);
+  const cIron = new THREE.Color(0x2b2e3a);
+  const cEmber = new THREE.Color(PALETTE.ember);
+  const cEmberHot = new THREE.Color(0xffe2ac);
+  const tmp = new THREE.Color();
+  const parts = [];
+
+  // Farbe je Facette (flat shading) plus aGlow-Attribut in einem Zug.
+  function colorize(g, fn, glow) {
+    const pos = g.attributes.position;
+    const col = new Float32Array(pos.count * 3);
+    const glo = new Float32Array(pos.count);
+    for (let i = 0; i < pos.count; i += 3) {
+      fn(tmp, pos.getY(i));
+      for (let k = 0; k < 3; k++) {
+        col[(i + k) * 3] = tmp.r;
+        col[(i + k) * 3 + 1] = tmp.g;
+        col[(i + k) * 3 + 2] = tmp.b;
+        glo[i + k] = glow;
+      }
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('aGlow', new THREE.BufferAttribute(glo, 1));
+    parts.push(g);
+  }
+
+  // Pfahl: unten dunkler (Schneekontakt), zur Spitze wärmeres Holz.
+  const pole = new THREE.CylinderGeometry(0.26, 0.4, TORCH_POLE_H, 5, 1, true).toNonIndexed();
+  pole.translate(0, TORCH_POLE_H / 2, 0);
+  colorize(pole, (c, y) => c.copy(cWoodDark).lerp(cWood, Math.min(1, (y / TORCH_POLE_H) * 0.7 + rand() * 0.35)), 0);
+
+  // Eisenkorb: offener Kegelstumpf, fasst den Glutkopf.
+  const basket = new THREE.CylinderGeometry(0.6, 0.32, 0.7, 6, 1, true).toNonIndexed();
+  basket.translate(0, TORCH_POLE_H - 0.25, 0);
+  colorize(basket, (c) => c.copy(cIron).multiplyScalar(0.85 + rand() * 0.3), 0);
+
+  // Glutkopf: kleiner Oktaeder in Glutfarben, Richtung Spitze heißer.
+  const head = new THREE.OctahedronGeometry(0.52, 0);
+  head.translate(0, TORCH_HEAD_Y, 0);
+  colorize(head, (c) => c.copy(cEmber).lerp(cEmberHot, rand() * 0.45), 1);
+
+  const merged = mergeGeometries(parts);
+  for (const g of parts) g.dispose();
+  return merged;
+}
+
 export function createTerrain3D({ map }) {
   const group = new THREE.Group();
 
@@ -957,6 +1066,210 @@ export function createTerrain3D({ map }) {
     group.add(ice);
   }
 
+  // ---------------------------------------------- Fackeln am Wegrand
+  // Deterministische Reihe entlang jeder Weg-Kante: JE STRASSENSEITE alle
+  // ~96–116 Kartenpixel eine Fackel; da die Seiten alternieren, fällt entlang
+  // des Weges alle ~48–58 px eine, versetzt links/rechts – der Zickzack
+  // verhindert den Lichterketten-Eindruck. Seitlicher Versatz 15–18 px von
+  // der Wegmitte: außerhalb des 8-px-Wegkerns und der Marsch-Fahrspuren, aber
+  // noch in der geglätteten Wegblende (kein Hangversatz). Verworfen wird, was
+  // Wegpunkten zu nah kommt (dort stehen Bauwerke/Plätze), in den Bergkranz
+  // ragt, in den Kern eines ANDEREN Weges fiele (Kreuzungsnähe) oder einer
+  // schon gesetzten Fackel einer Nachbarkante zu nah käme. Ergibt auf der
+  // aktuellen Karte 45 Fackeln (Mindestabstand ~31 px).
+  let torchSpots = [];
+  {
+    const rand = seededRand(6161);
+    for (const pts of polys) {
+      let side = rand() < 0.5 ? 1 : -1;
+      let next = 44 + rand() * 10; // erster Abstand ab Kantenanfang
+      let acc = 0;
+      for (let i = 2; i < pts.length; i += 2) {
+        const ax = pts[i - 2];
+        const ay = pts[i - 1];
+        const dx = pts[i] - ax;
+        const dy = pts[i + 1] - ay;
+        const segLen = Math.hypot(dx, dy) || 1e-6;
+        while (acc + segLen >= next) {
+          const t = (next - acc) / segLen;
+          // Seitlicher Versatz entlang der Wegnormalen, leicht variiert.
+          const off = (15 + rand() * 3) * side;
+          const tx = ax + dx * t - (dy / segLen) * off;
+          const ty = ay + dy * t + (dx / segLen) * off;
+          const r1 = rand();
+          const r2 = rand();
+          const r3 = rand();
+          const r4 = rand();
+          const r5 = rand();
+          side = -side;
+          next += 48 + rand() * 10;
+          if (pointDist(tx, ty, nodePts) < 42) continue;
+          if (rectDist(tx, ty) > 0.5) continue;
+          if (polyDist(tx, ty, segs) < 10) continue;
+          let crowded = false;
+          for (const s of torchSpots) {
+            if (Math.hypot(s.x - tx, s.y - ty) < 30) {
+              crowded = true;
+              break;
+            }
+          }
+          if (crowded) continue;
+          torchSpots.push({ x: tx, y: ty, h: heightAt(tx, ty), r1, r2, r3, r4, r5 });
+        }
+        acc += segLen;
+      }
+    }
+    // Deterministisch ausdünnen, falls das Raster über das Ziel hinausschießt.
+    const MAX_TORCHES = 90;
+    if (torchSpots.length > MAX_TORCHES) {
+      const kept = [];
+      for (let i = 0; i < torchSpots.length; i++) {
+        if (Math.floor(((i + 1) * MAX_TORCHES) / torchSpots.length) > Math.floor((i * MAX_TORCHES) / torchSpots.length)) {
+          kept.push(torchSpots[i]);
+        }
+      }
+      torchSpots = kept;
+    }
+  }
+
+  // Fackelmodell: EIN InstancedMesh, Varianz über Neigung/Drehung/Größe.
+  const torchGeo = makeTorchGeometry();
+  const torchMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
+  // Glut-Vertices (aGlow = 1) strahlen ihre Vertex-Farbe als Emissive ab –
+  // der Kopf glüht damit auch ohne Licht, ganz ohne zweites Material.
+  torchMat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlow;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vGlow;')
+      // vColor ist im Standard-Shader je nach Attributlage vec3 ODER vec4
+      // (z. B. mit Instanzfarben) – .rgb funktioniert in beiden Fällen.
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor.rgb * vGlow * 1.4;');
+  };
+  const torches = new THREE.InstancedMesh(torchGeo, torchMat, torchSpots.length);
+  torchSpots.forEach((p, i) => {
+    const s = 0.9 + p.r1 * 0.25;
+    dummy.position.set(toWorldX(p.x), p.h - 0.35, toWorldZ(p.y));
+    dummy.rotation.set((p.r2 - 0.5) * 0.12, p.r3 * Math.PI * 2, (p.r4 - 0.5) * 0.12);
+    dummy.scale.set(s, s, s);
+    dummy.updateMatrix();
+    torches.setMatrixAt(i, dummy.matrix);
+  });
+  torches.castShadow = true;
+  torches.frustumCulled = false; // wie Bäume: über das ganze Tal verteilt
+  // Schatten-Pass: Glut-Vertices verwerfen, damit der (selbst leuchtende)
+  // Kopf keinen Schatten wirft – nur Pfahl und Korb bleiben Schattenwerfer.
+  const torchDepthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  torchDepthMat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlow;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vGlow;')
+      .replace('void main() {', 'void main() {\n\tif (vGlow > 0.5) discard;');
+  };
+  torches.customDepthMaterial = torchDepthMat;
+  group.add(torches);
+
+  // Flammen-Glow: EIN Points-System, je Fackel ein additiver Sprite auf
+  // Kopfhöhe; das Flackern läuft im Shader (aPhase + uTime, siehe FLAME_VERT).
+  // Der Kern ist bewusst warmgelb statt weiß: ACES treibt helle additive
+  // Sprites schnell ins Weiße, ein wärmerer Startton hält die Flamme orange.
+  const flameTex = makeGlowTexture(64, [
+    [0, 'rgba(255, 214, 140, 0.9)'],
+    [0.25, 'rgba(255, 154, 61, 0.6)'], // PALETTE.fireLight
+    [0.6, 'rgba(255, 122, 40, 0.2)'],
+    [1, 'rgba(255, 122, 40, 0)'],
+  ]);
+  const flamePos = new Float32Array(torchSpots.length * 3);
+  const flamePhase = new Float32Array(torchSpots.length);
+  const flameSize = new Float32Array(torchSpots.length);
+  torchSpots.forEach((p, i) => {
+    const s = 0.9 + p.r1 * 0.25;
+    flamePos[i * 3] = toWorldX(p.x);
+    flamePos[i * 3 + 1] = p.h - 0.35 + (TORCH_HEAD_Y + 0.5) * s;
+    flamePos[i * 3 + 2] = toWorldZ(p.y);
+    flamePhase[i] = p.r5 * 100;
+    flameSize[i] = 7 + p.r3 * 3.5;
+  });
+  const flameGeo = new THREE.BufferGeometry();
+  flameGeo.setAttribute('position', new THREE.BufferAttribute(flamePos, 3));
+  flameGeo.setAttribute('aPhase', new THREE.BufferAttribute(flamePhase, 1));
+  flameGeo.setAttribute('aSize', new THREE.BufferAttribute(flameSize, 1));
+  const flameMat = new THREE.ShaderMaterial({
+    uniforms: { uMap: { value: flameTex }, uTime: { value: 0 } },
+    vertexShader: FLAME_VERT,
+    fragmentShader: FLAME_FRAG,
+    transparent: true,
+    depthWrite: false, // Glow verdeckt nichts, wird aber vom Gelände verdeckt
+    blending: THREE.AdditiveBlending,
+  });
+  const flames = new THREE.Points(flameGeo, flameMat);
+  flames.frustumCulled = false;
+  flames.renderOrder = 2; // nach dem Bodenschein, additiv ist die Reihenfolge egal
+  group.add(flames);
+
+  // Bodenschein: Points sind kameragerichtet, ein flacher Schein braucht
+  // deshalb ein eigenes Mesh – EINE gemergte Geometrie aus je einer
+  // bodenparallelen 8-Eck-Scheibe pro Fackel, die dem Gelände folgt (Rand
+  // knapp über heightAt, Mitte leicht gewölbt gegen Durchstoßen). Das sanfte
+  // Gesamtflackern übernimmt update() über die Material-Opacity.
+  const GLOW_SEGS = 8;
+  const glowTex = makeGlowTexture(128, [
+    [0, 'rgba(255, 183, 94, 0.8)'], // PALETTE.ember
+    [0.45, 'rgba(255, 154, 61, 0.35)'],
+    [1, 'rgba(255, 154, 61, 0)'],
+  ]);
+  const glowPos = new Float32Array(torchSpots.length * (GLOW_SEGS + 1) * 3);
+  const glowUv = new Float32Array(torchSpots.length * (GLOW_SEGS + 1) * 2);
+  const glowIdx = new Uint16Array(torchSpots.length * GLOW_SEGS * 3);
+  torchSpots.forEach((p, i) => {
+    const base = i * (GLOW_SEGS + 1);
+    const R = 6 + p.r5 * 2;
+    glowPos[base * 3] = toWorldX(p.x);
+    glowPos[base * 3 + 1] = p.h + 1.5;
+    glowPos[base * 3 + 2] = toWorldZ(p.y);
+    glowUv[base * 2] = 0.5;
+    glowUv[base * 2 + 1] = 0.5;
+    for (let k = 0; k < GLOW_SEGS; k++) {
+      const ang = p.r3 * Math.PI * 2 + (k * Math.PI * 2) / GLOW_SEGS;
+      const ca = Math.cos(ang);
+      const sa = Math.sin(ang);
+      const px = p.x + ca * R;
+      const py = p.y + sa * R;
+      const v = base + 1 + k;
+      glowPos[v * 3] = toWorldX(px);
+      glowPos[v * 3 + 1] = heightAt(px, py) + 1.2;
+      glowPos[v * 3 + 2] = toWorldZ(py);
+      glowUv[v * 2] = 0.5 + ca * 0.5;
+      glowUv[v * 2 + 1] = 0.5 + sa * 0.5;
+      const o = (i * GLOW_SEGS + k) * 3;
+      glowIdx[o] = base;
+      glowIdx[o + 1] = v;
+      glowIdx[o + 2] = base + 1 + ((k + 1) % GLOW_SEGS);
+    }
+  });
+  const glowGeo = new THREE.BufferGeometry();
+  glowGeo.setAttribute('position', new THREE.BufferAttribute(glowPos, 3));
+  glowGeo.setAttribute('uv', new THREE.BufferAttribute(glowUv, 2));
+  glowGeo.setIndex(new THREE.BufferAttribute(glowIdx, 1));
+  const glowMat = new THREE.MeshBasicMaterial({
+    map: glowTex,
+    transparent: true,
+    opacity: 0.2,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide, // Windung egal, Culling für den Schein abschalten
+    fog: false, // additiver Nebel würde den Schein grau aufhellen statt dämpfen
+  });
+  const groundGlow = new THREE.Mesh(glowGeo, glowMat);
+  // Über dem Terrain, aber unter Einheiten: Einheiten sind opak und decken
+  // den Schein per Tiefentest ab; renderOrder 1 hält ihn vor anderen
+  // transparenten Bodenlagen.
+  groundGlow.renderOrder = 1;
+  group.add(groundGlow);
+
   // ---------------------------------------------- optionale Detailtexturen
   // textures.js nutzt import.meta.glob und existiert nur unter Vite – deshalb
   // dynamisch importiert und jeder Fehlschlag bewusst geschluckt: die Bilder
@@ -996,6 +1309,14 @@ export function createTerrain3D({ map }) {
     })
     .catch(() => {});
 
+  // Pro Frame nur zwei Skalar-Zuweisungen: das Flammenflackern rechnet der
+  // Vertex-Shader, der Bodenschein flackert gemeinsam über die Opacity –
+  // zwei inkommensurable Frequenzen, zurückhaltende Amplitude (~0.2 Mitte).
+  function update(time) {
+    flameMat.uniforms.uTime.value = time;
+    glowMat.opacity = 0.17 + 0.03 * Math.sin(time * 8.3) + 0.02 * Math.sin(time * 13.7 + 1.1);
+  }
+
   function dispose() {
     disposed = true;
     groundGeo.dispose();
@@ -1020,9 +1341,19 @@ export function createTerrain3D({ map }) {
       iceGeo.dispose();
       iceMat.dispose();
     }
+    torchGeo.dispose();
+    torchMat.dispose();
+    torchDepthMat.dispose();
+    torches.dispose();
+    flameGeo.dispose();
+    flameMat.dispose();
+    flameTex.dispose();
+    glowGeo.dispose();
+    glowMat.dispose();
+    glowTex.dispose();
     // Texturen aus textures.js gehören dem dortigen geteilten Cache und
     // bleiben unangetastet.
   }
 
-  return { group, heightAt, dispose };
+  return { group, heightAt, update, dispose };
 }

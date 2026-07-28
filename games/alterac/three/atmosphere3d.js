@@ -210,8 +210,12 @@ export function createAtmosphere3D({ scene, camera }) {
   // Die Hemisphäre hebt Schattenseiten auf lesbares Blaugrau, der „Mond" aus
   // Nordwest setzt harte kalte Kanten. Intensitäten liegen bewusst über 1,
   // weil das ACES-Tone-Mapping (renderer3d, Exposure 1.05) sonst absäuft.
-  const hemi = new THREE.HemisphereLight(PALETTE.ambientSky, PALETTE.ambientGround, 1.6);
-  const moon = new THREE.DirectionalLight(PALETTE.moonlight, 1.9);
+  // Die Intensitäten sind auf Lesbarkeit kalibriert: Einheiten müssen aus
+  // jeder Richtung als Figuren erkennbar sein (nicht nur als Silhouetten),
+  // ohne dass die Nacht zur Dämmerung wird – geprüft am dunkelsten Fall,
+  // einer mondabgewandten Figur auf freiem Feld.
+  const hemi = new THREE.HemisphereLight(PALETTE.ambientSky, PALETTE.ambientGround, 2.0);
+  const moon = new THREE.DirectionalLight(PALETTE.moonlight, 2.0);
   moon.position.set(-430, 290, -470); // Nordwest, tief über den Graten
   moon.castShadow = true;
   moon.shadow.mapSize.set(QUALITY.shadowMapSize, QUALITY.shadowMapSize);
@@ -230,7 +234,7 @@ export function createAtmosphere3D({ scene, camera }) {
   // Gegenlicht aus Süden: reißt die mondabgewandten Seiten (Figuren von hinten,
   // Süd-Fassaden) aus dem Schwarz, kühl getönt, damit es nicht als zweite
   // sichtbare Lichtquelle auffällt, sondern nur als Aufhellung liest.
-  const fire = new THREE.DirectionalLight(0x8fa3cc, 0.55);
+  const fire = new THREE.DirectionalLight(0x8fa3cc, 0.8);
   fire.position.set(140, 190, 640);
   group.add(hemi, moon, moon.target, fire);
 
