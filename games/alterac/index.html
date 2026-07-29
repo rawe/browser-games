@@ -53,6 +53,10 @@
         <label class="switch-row" for="opt-supply">⬢ Vorratslager aktiv
           <input type="checkbox" id="opt-supply" class="switch" checked />
         </label>
+        <label class="switch-row" for="opt-view3d">🏔 Schlacht in 3D
+          <input type="checkbox" id="opt-view3d" class="switch" />
+        </label>
+        <small class="field-hint">Die Schlacht läuft als 3D-Kamerafahrt durchs Tal (Planung bleibt auf der Karte). Ein Finger verschiebt, zwei Finger drehen und zoomen.</small>
 
         <details class="advanced" id="advanced">
           <summary>Erweiterte Einstellungen</summary>
@@ -87,6 +91,9 @@
 
   <section id="screen-game" hidden>
     <div id="map-wrap"><canvas id="map" width="480" height="960"></canvas></div>
+    <!-- 3D-Ansicht der Schlacht: ersetzt während der Simulation die 2D-Karte,
+         wenn im Setup „Schlacht in 3D" gewählt ist (renderer3d.js, lazy geladen). -->
+    <div id="map3d-wrap" hidden><canvas id="map3d"></canvas></div>
     <div id="panel"></div>
   </section>
 

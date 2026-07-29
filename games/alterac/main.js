@@ -31,6 +31,8 @@ const renderer = createRenderer(canvas, map);
 const setupEl = document.getElementById('screen-setup');
 const gameEl = document.getElementById('screen-game');
 const mapWrapEl = document.getElementById('map-wrap');
+const map3dWrapEl = document.getElementById('map3d-wrap');
+const canvas3d = document.getElementById('map3d');
 const panelEl = document.getElementById('panel');
 const overlayEl = document.getElementById('overlay');
 const overlayCard = document.getElementById('overlay-card');
@@ -47,6 +49,13 @@ let sim = null;
 let humanFactions = ['blue'];
 let speed = 1;
 let paused = false;
+// 3D-Ansicht der Schlacht (renderer3d.js): wird erst beim ersten Bedarf lazy
+// geladen, je Schlacht neu erzeugt und beim Verlassen der Simulation entsorgt.
+// `sim3dFor` verhindert, dass ein spät aufgelöster Import einer schon
+// verlassenen Schlacht die Anzeige übernimmt. Scheitert Laden oder WebGL,
+// bleibt es still bei der 2D-Karte – 3D ist reine Kosmetik.
+let renderer3d = null;
+let sim3dFor = null;
 let resultShown = false;
 let lastLogCount = 0;
 // Geteilter Aufmarsch aus der Adresszeile (?plan=…). Er gilt für die erste
@@ -248,6 +257,8 @@ document.getElementById('setup-form').addEventListener('submit', (ev) => {
     supplyEnabled: gateOn('supply'),
     // Stärke des Computergegners dieser Partie (nur im CPU-Modus wirksam).
     aiLevel: aiLevelSelect.value,
+    // 3D-Ansicht der Schlacht (nur Darstellung, ohne Einfluss auf die Sim).
+    view3d: document.getElementById('opt-view3d').checked,
     // Einheitenwerte aus dem Erweitert-Bereich (zentral via resolveUnitTypes gelesen).
     unitStats: readUnitStats(),
   };
@@ -269,10 +280,39 @@ function showScreen(phase) {
   view.phase = phase;
 }
 
+// ------------------------------------------------------------------ 3D-Ansicht
+function teardown3D() {
+  sim3dFor = null;
+  if (renderer3d) {
+    renderer3d.dispose();
+    renderer3d = null;
+  }
+  map3dWrapEl.hidden = true;
+  mapWrapEl.hidden = false;
+}
+
+// 2D bleibt sichtbar, bis die 3D-Szene wirklich steht – so gibt es keinen
+// schwarzen Zwischenzustand und jeder Fehler endet einfach in der 2D-Karte.
+async function setup3D(forSim) {
+  sim3dFor = forSim;
+  try {
+    const { createRenderer3D } = await import('./three/renderer3d.js');
+    if (sim3dFor !== forSim || sim !== forSim) return;
+    renderer3d = createRenderer3D({ canvas: canvas3d, map });
+    mapWrapEl.hidden = true;
+    map3dWrapEl.hidden = false;
+    renderer3d.resize();
+  } catch (err) {
+    console.warn('3D-Ansicht nicht verfügbar, es bleibt bei der 2D-Karte.', err);
+    sim3dFor = null;
+  }
+}
+
 function startPlanning(faction) {
   showScreen('plan');
   view.sim = null;
   sim = null;
+  teardown3D();
   renderer.resize();
   const initialCode = pendingPlanCode;
   pendingPlanCode = null;
@@ -333,8 +373,10 @@ function startSim() {
   resultShown = false;
   lastLogCount = 0;
   showScreen('sim');
+  teardown3D();
   renderer.resize();
   buildSimPanel();
+  if (config.view3d) setup3D(sim);
   requestAnimationFrame(() => {
     mapWrapEl.scrollTop = (mapWrapEl.scrollHeight - mapWrapEl.clientHeight) / 2;
   });
@@ -631,6 +673,7 @@ function presentResult() {
     onNewSettings: () => {
       view.sim = null;
       sim = null;
+      teardown3D();
       showScreen('setup');
       window.scrollTo({ top: 0 });
     },
@@ -647,12 +690,20 @@ function frame(now) {
     updateSimPanel();
     if (sim.result && !resultShown) presentResult();
   }
-  if (view.phase !== 'setup') renderer.draw(view, dt);
+  if (view.phase !== 'setup') {
+    // Während der Schlacht übernimmt – falls aktiv – die 3D-Szene; die 2D-Karte
+    // pausiert dann komplett (ihre Leinwand ist ausgeblendet).
+    if (view.phase === 'sim' && renderer3d) renderer3d.draw(view, dt);
+    else renderer.draw(view, dt);
+  }
   requestAnimationFrame(frame);
 }
 
 window.addEventListener('resize', () => {
-  if (view.phase !== 'setup') renderer.resize();
+  if (view.phase !== 'setup') {
+    renderer.resize();
+    renderer3d?.resize();
+  }
 });
 
 // ------------------------------------------- Rückkehr aus dem Hintergrund
@@ -679,7 +730,10 @@ window.addEventListener('resize', () => {
 // Hintergrundebene.
 function repaintAfterRestore() {
   if (view.phase === 'setup') return;
-  requestAnimationFrame(() => renderer.resize());
+  requestAnimationFrame(() => {
+    renderer.resize();
+    renderer3d?.resize();
+  });
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -704,6 +758,9 @@ const params = new URLSearchParams(location.search);
 // nie. Passt der Plan nicht zu den gewählten Einstellungen, kürzt ihn der Planer
 // beim Übernehmen und sagt es.
 pendingPlanCode = params.get('plan');
+// `&3d=1` schaltet die 3D-Ansicht für die Testeinstiege ein (im normalen
+// Ablauf entscheidet der Setup-Schalter).
+if (params.has('3d')) config.view3d = true;
 if (params.get('test') === 'sim') {
   mode = 'cpu';
   humanFactions = []; // beide Seiten spielt der Computer
