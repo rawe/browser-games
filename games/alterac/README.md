@@ -56,7 +56,14 @@ Grundsätze, die alle `three/`-Module einhalten:
   wie bei Porträt- und Gebäude-Atlanten). Die Promptdaten zum Erzeugen stehen
   in `prompt-3d-texturen.md` (unversioniert).
 
-Für Entwicklung: `?test=sim&3d=1` startet direkt eine CPU-Schlacht in 3D.
+Für Entwicklung: `?test=sim&3d=1` startet direkt eine CPU-Schlacht in 3D;
+`&models=1` aktiviert dabei die kuratierten GLB-Einheitenmodelle (CC0,
+Quellen in `three/models3d.js`). Zur Einzelsichtung gibt es zwei
+Dev-Viewer (nur Dev-Server, kein Build-Einstieg): `dev-units.html` zeigt
+alle Einheitenfiguren mit schaltbaren Animationszuständen, `dev-buildings.html`
+alle Bauwerke – beide in der Nachtlichtstimmung des Spiels, mit Fokusfahrt
+je Figur/Gebäude (Drehung per Maus/Finger), Touch-Bedienung fürs Handy und
+Konsolen-API (`__devUnits`/`__devBuildings`) für Screenshot-Skripte.
 
 ## Wegpunkt-Netzwerk
 
