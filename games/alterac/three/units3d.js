@@ -31,6 +31,14 @@ import { toWorldX, toWorldZ, FACTION_COLOR, FACTION_DARK, PALETTE, seededRand } 
 import { edgePoint } from '../map.js';
 import { toRoman } from '../config.js';
 
+// PROTOTYP: Hinter dem URL-Flag `?models` ersetzen fertige GLB-Modelle
+// (models3d.js, dynamischer Import) testweise die handgebauten Figuren –
+// je Fraktion+Trupptyp ein Modell, dazu der Yeti als Boss Lokholar.
+// Ivus (blauer Boss) bleibt immer handgebaut. Ohne Flag bleibt ALLES exakt
+// wie bisher, das Modul models3d.js wird dann nie geladen.
+const USE_MODELS =
+  typeof location !== 'undefined' && new URLSearchParams(location.search).has('models');
+
 // Gemeinsame Materialfarben der Figuren (neutral – die Fraktion kommt wie bei
 // den 2D-Porträts nur über Stoff-/Akzentflächen in FACTION_COLOR/FACTION_DARK).
 const C = {
@@ -117,6 +125,87 @@ function swing(u, windup, strike, rest) {
 export function createUnits3D({ map, heightAt }) {
   const group = new THREE.Group();
   group.name = 'units3d';
+
+  // ------------------------------------------- PROTOTYP: GLB-Modelle laden
+  // Nur bei aktivem `?models`-Flag: models3d.js dynamisch nachladen. Bis die
+  // Modelle da sind, bleiben betroffene Trupps ein leerer Wrapper (nur
+  // UI-Sprite sichtbar); bei Ladefehlern fällt alles auf die handgebauten
+  // Figuren zurück (rec.useModel wird zurückgesetzt, s. attachModel/Fallback).
+  let modelsApi = null; // Modul models3d.js
+  // { blue: {light,medium,heavy}, red: {light,medium,heavy,lokholar} } nach
+  // erfolgreichem Laden – einzelne Slots können fehlen (Ladefehler je Modell).
+  let unitModels = null;
+  let modelsFailed = false;
+  let disposed = false;
+  if (USE_MODELS) {
+    import('./models3d.js')
+      .then(async (mod) => {
+        const loaded = await mod.loadUnitModels();
+        if (disposed) {
+          mod.disposeUnitModels(loaded);
+          return;
+        }
+        modelsApi = mod;
+        unitModels = loaded;
+        // Bereits angelegte Trupps nachrüsten.
+        for (const rec of records.values()) if (rec.useModel && !rec.mixer) attachModel(rec);
+      })
+      .catch((err) => {
+        console.warn('[units3d] GLB-Prototyp konnte nicht laden – Fallback auf handgebaute Figuren.', err);
+        modelsFailed = true;
+        for (const rec of records.values()) if (rec.useModel && !rec.mixer) fallbackToTemplate(rec);
+      });
+  }
+
+  // Hängt den passenden Modell-Klon samt AnimationMixer in den Wrapper eines
+  // Trupp-Records (erst möglich, sobald die GLBs geladen sind).
+  function attachModel(rec) {
+    const entry = unitModels?.[rec.modelFaction]?.[rec.modelSlot];
+    // PROTOTYP-Diagnose: belegt je Trupp die Zuordnung Fraktion+Typ→Modell
+    // (Sichtprüfung: Position auf der Karte verrät NICHT die Fraktion –
+    // blaue Angreifer stehen auch an der roten Nord-Festung).
+    console.log(
+      '[units3d] attach faction=%s slot=%s → %s',
+      rec.modelFaction,
+      rec.modelSlot,
+      entry ? entry.label : 'FEHLT → handgebauter Fallback'
+    );
+    if (!entry) {
+      // Nur dieses eine Modell fehlt (Ladefehler): der betroffene Trupp fällt
+      // auf die handgebaute Figur zurück, alle anderen behalten ihr Modell.
+      fallbackToTemplate(rec);
+      return;
+    }
+    const target = modelsApi.TARGET_HEIGHT[rec.modelSlot] ?? modelsApi.TARGET_HEIGHT.medium;
+    const model = modelsApi.cloneModel(entry, target);
+    rec.fig.add(model);
+    rec.mixer = new THREE.AnimationMixer(model);
+    rec.actions = {};
+    const roles = modelsApi.pickClips(entry.clips, entry.attack);
+    for (const role of Object.keys(roles)) {
+      if (roles[role]) rec.actions[role] = rec.mixer.clipAction(roles[role]);
+    }
+    if (rec.actions.death) {
+      rec.actions.death.setLoop(THREE.LoopOnce, 1);
+      rec.actions.death.clampWhenFinished = true;
+    }
+    rec.currentAction = null;
+  }
+
+  // Fallback bei Ladefehler: handgebaute Figur nachträglich in den (leeren)
+  // Wrapper hängen, damit der Trupp nicht dauerhaft unsichtbar bleibt.
+  function fallbackToTemplate(rec) {
+    rec.useModel = false;
+    const tpl = templateFor(rec.modelKey, rec.modelFaction).clone();
+    rec.fig.add(tpl);
+    rec.parts = {
+      torso: tpl.getObjectByName('torso'),
+      armL: tpl.getObjectByName('armL'),
+      armR: tpl.getObjectByName('armR'),
+      legL: tpl.getObjectByName('legL'),
+      legR: tpl.getObjectByName('legR'),
+    };
+  }
 
   // ------------------------------------------------------------ Materialien
   // Geteilt über alle Figuren – Klone teilen Geometrie UND Material, dadurch
@@ -758,14 +847,28 @@ export function createUnits3D({ map, heightAt }) {
     if (rec) return rec;
     const key = g.def?.key ?? (g.ally ? 'ally' : 'medium');
     const rig = RIGS[key] ?? RIGS.medium;
-    const fig = templateFor(key, g.faction).clone();
-    const parts = {
-      torso: fig.getObjectByName('torso'),
-      armL: fig.getObjectByName('armL'),
-      armR: fig.getObjectByName('armR'),
-      legL: fig.getObjectByName('legL'),
-      legR: fig.getObjectByName('legR'),
-    };
+    // PROTOTYP: Bei aktivem Flag bekommen Trupps mit passendem GLB-Slot statt
+    // der handgebauten Figur einen leeren Wrapper, in den (sobald geladen) der
+    // Modell-Klon gehängt wird. Je Fraktion+Trupptyp ein Modell; der rote
+    // Boss Lokholar nutzt den Yeti-Slot, Ivus (blau) bleibt immer handgebaut.
+    // Ohne Flag ist useModel konstant false → alter Pfad.
+    const modelSlot = key === 'ally' ? (g.faction === 'red' ? 'lokholar' : null) : key;
+    const useModel = USE_MODELS && !modelsFailed && modelSlot !== null;
+    let fig;
+    let parts = null;
+    if (useModel) {
+      fig = new THREE.Group();
+      fig.rotation.order = 'YXZ'; // wie die Template-Figuren (updateDead kippt um z)
+    } else {
+      fig = templateFor(key, g.faction).clone();
+      parts = {
+        torso: fig.getObjectByName('torso'),
+        armL: fig.getObjectByName('armL'),
+        armR: fig.getObjectByName('armR'),
+        legL: fig.getObjectByName('legL'),
+        legR: fig.getObjectByName('legR'),
+      };
+    }
     const label = g.ally ? '✦' : toRoman(g.ordinal ?? 1);
     const ui = new THREE.Sprite(uiMaterial(g.faction, label, HP_STEPS));
     ui.scale.set(7, 3.5, 1);
@@ -790,21 +893,77 @@ export function createUnits3D({ map, heightAt }) {
       speed: 0, travel: 0,
       groundY: 0, lastBob: 0,
       seen: 0,
+      // PROTOTYP: Felder des GLB-Pfads (ohne Flag dauerhaft false/null).
+      useModel,
+      modelKey: key, // Rig-/Template-Schlüssel (für den handgebauten Fallback)
+      modelSlot, // GLB-Slot in unitModels ('light'|'medium'|'heavy'|'lokholar')
+      modelFaction: g.faction,
+      mixer: null,
+      actions: null,
+      currentAction: null,
+      deathClipPlaying: false,
     };
     records.set(g, rec);
     group.add(fig);
+    if (useModel && unitModels) attachModel(rec);
     return rec;
   }
 
   function resetAll() {
-    for (const rec of records.values()) group.remove(rec.fig);
+    for (const rec of records.values()) {
+      if (rec.mixer) rec.mixer.stopAllAction(); // PROTOTYP
+      group.remove(rec.fig);
+    }
     records.clear();
+  }
+
+  // ---------------------------------------------- PROTOTYP: Modell-Animation
+  // Ersetzt für GLB-Trupps die prozeduralen Teilrotationen durch Clip-Auswahl
+  // nach Sim-Zustand, mit weichen Überblendungen (~0.2 s). Läuft der Mixer
+  // noch nicht (Modelle laden gerade), passiert nichts – der Wrapper ist leer.
+  // Rückgabe immer 0: kein prozedurales Wippen für Modell-Figuren.
+  function applyModelPose(rec, g, dt) {
+    if (!rec.mixer) return 0;
+    const A = rec.actions;
+    let role;
+    let timeScale = 1;
+    if (g.fighting) {
+      role = 'attack';
+      // Schlagrhythmus grob an das Angriffsintervall der Sim koppeln.
+      if (A.attack) {
+        const iv = Math.max(0.25, g.attackInterval || 1);
+        timeScale = A.attack.getClip().duration / iv;
+      }
+    } else if (rec.speed / rec.rig.speedRef > 0.04) {
+      role = A.walk ? 'walk' : 'run';
+      // Basis 1.0 bei speedRef – die Schrittfrequenz folgt der Geschwindigkeit.
+      timeScale = Math.min(1.8, Math.max(0.4, rec.speed / rec.rig.speedRef));
+    } else if (g.state === 'defending') {
+      role = 'block';
+    } else {
+      role = 'idle';
+    }
+    const action = A[role] ?? A.idle ?? null;
+    if (action && action !== rec.currentAction) {
+      if (rec.currentAction) rec.currentAction.fadeOut(0.2);
+      action.reset().fadeIn(0.2).play();
+      // Desynchronisation: Loop-Posen (Idle/Walk/Block) starten zufällig
+      // versetzt im Zyklus, damit nicht alle Figuren synchron atmen/laufen.
+      // Attacken bleiben bei 0 – sie takten über timeScale aufs Intervall.
+      if (role !== 'attack') action.time = Math.random() * action.getClip().duration;
+      rec.currentAction = action;
+    }
+    if (action) action.timeScale = timeScale;
+    rec.mixer.update(dt);
+    return 0;
   }
 
   // --------------------------------------------------------------- Posen
   // Liefert den vertikalen Wipp-Anteil; alle Teilrotationen werden komplett
   // neu gesetzt (kein Aufaddieren, damit nichts wegdriftet).
-  function applyPose(rec, g, time, simT) {
+  function applyPose(rec, g, time, simT, dt) {
+    // PROTOTYP: GLB-Trupps haben keine benannten Teile → Clip-Pfad.
+    if (rec.useModel) return applyModelPose(rec, g, dt);
     const R = rec.rig;
     const P = rec.parts;
     const ph = rec.phase;
@@ -890,6 +1049,12 @@ export function createUnits3D({ map, heightAt }) {
       rec.ui.visible = true;
       rec.hasPrev = false;
       rec.speed = 0;
+      // PROTOTYP: liegengebliebenen Death-Clip verwerfen, Animation neu starten.
+      if (rec.mixer) {
+        rec.mixer.stopAllAction();
+        rec.currentAction = null;
+        rec.deathClipPlaying = false;
+      }
     }
 
     // Geschwindigkeit aus der Kartenbewegung messen (geglättet); große Sprünge
@@ -916,7 +1081,7 @@ export function createUnits3D({ map, heightAt }) {
     rec.yaw += d * (1 - Math.exp(-8 * dt));
     rec.fig.rotation.y = rec.yaw;
 
-    const bob = applyPose(rec, g, time, simT);
+    const bob = applyPose(rec, g, time, simT, dt);
 
     // Respawn-Einblendung: von leicht versenkt hochkommen + Glimmer-Implosion.
     let yOff = 0;
@@ -946,7 +1111,7 @@ export function createUnits3D({ map, heightAt }) {
 
   // Gefallene: einmal umkippen und versinken (~1 s), danach unsichtbar bis zum
   // Respawn ('gone' bleibt für immer verborgen).
-  function updateDead(rec, time) {
+  function updateDead(rec, time, dt) {
     rec.seen = frameId;
     if (rec.mode === 'hidden') return;
     if (rec.mode === 'live') {
@@ -954,9 +1119,22 @@ export function createUnits3D({ map, heightAt }) {
       rec.dieAt = time;
       rec.ui.visible = false;
       rec.pulse.visible = false;
+      // PROTOTYP: Gibt es einen Death-Clip, spielt der statt des Umkippens
+      // (LoopOnce/clampWhenFinished ist in attachModel gesetzt).
+      rec.deathClipPlaying = false;
+      if (rec.mixer && rec.actions?.death) {
+        if (rec.currentAction) rec.currentAction.fadeOut(0.15);
+        rec.actions.death.reset().fadeIn(0.15).play();
+        rec.currentAction = rec.actions.death;
+        rec.deathClipPlaying = true;
+      }
     }
     const k = Math.min(1, (time - rec.dieAt) / 1.0);
-    rec.fig.rotation.z = rec.fallSide * k * k * 1.45;
+    if (rec.deathClipPlaying) {
+      rec.mixer.update(dt); // Umkippen entfällt, das Versinken unten bleibt
+    } else {
+      rec.fig.rotation.z = rec.fallSide * k * k * 1.45;
+    }
     const sink = Math.max(0, (k - 0.55) / 0.45);
     rec.fig.position.y = rec.groundY + rec.lastBob - sink * sink * 7;
     if (k >= 1) {
@@ -1007,7 +1185,7 @@ export function createUnits3D({ map, heightAt }) {
         bucket(byEdgeCombat, g.edgeCombat, g);
       } else if (g.state === 'dead' || g.state === 'gone') {
         const rec = records.get(g);
-        if (rec) updateDead(rec, time);
+        if (rec) updateDead(rec, time, dt);
       } else {
         bucket(byNode, g.node, g);
       }
@@ -1103,7 +1281,12 @@ export function createUnits3D({ map, heightAt }) {
   }
 
   function dispose() {
+    disposed = true; // PROTOTYP: noch laufende GLB-Ladevorgänge ins Leere laufen lassen
     resetAll();
+    if (unitModels && modelsApi) {
+      modelsApi.disposeUnitModels(unitModels); // PROTOTYP: Template-Ressourcen der GLBs
+      unitModels = null;
+    }
     for (const tpl of templates.values()) tpl.clear();
     templates.clear();
     for (const geo of geoms) geo.dispose();
