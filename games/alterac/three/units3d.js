@@ -1305,5 +1305,9 @@ export function createUnits3D({ map, heightAt }) {
     group.clear();
   }
 
-  return { group, update, dispose };
+  // `template` ist NUR für den Dev-Viewer (dev-units.js) gedacht: Zugriff auf
+  // die handgebauten Template-Figuren (z. B. 'ally'/'blue' → Ivus). Das Spiel
+  // (renderer3d.js) nutzt ausschließlich group/update/dispose – das
+  // Laufzeitverhalten bleibt unverändert.
+  return { group, update, dispose, template: templateFor };
 }

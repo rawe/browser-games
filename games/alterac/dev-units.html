@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alterac – Dev-Viewer Einheitenmodelle</title>
+  <!-- Dev-Viewer zur Einzelsichtung der Einheitenmodelle: die GLB-Modelle
+       plus der handgebaute Ivus (units3d.js). Kein Build-Einstieg
+       (vite.config.js erfasst nur games/*/index.html), läuft ausschließlich
+       über den Dev-Server:
+       http://localhost:5173/games/alterac/dev-units.html -->
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #353f60; }
+    #stage { display: block; width: 100%; height: 100%; }
+    #labels { position: fixed; inset: 0; pointer-events: none; }
+    .unit-label {
+      position: absolute;
+      transform: translate(-50%, 0);
+      text-align: center;
+      font: 12px/1.35 system-ui, sans-serif;
+      color: #e8edf7;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+      white-space: nowrap;
+    }
+    .unit-label strong { font-size: 13px; }
+    .unit-label.blue strong { color: #9cc4ff; }
+    .unit-label.red strong { color: #ffa79d; }
+    #hud {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      padding: 8px 12px;
+      font: 12px/1.5 system-ui, sans-serif;
+      color: #cdd6e8;
+      background: rgba(10, 14, 24, 0.65);
+      border-radius: 8px;
+      pointer-events: none;
+    }
+    #hud b { color: #fff; }
+    #loading {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font: 16px system-ui, sans-serif;
+      color: #e8edf7;
+      background: rgba(10, 14, 24, 0.6);
+    }
+    /* Kompakte Touch-Leiste: liegt über den Figuren-Labels (z-index) und ruft
+       dieselben Funktionen wie die Tasten auf. touch-action verhindert den
+       Zoom-Doppeltipp auf den Buttons. */
+    #touchbar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+      background: rgba(10, 14, 24, 0.82);
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    #touchbar .row {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+    }
+    #touchbar button {
+      flex: 1 1 0;
+      max-width: 110px;
+      min-height: 40px;
+      padding: 4px 2px;
+      font: 600 13px/1.2 system-ui, sans-serif;
+      color: #e8edf7;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    #touchbar button.active {
+      background: #3d5aa8;
+      border-color: #9cc4ff;
+    }
+    /* Auf schmalen Screens Platz sparen: Tastatur-HUD ausblenden. */
+    @media (max-width: 640px) {
+      #hud { display: none; }
+    }
+  </style>
+  <script type="module" src="./dev-units.js"></script>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <div id="labels"></div>
+  <div id="hud">
+    <b>1</b> Idle · <b>2</b> Walk · <b>3</b> Run · <b>4</b> Attack · <b>5</b> Block · <b>6</b> Death<br />
+    <b>←/→</b> bzw. <b>A/D</b> Figur fokussieren · <b>0</b> Überblick · <b>L</b> Aufhell-Licht<br />
+    Konsole: <b>__devUnits</b>.setState(name) / .focus(i) / .list()
+  </div>
+  <div id="loading">Lade Einheitenmodelle …</div>
+  <!-- Touch-Bedienung (Mobile): Zustände + Fokus/Überblick/Lampe.
+       Verdrahtung in dev-units.js, ruft dieselben Funktionen wie die Tasten. -->
+  <div id="touchbar">
+    <div class="row" id="stateRow">
+      <button type="button" data-state="idle">Idle</button>
+      <button type="button" data-state="walk">Geh</button>
+      <button type="button" data-state="run">Lauf</button>
+      <button type="button" data-state="attack">Angriff</button>
+      <button type="button" data-state="block">Block</button>
+      <button type="button" data-state="death">Tod</button>
+    </div>
+    <div class="row">
+      <button type="button" id="btnPrev" aria-label="Vorherige Figur">◀</button>
+      <button type="button" id="btnOverview" aria-label="Überblick">⌂</button>
+      <button type="button" id="btnNext" aria-label="Nächste Figur">▶</button>
+      <button type="button" id="btnLamp" aria-label="Aufhell-Licht">💡</button>
+    </div>
+  </div>
+</body>
+</html>
