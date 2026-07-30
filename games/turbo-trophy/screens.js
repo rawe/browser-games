@@ -2,12 +2,16 @@
 // Reines Markup + Klick-Bindung; alle Entscheidungen laufen über Callbacks.
 
 import {
-  MAX_LEVEL, QUALIFY_PLACES,
-  canBuy, repairCost, upgradeCost,
+  QUALIFY_PLACES,
+  canBuy, maxLevel, repairCost, upgradeCost,
 } from './career.js';
 import { DIFFICULTIES, profileFor } from './ai.js';
 import { ITEMS } from './items.js';
 import { tracks } from './tracks.js';
+import {
+  MAX_TUNING_CAP, NAMED_SEASONS, PEAK_SEASON,
+  calendarFor, championBonus, racesIn, seasonAt, tuningCap,
+} from './seasons.js';
 
 const money = (n) => `$${n.toLocaleString('de-DE')}`;
 
@@ -24,11 +28,22 @@ function difficultyPicker(current) {
     <p class="seg-hint">${profileFor(current).hint}</p>`;
 }
 
-function pips(level) {
+/**
+ * Stufenanzeige. `cap` ist die in dieser Saison offene Grenze; darüber hinaus
+ * bleiben die noch gesperrten Stufen als blasse Plätze sichtbar – so ist zu
+ * sehen, dass es später weitergeht.
+ */
+function pips(level, cap) {
   let out = '<span class="pips">';
-  for (let i = 0; i < MAX_LEVEL; i++) out += `<span class="pip${i < level ? ' on' : ''}"></span>`;
+  for (let i = 0; i < MAX_TUNING_CAP; i++) {
+    const state = i < level ? ' on' : (i >= cap ? ' locked' : '');
+    out += `<span class="pip${state}"></span>`;
+  }
   return `${out}</span>`;
 }
+
+/** Kalender einer Saison als Streckenliste. */
+const calendarLine = (index) => calendarFor(index).map((t) => t.name).join(' → ');
 
 /** Tastenbelegung der Ausrüstung für den Hilfetext – ohne feste Buchstaben. */
 const itemKeyHint = () =>
@@ -73,22 +88,41 @@ export function createScreens(overlayEl) {
       overlayEl.classList.add('hidden');
     },
 
-    title({ onStart, onEditor, onDifficulty, difficulty, audio }) {
+    title({ onStart, onContinue, onEditor, onDifficulty, difficulty, saved, audio }) {
+      // Ein gespeicherter Stand steht ganz oben – Weiterfahren ist der
+      // wahrscheinlichste Wunsch, wenn schon eine Karriere läuft.
+      const resume = saved ? `
+        <div class="panel">
+          <h3>LAUFENDE KARRIERE</h3>
+          <div class="row"><span class="lbl">${seasonAt(saved.season).name}<small>Rennen ${saved.stage + 1} von ${racesIn(saved.season)} • ${saved.points} Punkte</small></span></div>
+          <div class="row"><span class="lbl">Titel<small>Gewonnene Saisons</small></span><span class="moneytag">${saved.titles} 🏆</span></div>
+          <div class="row"><span class="lbl">Konto</span><span class="moneytag">${money(saved.money)}</span></div>
+        </div>
+        <button class="big" id="resume-btn">KARRIERE FORTSETZEN &#9654;</button>` : '';
+
       show(`
         <div class="logo">TURBO<br>TROPHY</div>
         <div class="sub">TOP-DOWN-ARCADE-RENNEN IM GEIST VON SUPER CARS</div>
+        ${resume}
         <div class="panel">
           <h3>MEISTERSCHAFT</h3>
           <div class="row"><span class="lbl">${tracks.length} Strecken<small>Werde Erster bis Dritter, um weiterzukommen</small></span></div>
-          <div class="row"><span class="lbl">Streckenelemente<small>Schanzen, Öllachen, Schranken und eine Brücke über die Kreuzung</small></span></div>
+          <div class="row"><span class="lbl">${NAMED_SEASONS.length} Saisons + offene Meisterschaft<small>Nach dem Titel geht es weiter – Wagen, Arsenal und Konto kommen mit</small></span></div>
+          <div class="row"><span class="lbl">Streckenelemente<small>Schanzen, Öllachen, Schranken und Brücken über die Kreuzungen</small></span></div>
           <div class="row"><span class="lbl">Preisgeld<small>Investiere zwischen den Rennen in Tuning &amp; Arsenal</small></span></div>
           <div class="row"><span class="lbl">Arsenal<small>${ITEMS.map((i) => i.name).join(' • ')}</small></span></div>
+        </div>
+        <div class="panel">
+          <h3>SAISONS</h3>
+          ${NAMED_SEASONS.map((_, i) => `
+            <div class="row"><span class="lbl">${seasonAt(i).name}<small>${racesIn(i)} Rennen • ${seasonAt(i).hint}</small></span></div>`).join('')}
+          <div class="row"><span class="lbl">${seasonAt(NAMED_SEASONS.length).name} ff.<small>Endlos weiter – wechselnder Kalender, Gegner am Anschlag</small></span></div>
         </div>
         <div class="panel">
           <h3>GEGNERSTÄRKE</h3>
           ${difficultyPicker(difficulty)}
         </div>
-        <button class="big" id="start-btn">SAISON STARTEN</button>
+        <button class="big${saved ? ' alt' : ''}" id="start-btn">${saved ? 'NEUE KARRIERE' : 'SAISON STARTEN'}</button>
         <button class="buy" id="editor-btn">&#128736; STRECKENEDITOR</button>
         <p class="hint">
           📱 Buttons unten – links lenken, rechts GAS &amp; Ausrüstung.<br>
@@ -100,6 +134,7 @@ export function createScreens(overlayEl) {
         <a class="overview-link" href="../../index.html">← Zur Spiele-Übersicht</a>
       `);
       onClick('start-btn', onStart);
+      if (saved) onClick('resume-btn', onContinue);
       onClick('editor-btn', onEditor);
       bindDifficulty(onDifficulty);
       onClick('mute-btn', (e) => {
@@ -110,16 +145,27 @@ export function createScreens(overlayEl) {
 
     shop({ career, track, onBuy, onStart, onDifficulty }) {
       const repair = repairCost(career);
+      const cap = maxLevel(career);
       const upgrade = (key) => {
-        const cost = upgradeCost(career[key]);
-        return { label: cost === null ? 'MAX' : money(cost), disabled: cost === null || career.money < cost };
+        const cost = upgradeCost(career, career[key]);
+        return {
+          label: cost === null ? (cap >= MAX_TUNING_CAP ? 'MAX' : 'GESPERRT') : money(cost),
+          disabled: cost === null || career.money < cost,
+        };
       };
       const motor = upgrade('engine');
       const handling = upgrade('handling');
       const armor = upgrade('armor');
+      const season = seasonAt(career.season);
+      // Solange die Ausbaugrenze noch wächst, gehört der Hinweis darauf in die
+      // Werkstatt – sonst wirkt „GESPERRT" wie ein Fehler.
+      const capHint = cap < MAX_TUNING_CAP
+        ? `Stufe ${cap + 1} und höher gibt erst die nächste Saison frei.`
+        : 'Alle Ausbaustufen sind offen.';
 
       show(`
         <div class="logo small">WERKSTATT</div>
+        <div class="sub">${season.name} • RENNEN ${career.stage + 1}/${racesIn(career.season)}</div>
         <div class="sub">NÄCHSTES RENNEN: ${track.name} • ${track.laps} RUNDEN</div>
         <div class="panel">
           <h3>KONTO &amp; ZUSTAND</h3>
@@ -129,9 +175,10 @@ export function createScreens(overlayEl) {
         </div>
         <div class="panel">
           <h3>TUNING</h3>
-          ${shopRow('buy-engine', `Motor ${pips(career.engine)}`, 'Höhere Endgeschwindigkeit', motor.label, motor.disabled)}
-          ${shopRow('buy-handling', `Handling ${pips(career.handling)}`, 'Engere Kurven', handling.label, handling.disabled)}
-          ${shopRow('buy-armor', `Panzerung ${pips(career.armor)}`, 'Weniger Schaden', armor.label, armor.disabled)}
+          ${shopRow('buy-engine', `Motor ${pips(career.engine, cap)}`, 'Höhere Endgeschwindigkeit', motor.label, motor.disabled)}
+          ${shopRow('buy-handling', `Handling ${pips(career.handling, cap)}`, 'Engere Kurven', handling.label, handling.disabled)}
+          ${shopRow('buy-armor', `Panzerung ${pips(career.armor, cap)}`, 'Weniger Schaden', armor.label, armor.disabled)}
+          <p class="seg-hint">${capHint}</p>
         </div>
         <div class="panel">
           <h3>ARSENAL</h3>
@@ -142,7 +189,10 @@ export function createScreens(overlayEl) {
           ${difficultyPicker(career.difficulty)}
         </div>
         <button class="big" id="race-btn">ZUM RENNEN &#9654;</button>
-        <p class="hint">Rennen ${career.stage + 1}/${tracks.length} • ${career.points} Punkte</p>
+        <p class="hint">
+          ${career.points} Punkte in dieser Saison${career.titles ? ` • ${career.titles} Titel 🏆` : ''}<br>
+          Kalender: ${calendarLine(career.season)}
+        </p>
       `);
 
       const rerender = () => screens.shop({ career, track, onBuy, onStart, onDifficulty });
@@ -172,7 +222,7 @@ export function createScreens(overlayEl) {
 
       show(`
         <div class="logo small">${result.qualified ? 'GESCHAFFT!' : 'AUSGESCHIEDEN'}</div>
-        <div class="sub">${result.trackName} • ERGEBNIS</div>
+        <div class="sub">${result.trackName} • RENNEN ${career.stage + 1}/${racesIn(career.season)} • ${seasonAt(career.season).name}</div>
         <div class="panel"><h3>PLATZIERUNG</h3><table class="results">${rows}</table></div>
         <div class="panel">
           <div class="row"><span class="lbl">Preisgeld</span><span class="moneytag">+${money(result.prize)}</span></div>
@@ -189,17 +239,54 @@ export function createScreens(overlayEl) {
       onClick('next-btn', onNext);
     },
 
-    champion({ career, onRestart }) {
+    /**
+     * Saisonende. Kein Abspann, sondern eine Beförderung: Der Bildschirm zeigt,
+     * was mitgenommen wird und was in der nächsten Saison anders ist.
+     * `career` ist der Stand *vor* dem Wechsel.
+     */
+    champion({ career, onNextSeason, onRestart }) {
+      const done = seasonAt(career.season);
+      const next = seasonAt(career.season + 1);
+      const bonus = championBonus(career.season);
+      const capNow = tuningCap(career.season);
+      const capNext = tuningCap(career.season + 1);
+      const titles = (career.titles ?? 0) + 1;
+      const tune = [
+        `Motor ${career.engine}`, `Handling ${career.handling}`, `Panzerung ${career.armor}`,
+      ].join(' • ');
+      const ammo = ITEMS.map((i) => `${i.icon} ${career.ammo[i.id] ?? 0}`).join('  ');
+
       show(`
-        <div class="logo">CHAMPION!</div>
-        <div class="sub">DU HAST DIE TURBO TROPHY GEWONNEN</div>
+        <div class="logo">TITEL!</div>
+        <div class="sub">${done.name} GEWONNEN • ${titles}. TITEL</div>
         <div class="panel">
-          <div class="row"><span class="lbl">Punkte</span><span class="moneytag">${career.points}</span></div>
-          <div class="row"><span class="lbl">Restguthaben</span><span class="moneytag">${money(career.money)}</span></div>
+          <h3>SAISONBILANZ</h3>
+          <div class="row"><span class="lbl">Punkte der Saison</span><span class="moneytag">${career.points}</span></div>
+          <div class="row"><span class="lbl">Punkte der Karriere</span><span class="moneytag">${career.totalPoints ?? career.points}</span></div>
+          <div class="row"><span class="lbl">Meisterprämie</span><span class="moneytag">+${money(bonus)}</span></div>
+          <div class="row"><span class="lbl">Konto danach</span><span class="moneytag">${money(career.money + bonus)}</span></div>
         </div>
-        <button class="big" id="again-btn">NEUE SAISON</button>
+        <div class="panel">
+          <h3>DAS KOMMT MIT</h3>
+          <div class="row"><span class="lbl">Wagen<small>${tune}</small></span></div>
+          <div class="row"><span class="lbl">Arsenal<small>${ammo}</small></span></div>
+          <div class="row"><span class="lbl">Karosserie<small>Schaden bleibt – reparieren kostet wie immer</small></span></div>
+        </div>
+        <div class="panel">
+          <h3>NÄCHSTE SAISON: ${next.name}</h3>
+          <div class="row"><span class="lbl">${racesIn(next.index)} Rennen<small>${calendarLine(next.index)}</small></span></div>
+          <div class="row"><span class="lbl">Gegner<small>${next.index <= PEAK_SEASON
+            ? 'Stärkeres Feld, besser ausgerüstet als in dieser Saison'
+            : 'Am Anschlag – härter wird es nicht mehr'}</small></span></div>
+          <div class="row"><span class="lbl">Werkstatt<small>${capNext > capNow
+            ? `Ausbaustufe ${capNext} wird freigeschaltet (bisher ${capNow})`
+            : 'Alle Ausbaustufen sind bereits offen'}</small></span></div>
+        </div>
+        <button class="big" id="next-season-btn">${next.name} STARTEN &#9654;</button>
+        <button class="buy" id="again-btn">Karriere beenden und neu anfangen</button>
         <a class="overview-link" href="../../index.html">← Zur Spiele-Übersicht</a>
       `);
+      onClick('next-season-btn', onNextSeason);
       onClick('again-btn', onRestart);
     },
   };

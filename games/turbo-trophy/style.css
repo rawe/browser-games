@@ -450,6 +450,13 @@ body {
   background: var(--ok);
 }
 
+/* Noch nicht freigeschaltete Ausbaustufen bleiben als Platzhalter sichtbar. */
+.pip.locked {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
+  opacity: 0.55;
+}
+
 button.buy {
   font-family: inherit;
   font-weight: bold;

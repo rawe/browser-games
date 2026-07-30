@@ -1,31 +1,10 @@
-// Gespeicherte Streckenelemente: kapselt `localStorage` pro Strecken-ID.
-//
-// Grundsatz: Der Speicher darf das Spiel nie zu Fall bringen. Im privaten
-// Modus wirft bereits der Zugriff auf `localStorage`, gespeichertes JSON kann
-// veraltet oder von Hand verbogen sein. Alle Zugriffe sind darum abgesichert
-// und liefern im Zweifel „nichts gespeichert" – dann gilt der
-// Auslieferungszustand der Strecke.
+// Gespeicherte Streckenelemente: kapselt den Speicher pro Strecken-ID.
+// Der abgesicherte Zugriff selbst steht in `storage.js`.
 
 import { ELEMENT_TYPES, normalizeElement } from './elements.js';
+import { readRaw, removeKey, store, writeRaw } from './storage.js';
 
 const PREFIX = 'turbo-trophy:elements:';
-
-/**
- * Einmalig prüfen, ob ein benutzbarer Speicher da ist. Ein Schreibversuch ist
- * nötig, weil manche Browser `localStorage` zwar anbieten, aber jedes
- * `setItem` ablehnen.
- */
-const store = (() => {
-  try {
-    const s = window.localStorage;
-    const probe = `${PREFIX}probe`;
-    s.setItem(probe, '1');
-    s.removeItem(probe);
-    return s;
-  } catch {
-    return null;
-  }
-})();
 
 const key = (trackId) => `${PREFIX}${trackId}`;
 
@@ -62,13 +41,7 @@ export function parseElements(text) {
 
 /** Gespeicherte Elemente einer Strecke – `null`, wenn nichts (Brauchbares) da ist. */
 export function loadElements(trackId) {
-  if (!store) return null;
-  let raw;
-  try {
-    raw = store.getItem(key(trackId));
-  } catch {
-    return null;
-  }
+  const raw = readRaw(key(trackId));
   if (raw == null) return null;
   try {
     return parseElements(raw);
@@ -82,23 +55,11 @@ export function loadElements(trackId) {
 export function saveElements(trackId, elements) {
   if (!store) return false;
   const defs = (elements ?? []).map(toDef).filter(Boolean);
-  try {
-    store.setItem(key(trackId), JSON.stringify(defs));
-    return true;
-  } catch {
-    return false;
-  }
+  return writeRaw(key(trackId), JSON.stringify(defs));
 }
 
 /** Bearbeitung verwerfen – danach gilt wieder der Auslieferungszustand. */
-export function clearElements(trackId) {
-  if (!store) return;
-  try {
-    store.removeItem(key(trackId));
-  } catch {
-    /* nichts zu tun */
-  }
-}
+export const clearElements = (trackId) => removeKey(key(trackId));
 
 /** Elemente für ein Rennen: gespeicherte Bearbeitung, sonst die Streckendaten. */
 export function elementsFor(trackDef) {
