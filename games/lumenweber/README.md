@@ -62,6 +62,29 @@ Zuordnung: `/` wirft nach oben, `\` nach unten. Das Verhalten ist dasselbe, nur
 die Beschriftung der Glyphe wäre sonst verdreht – und ein sichtbarer
 `/`-Spiegel, der nach unten ablenkt, sieht auf dem Schirm schlicht falsch aus.
 
+## Die Level
+
+20 Level, von 5×5 mit einem einzigen Spiegel bis 9×9 mit dreizehn drehbaren
+Spiegeln und fünf Knoten. Der Par-Wert steigt von 1 auf 8, nie um mehr als
+einen Zug pro Level.
+
+Jedes Level hat **genau eine** kürzeste Lösung – es gibt keine zwei
+gleichwertigen Wege, und damit auch keinen Zufallstreffer. In jedem Level gibt
+es außerdem mindestens zwei drehbare Spiegel mehr, als Züge nötig sind:
+„einfach alles umlegen" funktioniert nirgends.
+
+Drei der späten Level (`l13`, `l17`, `l19`) enthalten je einen **Ablenkspiegel**
+– einen drehbaren Spiegel, den das Licht in keiner Stellung berührt. Ohne ihn
+wüsste ein aufmerksamer Spieler, dass jeder sichtbare Spiegel gebraucht wird,
+und könnte allein daraus auf die Lösung schließen. Die Spalte `Deko` in
+`npm run sim:lumen` weist sie aus; `check:lumen` sorgt dafür, dass es bei
+Ablenkung bleibt und nicht die halbe Fläche Attrappe wird.
+
+Neue Mechaniken kommen einzeln und mit einem Satz Erklärung: Spiegel drehen
+(l01), der Faden läuft hinter einem Knoten weiter (l02), Blocker (l03), feste
+Spiegel (l04), Kreuzungen (l06), vier Knoten auf einem Faden (l11), das große
+Feld (l16).
+
 ## Aufbau
 
 ```
