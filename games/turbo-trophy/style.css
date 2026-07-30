@@ -431,6 +431,46 @@ body {
   font-size: 11px;
 }
 
+/* Cup-Auswahl auf dem Titelbildschirm: sieht aus wie eine Panel-Zeile, ist
+   aber ein Knopf – deshalb der sichtbare Rahmen und der Zustand `on`. */
+button.season {
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  color: var(--txt);
+  background: transparent;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+button.season .lbl {
+  font-size: 13px;
+  font-weight: bold;
+}
+
+button.season .lbl small {
+  display: block;
+  color: var(--muted);
+  font-weight: normal;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+button.season.on {
+  border-color: var(--amiga);
+  background: rgb(255 255 255 / 8%);
+}
+
+button.season.on .lbl {
+  color: var(--amiga);
+}
+
 .pips {
   display: inline-flex;
   gap: 3px;

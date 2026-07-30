@@ -27,7 +27,9 @@ const testExitBtn = document.getElementById('test-exit');
 // Gespeicherter Stand als Angebot auf dem Titelbildschirm; gefahren wird
 // zunächst mit einer frischen Karriere.
 let saved = loadCareer();
-let career = createCareer(saved?.difficulty);
+// Cup, mit dem eine *neue* Karriere beginnt – auf dem Titelbildschirm wählbar.
+let startSeason = 0;
+let career = createCareer(saved?.difficulty, startSeason);
 let race = null;
 let testing = false; // Testfahrt aus dem Editor – ohne Folgen für die Karriere
 let mode = 'title'; // title | shop | race | results | champion | editor
@@ -81,12 +83,14 @@ function showTitle() {
   screens.title({
     audio,
     saved,
+    startSeason,
     difficulty: career.difficulty,
     onDifficulty: (id) => { setDifficulty(id); showTitle(); },
+    onSeason: (index) => { startSeason = index; showTitle(); },
     onStart: () => {
       audio.unlock();
-      // Neue Karriere: der alte Stand ist damit verbraucht.
-      career = createCareer(career.difficulty);
+      // Neue Karriere im gewählten Cup: der alte Stand ist damit verbraucht.
+      career = createCareer(career.difficulty, startSeason);
       clearCareer();
       saved = null;
       showShop();
@@ -193,12 +197,14 @@ function endRace() {
         nextSeason(career);
         showShop();
       },
+      // Zurück zum Titelbildschirm statt direkt in die Werkstatt: Dort steht
+      // die Cup-Auswahl, und genau die will man für einen Neuanfang.
       onRestart: () => {
         audio.unlock();
-        career = createCareer(career.difficulty);
+        career = createCareer(career.difficulty, startSeason);
         clearCareer();
         saved = null;
-        showShop();
+        showTitle();
       },
     });
     return;

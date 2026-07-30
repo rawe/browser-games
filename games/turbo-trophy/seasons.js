@@ -83,6 +83,15 @@ export function seasonAt(index) {
   return { ...def, index: i, named: i < NAMED.length };
 }
 
+/**
+ * Saisons, die beim Spielstart zur Wahl stehen: die benannten plus der
+ * Einstieg in die offene Meisterschaft. Weiter hinten unterscheiden sich die
+ * offenen Saisons nur noch im Kalender – als Einstieg wäre das keine Wahl,
+ * sondern eine Liste.
+ */
+export const startChoices = () =>
+  Array.from({ length: NAMED.length + 1 }, (_, i) => seasonAt(i));
+
 /** Die Strecken der Saison in Fahrreihenfolge – aufsteigend nach Gegnertempo. */
 export const calendarFor = (index) => byDifficulty(seasonAt(index).trackIds);
 

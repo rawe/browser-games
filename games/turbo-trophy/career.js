@@ -26,20 +26,53 @@ export const POINTS = [9, 6, 4, 2];
 // Nur die ersten drei qualifizieren sich für den nächsten Lauf.
 export const QUALIFY_PLACES = 3;
 
-export function createCareer(difficulty = DEFAULT_DIFFICULTY) {
+/**
+ * Startausstattung für einen Quereinstieg in eine spätere Saison.
+ *
+ * Wer sich beim Spielstart direkt die MASTERS-TROPHY aussucht, bekommt den
+ * Wagen, den ein Fahrer an dieser Stelle der Karriere hätte: ausgebaut bis zur
+ * Grenze der *vorigen* Saison, mit deren Meisterprämie auf dem Konto. Das ist
+ * genau der Zustand, in dem ein durchgespielter Aufsteiger dort ankäme – also
+ * dieselbe Ausgangslage, nur ohne den Weg dahin.
+ *
+ * Saison 1 hat keine Vorsaison und bleibt damit der nackte Anfang.
+ */
+export function startingSetupFor(season = 0) {
+  if (season <= 0) {
+    return { money: 1000, engine: 0, handling: 0, armor: 0, ammo: startingAmmo() };
+  }
+  const level = tuningCap(season - 1);
+  return {
+    money: 1000 + championBonus(season - 1),
+    engine: level,
+    handling: level,
+    // Die Panzerung hinkt eine Stufe hinterher – sie ist erfahrungsgemäß das,
+    // was zuletzt gekauft wird.
+    armor: Math.max(0, level - 1),
+    ammo: normalizeAmmo({
+      front: 2 + season,
+      rear: 1 + Math.floor(season / 2),
+      homing: Math.max(0, season - 1),
+      turbo: season,
+      oil: Math.max(0, season - 1),
+    }),
+  };
+}
+
+/**
+ * Neue Karriere. `season` erlaubt den Quereinstieg in einen späteren Cup –
+ * der Wagen wird dann passend dazu ausgestattet (siehe `startingSetupFor`).
+ */
+export function createCareer(difficulty = DEFAULT_DIFFICULTY, season = 0) {
+  const start = Math.max(0, Math.round(season) || 0);
   return {
     difficulty,
-    money: 1000,
-    engine: 0,
-    handling: 0,
-    armor: 0,
+    ...startingSetupFor(start),
     hp: 100,
-    // Ausrüstungsbestand nach Item-ID – siehe items.js.
-    ammo: startingAmmo(),
     points: 0,
     stage: 0,
     // Laufende Saison (0 = erste) und was aus früheren Saisons übrig bleibt.
-    season: 0,
+    season: start,
     titles: 0,
     totalPoints: 0,
   };

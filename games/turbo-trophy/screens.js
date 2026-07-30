@@ -3,14 +3,14 @@
 
 import {
   QUALIFY_PLACES,
-  canBuy, maxLevel, repairCost, upgradeCost,
+  canBuy, maxLevel, repairCost, startingSetupFor, upgradeCost,
 } from './career.js';
 import { DIFFICULTIES, profileFor } from './ai.js';
 import { ITEMS } from './items.js';
 import { tracks } from './tracks.js';
 import {
   MAX_TUNING_CAP, NAMED_SEASONS, PEAK_SEASON,
-  calendarFor, championBonus, racesIn, seasonAt, tuningCap,
+  calendarFor, championBonus, racesIn, seasonAt, startChoices, tuningCap,
 } from './seasons.js';
 
 const money = (n) => `$${n.toLocaleString('de-DE')}`;
@@ -88,7 +88,15 @@ export function createScreens(overlayEl) {
       overlayEl.classList.add('hidden');
     },
 
-    title({ onStart, onContinue, onEditor, onDifficulty, difficulty, saved, audio }) {
+    title({ onStart, onContinue, onEditor, onDifficulty, onSeason, difficulty, startSeason = 0, saved, audio }) {
+      const chosen = seasonAt(startSeason);
+      const setup = startingSetupFor(startSeason);
+      // Wer später einsteigt, fährt nicht mit dem Anfängerwagen los – hier
+      // steht schwarz auf weiß, womit es losgeht.
+      const setupLine = startSeason === 0
+        ? 'Serienwagen, $1.000 Startkapital – der Anfang'
+        : `Motor ${setup.engine} • Handling ${setup.handling} • Panzerung ${setup.armor}`
+          + ` • ${money(setup.money)} • ${ITEMS.map((i) => `${i.icon} ${setup.ammo[i.id] ?? 0}`).join(' ')}`;
       // Ein gespeicherter Stand steht ganz oben – Weiterfahren ist der
       // wahrscheinlichste Wunsch, wenn schon eine Karriere läuft.
       const resume = saved ? `
@@ -113,16 +121,31 @@ export function createScreens(overlayEl) {
           <div class="row"><span class="lbl">Arsenal<small>${ITEMS.map((i) => i.name).join(' • ')}</small></span></div>
         </div>
         <div class="panel">
-          <h3>SAISONS</h3>
-          ${NAMED_SEASONS.map((_, i) => `
-            <div class="row"><span class="lbl">${seasonAt(i).name}<small>${racesIn(i)} Rennen • ${seasonAt(i).hint}</small></span></div>`).join('')}
-          <div class="row"><span class="lbl">${seasonAt(NAMED_SEASONS.length).name} ff.<small>Endlos weiter – wechselnder Kalender, Gegner am Anschlag</small></span></div>
+          <h3>${saved ? 'NEU ANFANGEN – WOMIT?' : 'WOMIT ANFANGEN?'}</h3>
+          ${startChoices().map((s) => `
+            <button class="season${s.index === startSeason ? ' on' : ''}" data-season="${s.index}">
+              <span class="lbl">${s.name}<small>${racesIn(s.index)} Rennen • ${s.hint}</small></span>
+            </button>`).join('')}
+          <p class="seg-hint">
+            Jeder Cup ist sofort wählbar. Wer später einsteigt, bekommt den Wagen,
+            den ein Aufsteiger dort hätte – die Gegner sind entsprechend stärker.<br>
+            Gewinnst du einen Cup, geht es mit dem nächsten weiter.
+            ${saved ? '<br><b>Achtung:</b> Die oben laufende Karriere wird dabei verworfen.' : ''}
+          </p>
+        </div>
+        <div class="panel">
+          <h3>START IM ${chosen.name}</h3>
+          <div class="row"><span class="lbl">Kalender<small>${calendarLine(startSeason)}</small></span></div>
+          <div class="row"><span class="lbl">Dein Wagen<small>${setupLine}</small></span></div>
+          <div class="row"><span class="lbl">Werkstatt<small>Ausbau bis Stufe ${tuningCap(startSeason)} offen${
+            tuningCap(startSeason) < MAX_TUNING_CAP ? ' – weitere Stufen gibt die nächste Saison frei' : ''}</small></span></div>
         </div>
         <div class="panel">
           <h3>GEGNERSTÄRKE</h3>
           ${difficultyPicker(difficulty)}
         </div>
-        <button class="big${saved ? ' alt' : ''}" id="start-btn">${saved ? 'NEUE KARRIERE' : 'SAISON STARTEN'}</button>
+        <button class="big${saved ? ' alt' : ''}" id="start-btn">${
+          saved ? `NEUE KARRIERE: ${chosen.name}` : `${chosen.name} STARTEN &#9654;`}</button>
         <button class="buy" id="editor-btn">&#128736; STRECKENEDITOR</button>
         <p class="hint">
           📱 Buttons unten – links lenken, rechts GAS &amp; Ausrüstung.<br>
@@ -137,6 +160,9 @@ export function createScreens(overlayEl) {
       if (saved) onClick('resume-btn', onContinue);
       onClick('editor-btn', onEditor);
       bindDifficulty(onDifficulty);
+      overlayEl.querySelectorAll('[data-season]').forEach((btn) => {
+        btn.addEventListener('click', () => onSeason(Number(btn.dataset.season)));
+      });
       onClick('mute-btn', (e) => {
         audio.setMuted(!audio.isMuted());
         e.target.textContent = audio.isMuted() ? '🔇 TON AN' : '🔊 TON AUS';
@@ -283,7 +309,7 @@ export function createScreens(overlayEl) {
             : 'Alle Ausbaustufen sind bereits offen'}</small></span></div>
         </div>
         <button class="big" id="next-season-btn">${next.name} STARTEN &#9654;</button>
-        <button class="buy" id="again-btn">Karriere beenden und neu anfangen</button>
+        <button class="buy" id="again-btn">Karriere beenden und Cup neu wählen</button>
         <a class="overview-link" href="../../index.html">← Zur Spiele-Übersicht</a>
       `);
       onClick('next-season-btn', onNextSeason);

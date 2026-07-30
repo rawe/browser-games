@@ -10,9 +10,10 @@ import { createThrottle, TAP_MS } from '../throttle.js';
 import { tracks } from '../tracks.js';
 import { buildTrack, posAt, ROAD_WIDTH } from '../trackGeometry.js';
 import { normalizeElement } from '../elements.js';
+import { ITEMS } from '../items.js';
 import {
   MAX_TUNING_CAP, NAMED_SEASONS, PEAK_SEASON,
-  calendarFor, racesIn, seasonAiBonus, seasonAt, tuningCap,
+  calendarFor, racesIn, seasonAiBonus, seasonAt, startChoices, tuningCap,
 } from '../seasons.js';
 import { createCareer, maxLevel, nextSeason, upgradeCost } from '../career.js';
 
@@ -257,6 +258,48 @@ for (const def of tracks) {
     }
   }
   check('Jede freigeschaltete Ausbaustufe hat einen Preis', priceless.length === 0, priceless.join(', '));
+}
+
+/* ---------- Quereinstieg in einen späteren Cup ---------- */
+
+{
+  // Jeder Cup ist beim Spielstart wählbar. Der Wagen dazu muss in die
+  // gewählte Saison passen: nicht über der Ausbaugrenze (sonst zeigt die
+  // Werkstatt Stufen, die es nicht zu kaufen gab) und nicht über dem
+  // Höchstbestand eines Items.
+  const bad = [];
+  for (const season of startChoices().map((s) => s.index)) {
+    const career = createCareer(undefined, season);
+    if (career.season !== season) bad.push(`S${season + 1}: falsche Saison`);
+    const cap = maxLevel(career);
+    for (const key of ['engine', 'handling', 'armor']) {
+      if (career[key] > cap) bad.push(`S${season + 1}: ${key} ${career[key]} > Grenze ${cap}`);
+    }
+    for (const item of ITEMS) {
+      const have = career.ammo[item.id] ?? 0;
+      if (have > item.max) bad.push(`S${season + 1}: ${item.id} ${have} > max ${item.max}`);
+    }
+    if (career.money <= 0) bad.push(`S${season + 1}: kein Startkapital`);
+  }
+  check('Startausstattung passt zu jedem wählbaren Cup', bad.length === 0, bad.join(', '));
+
+  const first = createCareer(undefined, 0);
+  eq('Der erste Cup startet unverändert bei null', `${first.engine}/${first.handling}/${first.armor}/${first.money}`, '0/0/0/1000');
+
+  // Der Quereinstieg soll dem entsprechen, womit ein Aufsteiger dort ankäme.
+  const climbed = createCareer();
+  climbed.engine = tuningCap(0);
+  climbed.handling = tuningCap(0);
+  climbed.armor = tuningCap(0) - 1;
+  nextSeason(climbed);
+  const direct = createCareer(undefined, 1);
+  eq('Quereinstieg entspricht dem Wagen eines Aufsteigers',
+    `${direct.engine}/${direct.handling}/${direct.armor}`,
+    `${climbed.engine}/${climbed.handling}/${climbed.armor}`);
+
+  const levels = startChoices().map((s) => createCareer(undefined, s.index).engine);
+  check('Spätere Cups starten mit mehr Wagen', levels.every((v, i) => i === 0 || v > levels[i - 1]),
+    levels.join(' → '));
 }
 
 /* ---------- Saisonwechsel ---------- */
