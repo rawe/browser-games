@@ -1,25 +1,12 @@
-// Renderer.
+// Rückfall-Renderer auf der 2D-Canvas-API.
 //
-// ── Schnittstelle (Vertrag mit main.js) ──────────────────────────────────────
-//   createRenderer(canvas) → {
-//     setLevel(level)              neues Level, Animationszustand zurücksetzen
-//     setSession(session)          Sitzung, aus der gezeichnet wird
-//     resize(cssW, cssH, insets)   Größe + Platz für HUD/Bedienleiste
-//     layout                       aktuelle Geometrie (siehe layout.js)
-//     setHover(cell|null)          Finger/Maus über einer Zelle
-//     setCursor(cell|null)         Tastaturfokus
-//     tapAt(x, y)                  sichtbare Rückmeldung auf einen Tipp
-//     celebrate()                  Siegesanimation auslösen
-//     frame(nowMs)                 ein Bild zeichnen
-//     dispose()
-//   }
-// ────────────────────────────────────────────────────────────────────────────
-//
-// Diese Fassung zeichnet mit der 2D-Canvas-API und ist die verlässliche
-// Grundlage: Sie läuft überall, auch ohne WebGL. Wer sie ersetzt, muss nur
-// obigen Vertrag erfüllen.
+// Erfüllt denselben Vertrag wie der WebGL2-Renderer (siehe `../render.js`),
+// nur ohne Shader. Er ist bewusst schlicht gehalten: Sein Zweck ist, dass das
+// Spiel auch dort spielbar bleibt, wo kein WebGL2-Kontext zustande kommt –
+// alte Geräte, abgeschaltete Hardwarebeschleunigung, Kontextverlust ohne
+// Wiederherstellung.
 
-import { computeLayout, cellCenter, gridToPixel } from './layout.js';
+import { computeLayout, cellCenter, gridToPixel } from '../layout.js';
 
 const PALETTE = {
   bgTop: '#070912',
@@ -53,8 +40,9 @@ const lerp = (a, b, t) => a + (b - a) * t;
 /** Rahmenratenunabhängiges Annähern. */
 const approach = (current, target, rate, dt) => lerp(current, target, 1 - Math.exp(-rate * dt));
 
-export function createRenderer(canvas) {
+export function createCanvas2dRenderer(canvas) {
   const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Lumenweber: weder WebGL2 noch 2D-Canvas verfügbar');
   let level = null;
   let session = null;
   let layout = computeLayout(1, 1, { width: 1, height: 1 });
@@ -421,6 +409,7 @@ export function createRenderer(canvas) {
   }
 
   return {
+    backend: '2d',
     setLevel, setSession, resize, setHover, setCursor, tapAt, celebrate, frame,
     get layout() { return layout; },
     dispose() { /* nichts zu räumen */ },
