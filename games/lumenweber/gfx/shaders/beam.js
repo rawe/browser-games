@@ -59,9 +59,10 @@ void main() {
   float s = arc0 + clamp(u, 0.0, segLen);
   float t = mix(uTime, 0.0, uCalm);
 
-  // Querprofil: drei ineinandergelegte Gauß-Kurven.
+  // Querprofil: drei ineinandergelegte Gauß-Kurven. Der Kern bleibt bewusst
+  // schmal – erst dadurch bleibt er als Faden lesbar und wird nicht zum Balken.
   float inner = exp(-(d * d) / (uCore * uCore));
-  float mid = exp(-(d * d) / (uCore * uCore * 8.0));
+  float mid = exp(-(d * d) / (uCore * uCore * 6.0));
   float outer = exp(-(d * d) / (uHalo * uHalo));
 
   // Energiepakete, die sichtbar in Laufrichtung wandern.
@@ -72,17 +73,19 @@ void main() {
 
   // Der Faden wird beim Umlenken neu gewebt: eine schnelle Front läuft von der
   // Quelle nach vorn. Ohne sie wirkt jeder Zug wie ein hartes Umspringen.
-  float woven = smoothstep(uReveal, uReveal - uCell * 0.9, s);
+  // Vor der Front bleibt ein schwacher Rest stehen: Der Verlauf ist dadurch
+  // jederzeit ablesbar, es sieht nur nicht fertig gewoben aus.
+  float woven = mix(0.18, 1.0, smoothstep(uReveal, uReveal - uCell * 0.9, s));
   float front = exp(-pow((s - uReveal) / (uCell * 0.5), 2.0)) * step(0.001, uReveal);
 
   // Siegeswelle: ein heller Bauch, der einmal den ganzen Faden entlangläuft.
   float wave = uWave < 0.0 ? 0.0 : exp(-pow((s - uWave) / (uCell * 1.1), 2.0));
 
-  float boost = 1.0 + wave * 2.4 + front * 1.8;
+  float boost = 1.0 + wave * 1.5 + front * 1.6;
 
   vec3 col = vec3(1.0) * inner * (1.15 + 0.85 * packet) * pulse;
-  col += uWarm * mid * 0.75;
-  col += uCool * outer * 0.40;
+  col += uWarm * mid * 0.55;
+  col += uCool * outer * 0.34;
   col += vec3(1.0, 0.94, 0.80) * wave * (inner * 1.2 + mid * 0.6);
 
   outColor = vec4(col * energy * woven * boost * uGain, 1.0);

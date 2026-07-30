@@ -141,9 +141,10 @@ function finishLevel() {
     el.winName.textContent = level.name;
     el.winStars.innerHTML = Array.from({ length: 3 }, (_, i) =>
       `<span class="star${i < stars ? ' is-on' : ''}" style="--d:${i * 120}ms">★</span>`).join('');
+    const turns = `${session.moves} ${session.moves === 1 ? 'Drehung' : 'Drehungen'}`;
     el.winDetail.textContent = stars === 3
-      ? `${session.moves} Drehungen – der kürzeste Weg.`
-      : `${session.moves} Drehungen · Par ${level.par}. Kürzer geht es noch.`;
+      ? `${turns} – der kürzeste Weg.`
+      : `${turns} · Par ${level.par}. Kürzer geht es noch.`;
     $('btn-next').textContent = index + 1 < levels.length ? 'Weiter' : 'Zur Auswahl';
     showOverlay(el.screenWin);
   }, 900);

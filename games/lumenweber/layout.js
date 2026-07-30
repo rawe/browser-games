@@ -3,8 +3,14 @@
 // Renderer und Eingabe teilen sich dieselbe Rechnung – nur so trifft ein
 // Fingertipp genau die Zelle, die auch gezeichnet wurde.
 
-/** Größte Kantenlänge einer Zelle in CSS-Pixeln (sonst wird das Brett absurd). */
-const MAX_CELL = 108;
+/**
+ * Größte Kantenlänge einer Zelle in CSS-Pixeln.
+ *
+ * Die Deckelung greift nur bei kleinen Rastern auf großen Schirmen – dort
+ * würde ein 5×5-Brett sonst die ganze Fläche fluten. 108 war zu streng: Auf
+ * einem Tablet blieb rundherum mehr leerer Nebel als Spielfeld.
+ */
+const MAX_CELL = 132;
 /** Kleinste Kantenlänge, bei der ein Finger noch sicher trifft. */
 const MIN_TOUCH_CELL = 34;
 

@@ -47,8 +47,8 @@ Der Strahl läuft Zelle für Zelle geradeaus, bis eines davon eintritt:
 
 Fest sind: Position und Richtung der Quelle, Position der Knoten, Blocker,
 Position aller Spiegel. Veränderbar ist ausschließlich die Ausrichtung der
-drehbaren Spiegel. Verschraubte Spiegel (dunkler, gestrichelter Ring) lenken
-mit, lassen sich aber nicht drehen.
+drehbaren Spiegel. Verschraubte Spiegel (dunkle Trägerplatte mit vier
+Schraubenköpfen) lenken mit, lassen sich aber nicht drehen.
 
 Der **Par-Wert** ist die vom Solver bestimmte Mindestzahl an Drehungen. Wer ihn
 trifft, bekommt drei Sterne. Es gibt keine Zugbegrenzung – niemand wird aus
@@ -93,7 +93,8 @@ beam.js       Strahlverfolgung – rein aus Level + Spiegelstellungen
 game.js       Sitzung: drehen, zurück, neu, Sternbewertung
 levels.js     Levelsammlung im Textformat
 layout.js     Geometrie – geteilt von Renderer und Eingabe
-render.js     Darstellung
+render.js     Wahl der Darstellung: WebGL2, sonst 2D-Canvas
+gfx/          WebGL2-Renderer (Shader, Bloom) und der 2D-Rückfall
 input.js      Finger, Maus, Tastatur
 progress.js   Fortschritt im localStorage
 audio.js      synthetischer Klang über die Web Audio API

@@ -37,11 +37,17 @@ const CONTEXT_ATTRS = {
   premultipliedAlpha: false,
   preserveDrawingBuffer: false,
   powerPreference: 'high-performance',
-  desynchronized: true,
 };
 
-/** Obergrenze für Gerätepixel. Darüber lohnt sich die Schärfe nicht mehr. */
-const MAX_DEVICE_PIXELS = 3_600_000;
+/**
+ * Obergrenze für Gerätepixel.
+ *
+ * Alles auf dem Brett ist weiches Licht – oberhalb von rund 2,8 Millionen
+ * Pixeln gewinnt die Darstellung nichts mehr an Schärfe, kostet aber überall
+ * volle Füllrate. Große Retina-Tablets und -Desktops rechnen darum leicht
+ * unterhalb ihres Pixelverhältnisses.
+ */
+const MAX_DEVICE_PIXELS = 2_800_000;
 const MAX_DPR = 2;
 
 const MAX_SPRITES = 1024;
@@ -272,13 +278,13 @@ export function createWebglRenderer(canvas) {
     beamProgram.u1f('uTime', time);
     beamProgram.u1f('uCalm', calm ? 1 : 0);
     beamProgram.u1f('uCell', Math.max(1, cell));
-    beamProgram.u1f('uCore', Math.max(1.2, cell * 0.052));
-    beamProgram.u1f('uHalo', Math.max(6, cell * 0.30));
+    beamProgram.u1f('uCore', Math.max(1.1, cell * 0.036));
+    beamProgram.u1f('uHalo', Math.max(5, cell * 0.24));
     beamProgram.u3f('uWarm', 0.55, 0.82, 1.0);
     beamProgram.u3f('uCool', 0.18, 0.44, 1.0);
     beamProgram.u1f('uReveal', scene.state.reveal);
     beamProgram.u1f('uWave', scene.state.wave);
-    beamProgram.u1f('uGain', gpu.floatOk ? 1.55 : 1.0);
+    beamProgram.u1f('uGain', gpu.floatOk ? 1.20 : 0.9);
     gpu.beam.draw();
 
     gpu.glow.reset();
@@ -291,7 +297,7 @@ export function createWebglRenderer(canvas) {
     const t = gpu.targets;
     gl.disable(gl.BLEND);
     // Ohne Gleitkomma sättigt die Szene bei 1.0 – dann muss die Schwelle tiefer.
-    const threshold = gpu.floatOk ? 0.90 : 0.55;
+    const threshold = gpu.floatOk ? 1.05 : 0.60;
     downsample(t.scene, t.nearA, threshold, 0.55);
     blur(t.nearA, t.nearB, true);
     blur(t.nearB, t.nearA, false);
@@ -318,8 +324,8 @@ export function createWebglRenderer(canvas) {
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, t.farA.texture);
     p.u2f('uPxRes', canvas.width, canvas.height);
-    p.u1f('uNear', 0.85);
-    p.u1f('uFar', 0.70);
+    p.u1f('uNear', 0.55);
+    p.u1f('uFar', 0.45);
     p.u1f('uExposure', gpu.floatOk ? 1.10 : 1.35);
     p.u1f('uFlash', scene.state.flash);
     p.u1f('uTime', time);

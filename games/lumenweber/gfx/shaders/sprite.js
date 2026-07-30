@@ -106,12 +106,12 @@ vec4 drawTarget(vec2 p, float aa, float lit, float seed) {
 }
 
 vec4 drawMirror(vec2 p, float aa, float locked, float lit, float seed) {
-  float d = sdRound(p, vec2(0.72, 0.105), 0.095);
+  float d = sdRound(p, vec2(0.70, 0.120), 0.105);
   float body = fill(d, aa);
   float t = mix(uTime, 0.0, uCalm);
 
   // Quer durch die Scheibe: oben Weißglanz, Mitte Glas, unten Schattenkante.
-  float v = clamp((p.y + 0.105) / 0.21, 0.0, 1.0);
+  float v = clamp((p.y + 0.120) / 0.24, 0.0, 1.0);
   vec3 top = mix(vec3(1.00, 1.00, 1.00), vec3(0.60, 0.65, 0.76), locked);
   vec3 mid = mix(vec3(0.58, 0.80, 1.00), vec3(0.26, 0.30, 0.40), locked);
   vec3 bot = mix(vec3(0.08, 0.20, 0.42), vec3(0.05, 0.06, 0.11), locked);
@@ -131,26 +131,37 @@ vec4 drawMirror(vec2 p, float aa, float locked, float lit, float seed) {
 vec4 drawBezel(vec2 p, float aa, float locked, float hover, float lit) {
   float r = length(p);
   float ang = atan(p.y, p.x);
-  float w = mix(0.030, 0.052, locked);
-  float ring = stroke(r - 0.87, w, aa);
 
-  // Drehbar: vier Bögen mit Lücken – die Fassung sieht beweglich aus.
-  // Verschraubt: geschlossener Ring mit vier Schraubenköpfen.
-  float gaps = mix(smoothstep(0.18, 0.52, abs(sin(ang * 2.0 + 0.7854))), 1.0, locked);
+  // Verschraubt bekommt eine dunkle Trägerplatte: Der Spiegel sitzt sichtbar
+  // in einer Fassung und lädt schon dadurch nicht zum Antippen ein.
+  float plate = fill(r - 0.80, aa) * locked;
+
+  float w = mix(0.026, 0.075, locked);
+  float ring = stroke(r - mix(0.87, 0.80, locked), w, aa);
+
+  // Drehbar: vier weit offene Bögen – die Fassung sieht beweglich aus.
+  float gaps = mix(smoothstep(0.30, 0.62, abs(sin(ang * 2.0 + 0.7854))), 1.0, locked);
+
   float screws = 0.0;
   for (int i = 0; i < 4; i++) {
     float a = 0.7854 + float(i) * 1.5708;
-    screws = max(screws, fill(length(p - vec2(cos(a), sin(a)) * 0.87) - 0.075, aa));
+    vec2 c = p - vec2(cos(a), sin(a)) * 0.80;
+    float head = fill(length(c) - 0.10, aa);
+    // Schlitz im Schraubenkopf – auf kleinen Zellen bleibt wenigstens der
+    // Kontrast, auf großen liest man die Schraube wirklich.
+    head *= 1.0 - fill(sdBox(c, vec2(0.075, 0.018)), aa) * 0.75;
+    screws = max(screws, head);
   }
   screws *= locked;
 
-  vec3 open = mix(vec3(0.24, 0.48, 0.86), vec3(0.65, 0.88, 1.00), hover);
-  vec3 fixedCol = vec3(0.20, 0.22, 0.30);
-  vec3 col = mix(open, fixedCol, locked);
-  col = mix(col, vec3(0.34, 0.37, 0.46), screws);
+  vec3 open = mix(vec3(0.26, 0.52, 0.92), vec3(0.72, 0.92, 1.00), hover);
+  vec3 col = mix(open, vec3(0.22, 0.25, 0.33), locked);
+  col = mix(col, vec3(0.04, 0.05, 0.09), plate * (1.0 - max(ring, screws)));
+  col = mix(col, vec3(0.46, 0.50, 0.60), screws);
   col += vec3(0.30, 0.55, 0.95) * lit * (1.0 - locked) * 0.35;
 
-  float a = max(ring * gaps, screws) * mix(mix(0.34, 0.85, hover), 0.72, locked);
+  float a = max(max(ring * gaps, screws), plate * 0.72);
+  a *= mix(mix(0.36, 0.95, hover), 1.0, locked);
   return vec4(col, a);
 }
 
@@ -191,12 +202,12 @@ vec3 drawTargetGlow(vec2 p, float lit, float impact, float seed) {
   float ang = atan(p.y, p.x);
   float t = mix(uTime, 0.0, uCalm);
 
-  float halo = exp(-r * r * 5.0) * 1.1 + 0.30 / (1.0 + r * r * 22.0);
-  float rays = (0.55 + 0.45 * cos(ang * 8.0 - t * 0.6 + seed * 6.0)) * exp(-r * r * 3.2) * 0.40;
+  float halo = exp(-r * r * 6.5) * 0.55 + 0.12 / (1.0 + r * r * 40.0);
+  float rays = (0.55 + 0.45 * cos(ang * 8.0 - t * 0.6 + seed * 6.0)) * exp(-r * r * 3.6) * 0.26;
   vec3 col = vec3(1.00, 0.80, 0.45) * (halo + rays) * lit;
 
   // Einschlag: ein kurzer weißer Kern, der schnell in das ruhige Glühen fällt.
-  col += vec3(1.0, 0.97, 0.92) * impact * exp(-r * r * 9.0) * 1.6;
+  col += vec3(1.0, 0.97, 0.92) * impact * exp(-r * r * 9.0) * 1.1;
   return col;
 }
 
@@ -214,10 +225,11 @@ vec3 drawSourceCorona(vec2 p) {
   float r = length(p);
   float ang = atan(p.y, p.x);
   float t = mix(uTime, 0.0, uCalm);
-  float pulse = 0.88 + 0.12 * sin(t * 2.1);
-  float halo = exp(-r * r * 4.2) * 1.2 + 0.26 / (1.0 + r * r * 16.0);
-  float rays = (0.5 + 0.5 * cos(ang * 12.0 + t * 0.8)) * exp(-r * r * 2.6) * 0.30;
-  return vec3(1.00, 0.72, 0.34) * (halo + rays) * pulse;
+  float pulse = 0.90 + 0.10 * sin(t * 2.1);
+  // Eng gehalten: Die Quelle soll warm glimmen, nicht das halbe Brett fluten.
+  float halo = exp(-r * r * 7.0) * 0.85 + 0.13 / (1.0 + r * r * 26.0);
+  float rays = (0.5 + 0.5 * cos(ang * 10.0 + t * 0.5)) * exp(-r * r * 4.0) * 0.12;
+  return vec3(1.00, 0.70, 0.32) * (halo + rays) * pulse;
 }
 
 vec3 drawRing(vec2 p, float prog, float warm) {
@@ -226,7 +238,7 @@ vec3 drawRing(vec2 p, float prog, float warm) {
   float w = mix(0.16, 0.03, prog);
   float band = exp(-pow((r - rr) / w, 2.0)) * (1.0 - prog) * (1.0 - prog);
   vec3 col = mix(vec3(0.55, 0.82, 1.00), vec3(1.00, 0.80, 0.42), warm);
-  return col * band * 1.6;
+  return col * band * 1.15;
 }
 
 vec3 drawSpark(vec2 p, float phase) {

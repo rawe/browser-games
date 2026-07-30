@@ -36,6 +36,8 @@ export function createScene() {
     /** Spiegelbild der zuletzt gesehenen Stellungen – erkennt neue Strahlwege. */
     lastOrient: [],
     lastTargetOn: [],
+    /** Vorgefertigte "x,y"-Schlüssel – sonst entstünde je Bild ein String je Ziel. */
+    targetKeys: [],
     crossings: [],
     reveal: 0,
     celebrateAt: -1e9,
@@ -65,6 +67,7 @@ export function createScene() {
     state.targetImpact = level ? level.targets.map(() => 0) : [];
     state.lastOrient = level ? level.mirrors.map(() => '') : [];
     state.lastTargetOn = level ? level.targets.map(() => false) : [];
+    state.targetKeys = level ? level.targets.map((t) => `${t.x},${t.y}`) : [];
     state.crossings = [];
     state.reveal = 0;
     state.celebrateAt = -1e9;
@@ -133,7 +136,7 @@ export function createScene() {
     }
 
     level.targets.forEach((t, i) => {
-      const on = trace.litTargets.has(`${t.x},${t.y}`);
+      const on = trace.litTargets.has(state.targetKeys[i]);
       if (on && !state.lastTargetOn[i]) {
         // Einschlag: kurzer heller Kern plus ein Ring, der nach außen läuft.
         state.targetImpact[i] = 1;
@@ -148,7 +151,7 @@ export function createScene() {
     if (calm) {
       state.reveal = beamLenPx + cell * 4;
     } else if (state.reveal < beamLenPx + cell * 2) {
-      state.reveal += dt * Math.max(beamLenPx / 0.26, cell * 14);
+      state.reveal += dt * Math.max(beamLenPx / 0.22, cell * 16);
     }
 
     for (const r of rings) {
@@ -160,7 +163,7 @@ export function createScene() {
 
     const since = (nowMs - state.celebrateAt) / 1000;
     if (since >= 0 && since < 3) {
-      state.flash = Math.max(0, 1 - since / 0.7);
+      state.flash = Math.max(0, 1 - since / 0.45);
       state.winGlow = Math.min(1, since * 3) * Math.max(0, 1 - Math.max(0, since - 1.2) / 1.6);
       state.wave = since < 1.5 ? (since / 1.2) * (beamLenPx + cell * 2) : -1;
     } else {
@@ -227,7 +230,7 @@ export function createScene() {
       const impact = state.targetImpact[i];
       if (lit < 0.01 && impact < 0.01) return;
       const { px, py } = cellCenter(layout, t.x, t.y);
-      const bloom = 1 + state.winGlow * 1.6;
+      const bloom = 1 + state.winGlow * 0.35;
       batch.add(px, py, cell * 1.5, 0, KIND.TARGET_GLOW, bloom, 0, 0, 1, 1, 1, 1,
         lit, impact, seedOf(t.x, t.y), 0);
     });
@@ -242,7 +245,7 @@ export function createScene() {
 
     for (const s of level.sources) {
       const { px, py } = cellCenter(layout, s.x, s.y);
-      batch.add(px, py, cell * 1.6, 0, KIND.SOURCE_CORONA, 1 + state.winGlow, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0);
+      batch.add(px, py, cell * 1.45, 0, KIND.SOURCE_CORONA, 1 + state.winGlow * 0.4, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0);
     }
 
     for (const c of state.crossings) {

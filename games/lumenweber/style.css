@@ -177,7 +177,12 @@
   z-index: 5;
 }
 
-.overlay--win { background: radial-gradient(110% 80% at 50% 30%, rgba(38, 54, 104, 0.8), rgba(4, 6, 14, 0.95)); }
+/* Halbdurchsichtig, damit das gelöste Brett hinter dem Panel weiterglüht –
+   der Moment gehört dem Licht, nicht dem Kasten davor. */
+.overlay--win {
+  background: radial-gradient(110% 80% at 50% 30%, rgba(30, 46, 92, 0.42), rgba(4, 6, 14, 0.80));
+  backdrop-filter: blur(3px);
+}
 
 .panel {
   width: min(34rem, 100%);
@@ -230,13 +235,21 @@
 
 /* ---------- Titel ---------- */
 
-.overlay--title { background: radial-gradient(120% 90% at 50% 15%, rgba(24, 42, 88, 0.75), rgba(3, 5, 12, 0.96)); }
+/* Der Nebel im Hintergrund ist die Einladung – der Titel legt sich nur
+   soweit darüber, wie die Schrift zum Lesen braucht. */
+.overlay--title {
+  background: radial-gradient(120% 90% at 50% 15%, rgba(20, 36, 78, 0.45), rgba(3, 5, 12, 0.82));
+  backdrop-filter: blur(2px);
+}
 
-.title-card { text-align: center; display: grid; gap: 0.9rem; justify-items: center; }
+.title-card { text-align: center; display: grid; gap: 0.9rem; justify-items: center; max-width: 100%; }
 
+/* 13vw ließen den Schriftzug auf 390er-Schirmen rechts anschlagen – die
+   Überlaufkante war im Bild zu sehen. */
 .game-logo {
   margin: 0;
-  font-size: clamp(2.6rem, 13vw, 4.6rem);
+  max-width: 100%;
+  font-size: clamp(2.1rem, 11.2vw, 4.6rem);
   font-weight: 300;
   letter-spacing: 0.06em;
   line-height: 1;
@@ -253,7 +266,7 @@
   margin: 0 0 0.6rem;
   color: var(--ink-dim);
   font-size: clamp(0.9rem, 3.6vw, 1.05rem);
-  max-width: 24rem;
+  max-width: min(24rem, 100%);
   text-wrap: balance;
 }
 

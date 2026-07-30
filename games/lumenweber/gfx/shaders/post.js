@@ -84,7 +84,7 @@ void main() {
   col += texture(uBloomNear, vUv).rgb * uNear;
   col += texture(uBloomFar, vUv).rgb * uFar;
 
-  col += vec3(0.80, 0.90, 1.0) * uFlash * 0.35;
+  col += vec3(0.80, 0.90, 1.0) * uFlash * 0.10;
 
   // Weiche Sättigung statt hartem Abschneiden: Lichter laufen sauber ins Weiß.
   col = 1.0 - exp(-col * uExposure);

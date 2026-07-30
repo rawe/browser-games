@@ -77,6 +77,11 @@ void main() {
   col *= mix(1.0, 0.72, inside);                         // außen bleibt es lauter
   col += vec3(0.020, 0.032, 0.072) * inside * (1.0 - 0.55 * rad);
 
+  // Schimmer, den das Brett in den Nebel wirft. Auf breiten Schirmen steht das
+  // Feld sonst wie ausgeschnitten im Schwarzen.
+  float aura = exp(-max(bd, 0.0) / max(uCell * 2.2, 1.0)) * (1.0 - inside * 0.72);
+  col += vec3(0.055, 0.105, 0.230) * aura * 0.60;
+
   // Raster. Nur innerhalb des Bretts, mit weichem Abfall nach außen.
   vec2 gp = (px - uBoard.xy) / uCell;
   vec2 gw = fwidth(gp);
@@ -93,7 +98,7 @@ void main() {
   col += vec3(0.22, 0.42, 0.85) * stroke(bd, 1.0, 1.4) * 0.55;
 
   // Siegesglanz: warme Aufhellung von der Brettmitte her.
-  col += vec3(0.95, 0.72, 0.36) * uWin * 0.14 * (1.0 - smoothstep(0.0, 1.6, rad));
+  col += vec3(0.95, 0.72, 0.36) * uWin * 0.08 * (1.0 - smoothstep(0.0, 1.6, rad));
 
   outColor = vec4(col, 1.0);
 }`;
