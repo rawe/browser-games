@@ -2,7 +2,11 @@
 // verdrahten und die feste 60-Hz-Schleife antreiben.
 
 import { tracks } from './tracks.js';
-import { createCareer, applyResult, buyItem, buyRepair, buyUpgrade, QUALIFY_PLACES } from './career.js';
+import { trackAt } from './seasons.js';
+import {
+  createCareer, applyResult, buyItem, buyRepair, buyUpgrade, isFinalStage, nextSeason, QUALIFY_PLACES,
+} from './career.js';
+import { clearCareer, loadCareer, saveCareer } from './careerStorage.js';
 import { createRace, playerCar, standings, stepRace, useItem } from './race.js';
 import { createRenderer } from './render.js';
 import { createHud } from './hud.js';
@@ -20,7 +24,12 @@ const hud = createHud();
 const audio = createAudio();
 const testExitBtn = document.getElementById('test-exit');
 
-let career = createCareer();
+// Gespeicherter Stand als Angebot auf dem Titelbildschirm; gefahren wird
+// zunächst mit einer frischen Karriere.
+let saved = loadCareer();
+// Cup, mit dem eine *neue* Karriere beginnt – auf dem Titelbildschirm wählbar.
+let startSeason = 0;
+let career = createCareer(saved?.difficulty, startSeason);
 let race = null;
 let testing = false; // Testfahrt aus dem Editor – ohne Folgen für die Karriere
 let mode = 'title'; // title | shop | race | results | champion | editor
@@ -47,6 +56,24 @@ window.addEventListener('resize', () => renderer.resize());
 /* ---------- Zustandswechsel ---------- */
 function setDifficulty(id) {
   career.difficulty = id;
+  // Läuft schon eine gespeicherte Karriere, übernimmt sie die Wahl sofort –
+  // sonst überschriebe „Fortsetzen" sie gleich wieder mit der alten Stufe.
+  // Ohne gespeicherte Karriere wird bewusst nichts angelegt: Wer auf dem
+  // Titelbildschirm nur die Gegnerstärke umstellt, hat noch nichts begonnen.
+  if (saved) {
+    saved.difficulty = id;
+    saveCareer(saved);
+  }
+}
+
+/** Kopie ohne gemeinsame Unterobjekte – sonst wandert jeder Kauf sofort in den
+ *  gemerkten Stand. */
+const copyCareer = (c) => ({ ...c, ammo: { ...c.ammo } });
+
+/** Karrierestand sichern – nach jedem Kauf, Rennen und Saisonwechsel. */
+function store() {
+  saved = copyCareer(career);
+  saveCareer(career);
 }
 
 function showTitle() {
@@ -55,9 +82,24 @@ function showTitle() {
   hud.showCareerAmmo(career);
   screens.title({
     audio,
+    saved,
+    startSeason,
     difficulty: career.difficulty,
     onDifficulty: (id) => { setDifficulty(id); showTitle(); },
-    onStart: () => { audio.unlock(); showShop(); },
+    onSeason: (index) => { startSeason = index; showTitle(); },
+    onStart: () => {
+      audio.unlock();
+      // Neue Karriere im gewählten Cup: der alte Stand ist damit verbraucht.
+      career = createCareer(career.difficulty, startSeason);
+      clearCareer();
+      saved = null;
+      showShop();
+    },
+    onContinue: () => {
+      audio.unlock();
+      career = copyCareer(saved);
+      showShop();
+    },
     onEditor: () => { audio.unlock(); showEditor(); },
   });
 }
@@ -76,15 +118,17 @@ function buy(kind) {
     : buyUpgrade(career, kind);
   if (!bought) return;
   audio.cash();
+  store();
   hud.showCareerAmmo(career);
 }
 
 function showShop() {
   mode = 'shop';
   hud.showCareerAmmo(career);
+  store();
   screens.shop({
     career,
-    track: tracks[career.stage],
+    track: trackAt(career.season, career.stage),
     onBuy: buy,
     onDifficulty: setDifficulty,
     onStart: () => { audio.unlock(); startRace(); },
@@ -92,13 +136,12 @@ function showShop() {
 }
 
 /** Streckendefinition samt der im Editor gespeicherten Elemente. */
-function raceDef(stage) {
-  const def = tracks[stage];
+function raceDef(def) {
   return { ...def, elements: elementsFor(def) };
 }
 
 function startRace() {
-  race = createRace(raceDef(career.stage), career);
+  race = createRace(raceDef(trackAt(career.season, career.stage)), career);
   testing = false;
   input.reset();
   hud.clear();
@@ -110,7 +153,7 @@ function startRace() {
 
 /** Probefahrt aus dem Editor: eigene Karriere-Kopie, kein Preisgeld, kein Aufstieg. */
 function startTestDrive(stage) {
-  race = createRace(raceDef(stage), { ...createCareer(career.difficulty), stage });
+  race = createRace(raceDef(tracks[stage]), { ...createCareer(career.difficulty), stage });
   testing = true;
   input.reset();
   hud.clear();
@@ -135,18 +178,34 @@ function endRace() {
   const place = order.indexOf(me);
   const prize = applyResult(career, { place, car: me });
   const qualified = place < QUALIFY_PLACES;
-  const isFinalStage = career.stage >= tracks.length - 1;
+  const seasonOver = isFinalStage(career);
 
   input.reset();
   hud.clear();
   hud.showCareerAmmo(career);
+  store();
   if (qualified) audio.cash();
 
-  if (qualified && isFinalStage) {
+  if (qualified && seasonOver) {
     mode = 'champion';
     screens.champion({
       career,
-      onRestart: () => { career = createCareer(career.difficulty); showShop(); },
+      // Weiterspielen mit allem, was erspielt wurde – nur Kalender und
+      // Gegner ziehen an.
+      onNextSeason: () => {
+        audio.unlock();
+        nextSeason(career);
+        showShop();
+      },
+      // Zurück zum Titelbildschirm statt direkt in die Werkstatt: Dort steht
+      // die Cup-Auswahl, und genau die will man für einen Neuanfang.
+      onRestart: () => {
+        audio.unlock();
+        career = createCareer(career.difficulty, startSeason);
+        clearCareer();
+        saved = null;
+        showTitle();
+      },
     });
     return;
   }

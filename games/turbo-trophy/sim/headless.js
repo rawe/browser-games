@@ -11,6 +11,7 @@
 
 import { tracks } from '../tracks.js';
 import { createCareer } from '../career.js';
+import { tuningCap } from '../seasons.js';
 import { CAR_RADIUS, createRace, playerCar, standings, stepRace, useItem } from '../race.js';
 import { createAiState, driveAi, profileFor } from '../ai.js';
 import { normalizeAmmo } from '../items.js';
@@ -98,27 +99,39 @@ const ZIGZAG_MIN = 4;
  * Karriere-Stand, den ein Spieler zu diesem Zeitpunkt der Meisterschaft
  * plausibel hätte – sonst führe der Referenzfahrer im Finale noch ein
  * unaufgerüstetes Auto.
+ *
+ * `stage` ist hier der Platz in der Schwierigkeitsstaffel des Streckenpools,
+ * nicht der Lauf einer bestimmten Saison. `season` legt obendrauf, was ein
+ * Spieler aus früheren Saisons mitgebracht hätte – begrenzt durch die
+ * Ausbaugrenze der Werkstatt, mehr geht auch im Spiel nicht.
  */
-const careerFor = (stage, difficulty) => ({
-  ...createCareer(difficulty),
-  stage,
-  engine: stage,
-  handling: stage,
-  armor: Math.max(0, stage - 1),
-  // Arsenal, wie es ein Spieler zu diesem Zeitpunkt plausibel gekauft hätte.
-  ammo: normalizeAmmo({
-    front: 2 + stage,
-    rear: 1 + Math.floor(stage / 2),
-    homing: Math.max(0, stage - 1),
-    turbo: Math.max(0, stage - 1),
-    oil: Math.max(0, stage - 1),
-  }),
-});
+const careerFor = (stage, difficulty, season = 0) => {
+  const level = Math.min(tuningCap(season), stage + season);
+  return {
+    ...createCareer(difficulty),
+    stage,
+    season,
+    engine: level,
+    handling: level,
+    armor: Math.max(0, level - 1),
+    // Arsenal, wie es ein Spieler zu diesem Zeitpunkt plausibel gekauft hätte.
+    ammo: normalizeAmmo({
+      front: 2 + stage,
+      rear: 1 + Math.floor(stage / 2),
+      homing: Math.max(0, level - 1),
+      turbo: Math.max(0, level - 1),
+      oil: Math.max(0, level - 1),
+    }),
+  };
+};
 
 /** Ein Rennen simulieren und Kennzahlen zurückgeben. */
 export function simulateRace({
   stage = 0,
   difficulty = 'mittel',
+  // Saisonnummer: hebt Gegnertempo und -ausrüstung und gibt dem Spieler die
+  // höheren Ausbaustufen, die er dort hätte (siehe `seasons.js`).
+  season = 0,
   seed = 1,
   career: careerPatch = {},
   maxTicks = MAX_TICKS,
@@ -126,7 +139,7 @@ export function simulateRace({
   // 'parked' = stehendes Hindernis
   driver = 'reference',
 } = {}) {
-  const career = { ...careerFor(stage, difficulty), ...careerPatch, difficulty };
+  const career = { ...careerFor(stage, difficulty, season), ...careerPatch, difficulty };
   const trackDef = tracks[stage];
   const race = createRace(trackDef, career, { seed });
 
@@ -517,14 +530,17 @@ export function simulateHoming({ stage = 0, seed = 1, offset = 34, gap = 200, ho
 }
 
 /** Mehrere Seeds über eine Strecke mitteln. */
-export function simulateSeries({ stage = 0, difficulty = 'mittel', seeds = 5, firstSeed = 1, ...rest } = {}) {
+export function simulateSeries({
+  stage = 0, difficulty = 'mittel', season = 0, seeds = 5, firstSeed = 1, ...rest
+} = {}) {
   const runs = [];
   for (let i = 0; i < seeds; i++) {
-    runs.push(simulateRace({ stage, difficulty, seed: firstSeed + i * 977, ...rest }));
+    runs.push(simulateRace({ stage, difficulty, season, seed: firstSeed + i * 977, ...rest }));
   }
   const mean = (fn) => runs.reduce((sum, r) => sum + fn(r), 0) / runs.length;
   return {
     stage,
+    season,
     difficulty,
     track: runs[0].track,
     runs,

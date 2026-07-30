@@ -10,6 +10,8 @@ import {
   GROUND, JUMP_TICKS,
 } from './elements.js';
 import { normalizeAmmo, MISSILE, TURBO } from './items.js';
+import { armorFactor, playerAccel, playerTopSpeed, playerTurnRate } from './career.js';
+import { rivalTier, seasonAiBonus, seasonCurveFactor } from './seasons.js';
 import { createRng } from './rng.js';
 import { useItem } from './weapons.js';
 
@@ -43,10 +45,18 @@ export function createRace(trackDef, career, options = {}) {
   // Streckenelemente hängen am aufgebauten Track, nicht an der Geometrie –
   // so bleibt `trackGeometry.js` frei von Spiellogik.
   track.elements = buildElements(track, trackDef.elements ?? []);
-  const profile = profileFor(career.difficulty);
+  const season = career.season ?? 0;
+  // Die Saison verschärft das Profil der Gegner: mehr Tempo (unten) und mehr
+  // Mut in den Kurven. Die Stufe selbst bleibt, was der Spieler gewählt hat.
+  const base = profileFor(career.difficulty);
+  const profile = { ...base, curveBrake: base.curveBrake * seasonCurveFactor(season) };
   const rng = createRng(options.seed ?? Math.floor(Math.random() * 0xffffffff));
   const cars = [];
-  const aiBase = (3.55 + trackDef.aiBonus) * profile.speed;
+  // Die Saison hebt das Grundtempo der Gegner an – sonst wäre der aus der
+  // Vorsaison mitgenommene Wagen in Saison 2 konkurrenzlos.
+  const aiBase = (3.55 + trackDef.aiBonus + seasonAiBonus(season)) * profile.speed;
+  // Ausrüstungsstand der Gegner: Lauf plus Saison-Aufschlag.
+  const tier = rivalTier(season, career.stage);
 
   // Startaufstellung: versetzt hintereinander, links/rechts der Ideallinie.
   const makeCar = (gridIndex, props) => {
@@ -85,7 +95,7 @@ export function createRace(trackDef, career, options = {}) {
       spin: 0,       // Driftrichtung während des Schleuderns
       ...props,
     };
-    car.maxSpeed = car.isPlayer ? 4.0 + car.engine * 0.45 : aiBase * car.skill;
+    car.maxSpeed = car.isPlayer ? playerTopSpeed(car.engine) : aiBase * car.skill;
     car.ai = car.isPlayer ? null : createAiState(rng, side);
     return car;
   };
@@ -101,13 +111,15 @@ export function createRace(trackDef, career, options = {}) {
       // Die Gegner rüsten mit dem Meisterschaftsfortschritt auf – sonst
       // stünde der Spieler im Finale mit Zielsuchraketen allein da.
       ammo: normalizeAmmo({
-        front: 1 + career.stage,
-        rear: 1,
-        homing: career.stage >= 2 ? 1 : 0,
-        turbo: Math.min(3, career.stage),
-        oil: career.stage >= 1 ? 1 : 0,
+        front: 1 + tier,
+        rear: 1 + Math.floor(tier / 3),
+        homing: tier >= 2 ? Math.min(4, tier - 1) : 0,
+        // Der Turbo ist der stärkste Gegenstand des Spiels. In späten Saisons
+        // führt der Spieler ihn im Dutzend mit – die Gegner müssen mitziehen.
+        turbo: Math.min(6, tier),
+        oil: tier >= 1 ? Math.min(4, tier) : 0,
       }),
-      armor: Math.min(3, career.stage),
+      armor: Math.min(4, tier),
     }));
   });
 
@@ -168,12 +180,12 @@ export function standings(race) {
   });
 }
 
-const turnRateOf = (race, car) => (car.isPlayer ? 0.052 + car.handling * 0.011 : race.profile.turn);
+const turnRateOf = (race, car) => (car.isPlayer ? playerTurnRate(car.handling) : race.profile.turn);
 
 // Turbo greift an denselben Stellen wie das Tuning – Beschleunigung und
 // Höchstgeschwindigkeit –, nur befristet und deutlich kräftiger.
 const accelOf = (race, car) =>
-  (car.isPlayer ? 0.085 + car.engine * 0.012 : race.profile.accel) * (car.turbo > 0 ? TURBO.accel : 1);
+  (car.isPlayer ? playerAccel(car.engine) : race.profile.accel) * (car.turbo > 0 ? TURBO.accel : 1);
 const topSpeedOf = (car) => car.maxSpeed * (car.turbo > 0 ? TURBO.speed : 1);
 
 function explode(race, x, y, count) {
@@ -194,7 +206,7 @@ function explode(race, x, y, count) {
 
 function damage(race, car, amount, fromMissile) {
   if (car.invuln > 0 || car.respawn > 0) return;
-  car.hp -= amount * (1 - car.armor * 0.13);
+  car.hp -= amount * armorFactor(car.armor);
   if (car.hp <= 0) {
     car.hp = 0;
     car.respawn = RESPAWN_TICKS;

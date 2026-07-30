@@ -3,12 +3,18 @@
 //   npm run sim:turbo                  → Tabelle über alle Strecken und Stufen
 //   npm run sim:turbo -- --check       → Akzeptanzkriterien als PASS/FAIL
 //   npm run sim:turbo -- --seeds=12 --difficulty=schwer --stage=2
+//   npm run sim:turbo -- --season=2    → dieselben Strecken in Saison 3
+//
+// `--stage` ist der Index im *Streckenpool* (tracks.js), nicht der Lauf einer
+// Saison: gemessen wird jede Strecke einzeln. `--season` legt die Saison-
+// staffelung darüber (siehe seasons.js).
 //
 // Kein Browser nötig, und jeder Lauf ist über den Seed reproduzierbar.
 
 import { tracks } from '../tracks.js';
 import { DIFFICULTIES } from '../ai.js';
 import { ELEMENT_TYPES } from '../elements.js';
+import { PEAK_SEASON } from '../seasons.js';
 import {
   simulateHoming, simulateOvertake, simulateParked, simulateSeries, simulateTurboRam,
 } from './headless.js';
@@ -21,6 +27,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((a) => {
 const seeds = Number(args.seeds ?? 6);
 const levels = args.difficulty ? [args.difficulty] : DIFFICULTIES.map((d) => d.id);
 const stages = args.stage !== undefined ? [Number(args.stage)] : tracks.map((_, i) => i);
+const season = Number(args.season ?? 0);
 
 const pct = (v) => `${(v * 100).toFixed(1)}%`;
 const pad = (v, n) => String(v).padStart(n);
@@ -55,8 +62,9 @@ function table(rows) {
 
 const results = [];
 for (const stage of stages) {
-  for (const difficulty of levels) results.push(simulateSeries({ stage, difficulty, seeds }));
+  for (const difficulty of levels) results.push(simulateSeries({ stage, difficulty, season, seeds }));
 }
+if (season > 0) console.log(`Saison ${season + 1} (Saisonstaffelung aktiv)\n`);
 table(results);
 
 // Zweiter Durchgang mit dem starken Fahrer am Steuer. Er ist der Maßstab für
@@ -65,7 +73,9 @@ table(results);
 // beantworten, weil er selbst nur mittelmäßig fährt.
 const aces = [];
 for (const stage of stages) {
-  for (const difficulty of levels) aces.push(simulateSeries({ stage, difficulty, seeds, driver: 'ace' }));
+  for (const difficulty of levels) {
+    aces.push(simulateSeries({ stage, difficulty, season, seeds, driver: 'ace' }));
+  }
 }
 console.log('\nGegen einen starken Fahrer (Referenzprofil „ASS“: Dauergas, saubere Linie, keine Fehler)');
 console.log(['Strecke', 'Stufe', 'Platz Ass', 'Siege', 'Ø Tempo Ass', 'Ø Tempo Bots']
@@ -351,6 +361,64 @@ if (stages.length === tracks.length) {
   add('Zielsuchrakete trifft härter als eine gerade Rakete',
     nose.hit && homingDamage > nose.damage,
     `${homingDamage} gegen ${nose.damage} Schaden`);
+}
+
+/* ---------- Akzeptanzkriterien der Saisonstaffelung ---------- */
+
+// Die Frage hinter den Saisons: Bleibt es interessant, wenn der Spieler seinen
+// ausgebauten Wagen mitnimmt? Gemessen wird an zwei Strecken über alle Saisons
+// bis über den Anschlag hinaus – einmal das Gegnertempo, einmal der starke
+// Fahrer mit dem Ausbaustand, den er in dieser Saison plausibel hätte.
+// Gemessen wird auf SCHWER: Nur dort ist die Frage überhaupt zu stellen. Auf
+// MITTEL gewinnt ein starker Fahrer schon in Saison 1 fast jedes Rennen – da
+// wäre keine Verschiebung mehr abzulesen.
+if (args.stage === undefined && args.season === undefined) {
+  const seasonStages = [1, tracks.length - 1];
+  const seasonSeeds = Math.min(4, seeds);
+  const perSeason = [];
+  for (let s = 0; s <= PEAK_SEASON + 1; s++) {
+    const rows = seasonStages.map((stage) =>
+      simulateSeries({ stage, difficulty: 'schwer', season: s, seeds: seasonSeeds }));
+    const aceRows = seasonStages.map((stage) =>
+      simulateSeries({ stage, difficulty: 'schwer', season: s, seeds: seasonSeeds, driver: 'ace' }));
+    perSeason.push({
+      season: s,
+      botSpeed: avg(rows, 'botAvgSpeed'),
+      aceWins: avg(aceRows, 'playerWins'),
+      acePlace: avg(aceRows, 'playerPlace'),
+    });
+  }
+
+  const speeds = perSeason.map((p) => p.botSpeed);
+  const detail = perSeason.map((p) => `S${p.season + 1}=${p.botSpeed.toFixed(2)}`).join('  ');
+  add('Das Feld wird Saison für Saison schneller (bis zum Anschlag)',
+    speeds[PEAK_SEASON] > speeds[0] + 0.4
+    && speeds.slice(1, PEAK_SEASON + 1).every((v, i) => v > speeds[i] - 0.03),
+    detail);
+
+  add('Am Anschlag hört die Steigerung auf',
+    Math.abs(speeds[PEAK_SEASON + 1] - speeds[PEAK_SEASON]) < 0.06,
+    `S${PEAK_SEASON + 1}=${speeds[PEAK_SEASON].toFixed(2)}  S${PEAK_SEASON + 2}=${speeds[PEAK_SEASON + 1].toFixed(2)}`);
+
+  // Der mitgenommene Wagen darf die späten Saisons nicht zum Selbstläufer
+  // machen – sonst wäre „Verbesserungen mitnehmen" ein Abschalter.
+  const worstWins = Math.max(...perSeason.map((p) => p.aceWins));
+  add('Mitgenommenes Tuning macht keine Saison zum Selbstläufer (< 60 % Siege auf SCHWER)',
+    worstWins < 0.6,
+    perSeason.map((p) => `S${p.season + 1}=${pct(p.aceWins)}`).join('  '));
+
+  // Und andersherum: Es darf auch nicht aussichtslos werden. Maßstab ist die
+  // erste Saison – der absolute Platz sagt hier wenig, weil gerade die beiden
+  // schwersten Strecken des Pools gemessen werden.
+  const later = perSeason.slice(1).map((p) => p.acePlace);
+  add('Keine spätere Saison ist schwerer als die erste',
+    Math.max(...later) <= perSeason[0].acePlace + 0.3,
+    perSeason.map((p) => `S${p.season + 1}=Ø ${p.acePlace.toFixed(2)}`).join('  '));
+
+  add('Auch am Anschlag ist das Podium drin',
+    perSeason[PEAK_SEASON].acePlace < 3.2,
+    `S${PEAK_SEASON + 1}: Ø Platz ${perSeason[PEAK_SEASON].acePlace.toFixed(2)}, `
+    + `${pct(perSeason[PEAK_SEASON].aceWins)} Siege`);
 }
 
 console.log('\nAkzeptanzkriterien');

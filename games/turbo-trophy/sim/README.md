@@ -8,16 +8,26 @@ Schwierigkeitsstufen dauert wenige Sekunden.
 npm run sim:turbo                 # Kennzahlentabelle
 npm run sim:turbo -- --check      # Akzeptanzkriterien als PASS/FAIL
 npm run sim:turbo -- --seeds=12 --difficulty=schwer --stage=2
+npm run sim:turbo -- --season=2   # dieselben Strecken in Saison 3
 ```
+
+`--stage` ist der Index im **Streckenpool** (`tracks.js`), nicht der Lauf einer
+Saison: Gemessen wird jede Strecke einzeln, unabhängig davon, in welchem
+Kalender sie vorkommt. `--season` legt die Saisonstaffelung darüber – höheres
+Grundtempo und mehr Mut in den Kurven bei den Gegnern, dazu der Ausbaustand,
+den ein Spieler in dieser Saison plausibel mitbrächte (siehe `seasons.js`).
 
 Daneben gibt es schnelle Zustandsprüfungen der übrigen DOM-freien Logik:
 
 ```bash
-npm run check:turbo               # z. B. der Dauergas-Schalter aus throttle.js
+npm run check:turbo               # Dauergas, Streckengeometrie, Saisonmodell
 ```
 
-`checks.js` ist bewusst klein gehalten: reine Zustandsmaschinen lassen sich
-damit exakt prüfen, ohne ein ganzes Rennen simulieren zu müssen.
+`checks.js` ist bewusst klein gehalten: reine Zustandsmaschinen und Daten
+lassen sich damit exakt prüfen, ohne ein ganzes Rennen simulieren zu müssen.
+Dort liegen auch die Prüfungen, die eine neu eingetragene Strecke abfangen,
+bevor sie im Spiel landet: keine ungebrückte Kreuzung, keine Kurve enger als
+der Wendekreis, keine Elemente jenseits des Fahrbahnrands.
 
 ## Wie es funktioniert
 
@@ -100,6 +110,25 @@ Schanzen tatsächlich befahren werden, Öllachen wirken, Schranken während des
 Rennens umschalten, die KI nicht dauernd in geschlossene Sperren fährt und
 Fahrzeuge auf getrennten Höhenebenen einander durchdringen, statt zu
 kollidieren.
+
+## Saisonstaffelung
+
+Mehrere Saisons werfen eine eigene Balance-Frage auf: Der Spieler nimmt seinen
+ausgebauten Wagen mit – bleibt es trotzdem ein Rennen? `--check` misst das an
+den beiden schwersten Strecken des Pools auf SCHWER über alle Saisons bis über
+den Anschlag hinaus:
+
+- **Das Feld wird Saison für Saison schneller** – bis `PEAK_SEASON`, danach
+  nicht mehr. Gemessen am mittleren Tempo der Bots, nicht an ihrer
+  Höchstgeschwindigkeit: Die erreichen sie auf kurvigen Strecken ohnehin nie.
+- **Keine Saison wird zum Selbstläufer** – der starke Fahrer bleibt auch mit
+  vollem Ausbau unter 60 % Siegen.
+- **Keine spätere Saison ist schwerer als die erste** und am Anschlag ist das
+  Podium noch drin – sonst wäre der Endloslauf nur eine Wand.
+
+Der letzte Punkt ist der Grund, warum die Staffelung an `curveBrake` hängt und
+nicht nur am Tempo: Mehr Höchstgeschwindigkeit allein macht Gegner, die vor
+jeder Kurve vom Gas gehen, nicht schneller.
 
 ## Parameter-Sweeps
 

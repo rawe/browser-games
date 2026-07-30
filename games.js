@@ -28,7 +28,7 @@ export const games = [
   {
     slug: 'turbo-trophy',
     title: 'Turbo Trophy',
-    description: 'Arcade-Rennen mit Raketen, Werkstatt und Meisterschaft – 2D von oben im Amiga-Stil.',
+    description: 'Arcade-Rennen mit Raketen, Werkstatt und Meisterschaft über mehrere Saisons – 2D von oben im Amiga-Stil.',
     emoji: '🏁',
   },
 ];
