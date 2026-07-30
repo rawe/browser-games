@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#05060d" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Lumenweber</title>
+  <link rel="stylesheet" href="/shared/base.css" />
+  <link rel="stylesheet" href="./style.css" />
+  <script type="module" src="./main.js"></script>
+</head>
+<body class="lumenweber">
+  <div id="stage" class="stage">
+    <canvas id="board" aria-label="Spielfeld"></canvas>
+
+    <!-- Kopfzeile: Level, Ziele, Züge -->
+    <header id="hud" class="hud" hidden>
+      <button id="btn-menu" class="icon-btn" type="button" aria-label="Levelauswahl">☰</button>
+      <div class="hud-title">
+        <span id="hud-level" class="hud-level">Level</span>
+        <span id="hud-name" class="hud-name">–</span>
+      </div>
+      <div class="hud-stats">
+        <span id="hud-targets" class="chip" title="erhellte Ziele">◉ 0/0</span>
+        <span id="hud-moves" class="chip" title="Züge / Par">↻ 0/0</span>
+      </div>
+      <button id="btn-help" class="icon-btn" type="button" aria-label="Spielregeln">?</button>
+    </header>
+
+    <!-- Fußzeile: Aktionen -->
+    <footer id="controls" class="controls" hidden>
+      <button id="btn-undo" class="pill" type="button">↩ Zurück</button>
+      <button id="btn-reset" class="pill" type="button">⟳ Neu</button>
+      <button id="btn-hint" class="pill" type="button">💡 Tipp</button>
+    </footer>
+
+    <!-- Kurzer Hinweis zum Level -->
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+    <!-- Titelbild / Start -->
+    <section id="screen-title" class="overlay overlay--title">
+      <div class="title-card">
+        <h1 class="game-logo">Lumen<span>weber</span></h1>
+        <p class="tagline">Dreh die Spiegel. Webe das Licht durch alle Knoten.</p>
+        <button id="btn-play" class="cta" type="button">Spielen</button>
+        <button id="btn-rules" class="ghost" type="button">So geht's</button>
+      </div>
+      <a class="back-link" href="../../index.html">← Übersicht</a>
+    </section>
+
+    <!-- Levelauswahl -->
+    <section id="screen-levels" class="overlay" hidden>
+      <div class="panel">
+        <h2>Kapitel des Lichts</h2>
+        <p class="panel-sub">Jedes gelöste Level öffnet das nächste.</p>
+        <ol id="level-grid" class="level-grid"></ol>
+        <div class="panel-actions">
+          <button id="btn-levels-close" class="ghost" type="button">Zurück</button>
+          <a class="ghost" href="../../index.html">Alle Spiele</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Regeln -->
+    <section id="screen-rules" class="overlay" hidden>
+      <div class="panel">
+        <h2>So geht's</h2>
+        <ul class="rules">
+          <li><b class="rule-mark rule-src">▶</b><span><b>Die Quelle</b> steht fest und strahlt immer in dieselbe Richtung.</span></li>
+          <li><b class="rule-mark rule-mirror">/</b><span><b>Tippe einen Spiegel an</b> – er kippt zwischen <code>/</code> und <code>\</code> und lenkt das Licht um 90° um. Der Faden wird sofort neu gewebt.</span></li>
+          <li><b class="rule-mark rule-fixed">╱</b><span><b>Verschraubte Spiegel</b> (dunkler Ring) lenken mit, lassen sich aber nicht drehen.</span></li>
+          <li><b class="rule-mark rule-wall">█</b><span><b>Blocker</b> verschlucken das Licht. Dahinter ist Schatten.</span></li>
+          <li><b class="rule-mark rule-target">◉</b><span><b>Knoten</b> leuchten auf, wenn der Faden sie durchläuft – und er läuft dahinter weiter.</span></li>
+          <li><b class="rule-mark rule-win">✦</b><span><b>Gelöst</b>, sobald alle Knoten gleichzeitig leuchten. Wer den Par-Wert trifft, holt drei Sterne.</span></li>
+        </ul>
+        <div class="panel-actions">
+          <button id="btn-rules-close" class="cta" type="button">Verstanden</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Gelöst -->
+    <section id="screen-win" class="overlay overlay--win" hidden>
+      <div class="panel panel--win">
+        <p class="win-kicker">Der Faden hält</p>
+        <h2 id="win-name">Level</h2>
+        <div id="win-stars" class="stars" aria-label="Bewertung"></div>
+        <p id="win-detail" class="win-detail"></p>
+        <div class="panel-actions">
+          <button id="btn-again" class="ghost" type="button">Nochmal</button>
+          <button id="btn-next" class="cta" type="button">Weiter</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <noscript><p style="padding:2rem">Lumenweber braucht JavaScript.</p></noscript>
+</body>
+</html>

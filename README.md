@@ -25,6 +25,16 @@ Trophy fährt so ganze Rennserien in Sekunden aus – siehe
 npm run sim:turbo -- --check   # Kennzahlen und Akzeptanzkriterien der KI
 ```
 
+Lumenweber geht denselben Weg: Die Rätsellogik ist DOM-frei, ein erschöpfender
+Solver nimmt jedes Level ab, und die Simulation zeichnet Spielfeld und
+Lichtverlauf als ASCII – siehe
+[`games/lumenweber/sim/`](games/lumenweber/sim/README.md):
+
+```bash
+npm run check:lumen                # Abnahme aller Level und der Spiellogik
+npm run sim:lumen -- --show=l05    # Start- und Lösungsbild im Terminal
+```
+
 ## Struktur
 
 ```
