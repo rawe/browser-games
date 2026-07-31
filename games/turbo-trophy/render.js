@@ -23,6 +23,13 @@
 
 import { ROAD_WIDTH, WORLD, posAt } from './trackGeometry.js';
 import { gateState } from './elements.js';
+import { drawCarBody } from './render/car.js';
+import {
+  FLAME_CORE, FLAME_MID, FLAME_OUTER,
+  OIL_BODY, OIL_BODY_EDGE, OIL_FILM, OIL_GLINT,
+} from './render/palette.js';
+import { paintGrass } from './render/terrain.js';
+import { paintRoad } from './render/road.js';
 
 const MINIMAP_SIZE = 96;
 const TAU = Math.PI * 2;
@@ -43,75 +50,18 @@ const hash01 = (n) => {
 let alphaScale = 1;
 const A = (ctx, a = 1) => { ctx.globalAlpha = a * alphaScale; };
 
-/** Strecke (Gras, Curbs, Asphalt, Start/Ziel) als statisches Bild rendern. */
+/**
+ * Strecke als statisches Bild rendern. Die Schichten liegen in eigenen Modulen
+ * (`render/terrain.js`, `render/road.js`); die Reihenfolge ist zwingend, weil
+ * die Fahrbahn das Gras überdeckt.
+ */
 export function bakeTrack(track) {
   const canvas = document.createElement('canvas');
   canvas.width = WORLD;
   canvas.height = WORLD;
   const g = canvas.getContext('2d');
-
-  // Gras mit deterministischem Pseudo-Rauschen (gleiche Optik bei jedem Start).
-  g.fillStyle = '#3f7d2e';
-  g.fillRect(0, 0, WORLD, WORLD);
-  let seed = 7;
-  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  g.fillStyle = '#376e28';
-  for (let i = 0; i < 2600; i++) g.fillRect(rnd() * WORLD, rnd() * WORLD, 4, 4);
-  g.fillStyle = '#4a8f38';
-  for (let i = 0; i < 1600; i++) g.fillRect(rnd() * WORLD, rnd() * WORLD, 3, 3);
-
-  const path = () => {
-    g.beginPath();
-    g.moveTo(track.pts[0][0], track.pts[0][1]);
-    for (let i = 1; i < track.n; i++) g.lineTo(track.pts[i][0], track.pts[i][1]);
-    g.closePath();
-  };
-  g.lineJoin = 'round';
-  g.lineCap = 'round';
-
-  // Randsteine: weiße Basis, rote Striche darüber.
-  path();
-  g.strokeStyle = '#e9e9e9';
-  g.lineWidth = ROAD_WIDTH + 16;
-  g.stroke();
-  path();
-  g.strokeStyle = '#d3402f';
-  g.setLineDash([20, 20]);
-  g.stroke();
-  g.setLineDash([]);
-
-  path();
-  g.strokeStyle = '#43474d';
-  g.lineWidth = ROAD_WIDTH;
-  g.stroke();
-  path();
-  g.strokeStyle = '#4b5057';
-  g.lineWidth = ROAD_WIDTH - 26;
-  g.stroke();
-
-  path();
-  g.strokeStyle = 'rgba(240,240,240,.55)';
-  g.lineWidth = 4;
-  g.setLineDash([22, 26]);
-  g.stroke();
-  g.setLineDash([]);
-
-  // Start/Ziel-Schachbrett quer über die Fahrbahn.
-  const a = track.pts[0];
-  const b = track.pts[1];
-  g.save();
-  g.translate(a[0], a[1]);
-  g.rotate(Math.atan2(b[1] - a[1], b[0] - a[0]));
-  const sq = 12;
-  const rows = Math.ceil(ROAD_WIDTH / sq);
-  for (let col = 0; col < 3; col++) {
-    for (let row = 0; row < rows; row++) {
-      const y = -ROAD_WIDTH / 2 + row * sq;
-      g.fillStyle = (col + row) % 2 === 0 ? '#f2f2f2' : '#111';
-      g.fillRect(col * sq, y, sq, Math.min(sq, ROAD_WIDTH / 2 - y));
-    }
-  }
-  g.restore();
+  paintGrass(g, WORLD);
+  paintRoad(g, track);
   return canvas;
 }
 
@@ -207,9 +157,9 @@ function drawOil(ctx, el, time) {
 
     // Dunkle, glänzende Fläche.
     const body = ctx.createRadialGradient(-r * 0.28, -r * 0.24, r * 0.1, 0, 0, r);
-    body.addColorStop(0, '#05070c');
-    body.addColorStop(0.6, '#101520');
-    body.addColorStop(1, '#1e2431');
+    body.addColorStop(0, OIL_BODY);
+    body.addColorStop(0.6, '#0a0d17');
+    body.addColorStop(1, OIL_BODY_EDGE);
     A(ctx, 1);
     ctx.fillStyle = body;
     blobPath(ctx, pts);
@@ -221,13 +171,13 @@ function drawOil(ctx, el, time) {
     const gx = Math.cos(shim) * r;
     const gy = Math.sin(shim) * r;
     const rim = ctx.createLinearGradient(-gx, -gy, gx, gy);
-    rim.addColorStop(0, '#9d6bff');
-    rim.addColorStop(0.3, '#54d6ff');
-    rim.addColorStop(0.58, '#5be07a');
-    rim.addColorStop(0.82, '#ffd23f');
-    rim.addColorStop(1, '#ff4f7b');
+    rim.addColorStop(0, OIL_FILM[2]);
+    rim.addColorStop(0.28, OIL_FILM[0]);
+    rim.addColorStop(0.56, OIL_FILM[1]);
+    rim.addColorStop(0.8, OIL_FILM[3]);
+    rim.addColorStop(1, OIL_FILM[2]);
     A(ctx, 0.85 + fresh * 0.15);
-    ctx.lineWidth = 3.5 + fresh * 2;
+    ctx.lineWidth = 2.6 + fresh * 1.6;
     ctx.lineJoin = 'round';
     ctx.strokeStyle = rim;
     blobPath(ctx, pts);
@@ -236,7 +186,7 @@ function drawOil(ctx, el, time) {
     // Innerer Glanz und zwei Lichtpunkte.
     A(ctx, 0.35);
     ctx.lineWidth = 1.5;
-    ctx.strokeStyle = '#cfe6ff';
+    ctx.strokeStyle = OIL_GLINT;
     ctx.save();
     ctx.scale(0.72, 0.72);
     blobPath(ctx, pts);
@@ -244,7 +194,7 @@ function drawOil(ctx, el, time) {
     ctx.restore();
 
     A(ctx, 0.5);
-    ctx.fillStyle = '#e8f2ff';
+    ctx.fillStyle = OIL_GLINT;
     ctx.beginPath();
     ctx.ellipse(-r * 0.3, -r * 0.32, r * 0.22, r * 0.1, -0.5, 0, TAU);
     ctx.fill();
@@ -258,7 +208,7 @@ function drawOil(ctx, el, time) {
       // sieht, dass die Lache eben erst gefallen ist.
       if (fresh > 0.01) {
         A(ctx, 0.5 * fresh);
-        ctx.fillStyle = '#e8f2ff';
+        ctx.fillStyle = OIL_GLINT;
         ctx.save();
         ctx.scale(0.5, 0.44);
         blobPath(ctx, pts);
@@ -719,22 +669,9 @@ function airHeight(car) {
   return Math.sin(Math.PI * clamp(1 - car.air / car.airMax, 0, 1));
 }
 
-/** Karosserie im lokalen Fahrzeugsystem. */
-function carBody(ctx, car) {
-  A(ctx, 1);
-  ctx.fillStyle = 'rgba(0,0,0,.3)';
-  ctx.fillRect(-14, -5, 28, 16);
-  ctx.fillStyle = '#111';
-  ctx.fillRect(-12, -10, 7, 4);
-  ctx.fillRect(5, -10, 7, 4);
-  ctx.fillRect(-12, 6, 7, 4);
-  ctx.fillRect(5, 6, 7, 4);
-  ctx.fillStyle = car.color;
-  ctx.fillRect(-14, -7, 28, 14);
-  ctx.fillStyle = 'rgba(255,255,255,.85)';
-  ctx.fillRect(2, -5, 7, 10);
-  ctx.fillStyle = 'rgba(0,0,0,.25)';
-  ctx.fillRect(-14, -7, 6, 14);
+/** Karosserie im lokalen Fahrzeugsystem – Detailarbeit steckt in `render/car.js`. */
+function carBody(ctx, car, alpha = 1) {
+  drawCarBody(ctx, car, alpha * alphaScale);
 }
 
 /** Rauchfahne und Schlieren, solange das Fahrzeug schleudert. */
@@ -801,15 +738,12 @@ function flamePath(ctx, x0, y, len, half) {
  */
 function drawTurboBoost(ctx, car, s, time) {
   // Nachzieheffekt: zwei blasse Kopien der Karosserie hinter dem Wagen.
-  const outer = alphaScale;
   for (let i = 2; i >= 1; i--) {
-    alphaScale = outer * 0.2 * s / i;
     ctx.save();
     ctx.translate(-i * (5 + 4 * s), 0);
-    carBody(ctx, car);
+    carBody(ctx, car, 0.2 * s / i);
     ctx.restore();
   }
-  alphaScale = outer;
 
   // Tempostreifen seitlich – laufen nach hinten aus dem Bild.
   ctx.lineCap = 'round';
@@ -831,15 +765,15 @@ function drawTurboBoost(ctx, car, s, time) {
   const len = (13 + 25 * s) * flick;
   for (const side of [-3.6, 3.6]) {
     A(ctx, 0.3 * s);
-    ctx.fillStyle = '#ff4f7b';
+    ctx.fillStyle = FLAME_OUTER;
     flamePath(ctx, -14, side, len * 1.18, 7);
     ctx.fill();
     A(ctx, 0.62 * s);
-    ctx.fillStyle = '#ffd23f';
+    ctx.fillStyle = FLAME_MID;
     flamePath(ctx, -14, side, len, 4.6);
     ctx.fill();
     A(ctx, 0.9 * s);
-    ctx.fillStyle = '#fff4c8';
+    ctx.fillStyle = FLAME_CORE;
     flamePath(ctx, -14, side, len * 0.48, 2.6);
     ctx.fill();
   }

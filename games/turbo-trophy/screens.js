@@ -13,6 +13,10 @@ import {
   calendarFor, championBonus, racesIn, seasonAt, startChoices, tuningCap,
 } from './seasons.js';
 
+// Der Pfad muss über `new URL(…, import.meta.url)` laufen – ein roher String im
+// Markup gilt dem Build als unreferenziert und landet nicht in `dist/`.
+const TITLE_BANNER_URL = new URL('./assets/title-banner.webp', import.meta.url).href;
+
 const money = (n) => `$${n.toLocaleString('de-DE')}`;
 
 // Kaufwünsche laufen als Kennung durch `onBuy`. Ausrüstung trägt dabei diesen
@@ -109,8 +113,12 @@ export function createScreens(overlayEl) {
         <button class="big" id="resume-btn">KARRIERE FORTSETZEN &#9654;</button>` : '';
 
       show(`
-        <div class="logo">TURBO<br>TROPHY</div>
-        <div class="sub">TOP-DOWN-ARCADE-RENNEN IM GEIST VON SUPER CARS</div>
+        <div class="menu-hero">
+          <img src="${TITLE_BANNER_URL}" alt="" width="1536" height="640">
+          <h1 class="hero-logo">TURBO<br>TROPHY</h1>
+          <span class="hero-badge">TOP-DOWN-ARCADE</span>
+        </div>
+        <div class="sub">RENNEN IM GEIST VON SUPER CARS</div>
         ${resume}
         <div class="panel">
           <h3>MEISTERSCHAFT</h3>
