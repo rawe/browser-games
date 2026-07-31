@@ -1,74 +1,56 @@
 // 3D-Darstellung mit Three.js: Strecke, Fahrzeuge, Raketen, Effekte, Verfolgerkamera.
 import * as THREE from 'three';
+import { createSupercarMesh } from './carModel.js';
+import { addEnvironmentScenery } from './environment.js';
 
-export function createRenderer(canvas) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  return renderer;
+const ROAD_TEXTURE_URL = new URL('./assets/textures/road-asphalt.webp', import.meta.url).href;
+const GROUND_TEXTURE_URL = new URL('./assets/textures/alpine-ground.webp', import.meta.url).href;
+
+function repeatTexture(url, repeatX = 1, repeatY = repeatX) {
+  const texture = new THREE.TextureLoader().load(url);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(repeatX, repeatY);
+  texture.anisotropy = 4;
+  return texture;
 }
 
-function makeCarMesh(color) {
-  const group = new THREE.Group();
-  const bodyMat = new THREE.MeshLambertMaterial({ color });
-  const darkMat = new THREE.MeshLambertMaterial({ color: 0x15161a });
-  const glassMat = new THREE.MeshLambertMaterial({ color: 0x9fd8ff });
-
-  const body = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.7, 1.8), bodyMat);
-  body.position.y = 0.55;
-  group.add(body);
-
-  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.45, 1.5), bodyMat);
-  nose.position.set(2.05, 0.45, 0);
-  group.add(nose);
-
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.55, 1.3), glassMat);
-  cabin.position.set(-0.1, 1.15, 0);
-  group.add(cabin);
-
-  const spoiler = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.12, 2.0), bodyMat);
-  spoiler.position.set(-1.75, 1.15, 0);
-  group.add(spoiler);
-  const spoilerLegL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.4, 0.12), darkMat);
-  spoilerLegL.position.set(-1.7, 0.95, 0.7);
-  group.add(spoilerLegL);
-  const spoilerLegR = spoilerLegL.clone();
-  spoilerLegR.position.z = -0.7;
-  group.add(spoilerLegR);
-
-  const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.4, 10);
-  wheelGeo.rotateX(Math.PI / 2);
-  for (const [wx, wz] of [[1.25, 1.0], [1.25, -1.0], [-1.25, 1.0], [-1.25, -1.0]]) {
-    const wheel = new THREE.Mesh(wheelGeo, darkMat);
-    wheel.position.set(wx, 0.42, wz);
-    group.add(wheel);
-  }
-
-  // weicher Schattenfleck statt echter Schatten (mobil-freundlich)
-  const blob = new THREE.Mesh(
-    new THREE.CircleGeometry(2.2, 16),
-    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false })
-  );
-  blob.rotation.x = -Math.PI / 2;
-  blob.position.y = 0.02;
-  group.add(blob);
-  return group;
+export function createRenderer(canvas) {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  const mobileDprCap = matchMedia('(pointer: coarse)').matches ? 1.5 : 2;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobileDprCap));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.12;
+  return renderer;
 }
 
 function ribbonGeometry(track, innerOffset, outerOffset, y = 0.01) {
   const { samples, count } = track;
   const positions = new Float32Array(count * 2 * 3);
+  const uvs = new Float32Array(count * 2 * 2);
   const index = [];
   for (let i = 0; i < count; i++) {
     const s = samples[i];
-    positions.set([s.x + s.nx * innerOffset, y, s.z + s.nz * innerOffset], i * 6);
-    positions.set([s.x + s.nx * outerOffset, y, s.z + s.nz * outerOffset], i * 6 + 3);
+    const innerX = s.x + s.nx * innerOffset;
+    const innerZ = s.z + s.nz * innerOffset;
+    const outerX = s.x + s.nx * outerOffset;
+    const outerZ = s.z + s.nz * outerOffset;
+    positions.set([innerX, y, innerZ], i * 6);
+    positions.set([outerX, y, outerZ], i * 6 + 3);
+    // Weltkoordinaten halten die isotrope Asphaltstruktur über die geschlossene
+    // Naht hinweg kachelbar, ohne zusätzliche Seam-Vertices.
+    uvs.set([innerX / 18, innerZ / 18, outerX / 18, outerZ / 18], i * 4);
     const a = i * 2;
     const b = ((i + 1) % count) * 2;
-    index.push(a, b, a + 1, b, b + 1, a + 1);
+    // Außenkante zuerst: die Dreiecke zeigen nach oben und bleiben mit
+    // FrontSide sichtbar (weniger Fragmentarbeit als DoubleSide auf Mobilgeräten).
+    index.push(a, a + 1, b, b, a + 1, b + 1);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   // flache Fahrbahn: Normalen zeigen einheitlich nach oben
   const normals = new Float32Array(count * 2 * 3);
   for (let i = 0; i < count * 2; i++) normals[i * 3 + 1] = 1;
@@ -109,17 +91,23 @@ function barrierGeometry(track, side) {
   const off = side * (track.halfWidth + track.shoulder + 0.4);
   const h = 1.0;
   const positions = new Float32Array(count * 2 * 3);
+  const colors = new Float32Array(count * 2 * 3);
   const index = [];
   for (let i = 0; i < count; i++) {
     const s = samples[i];
     positions.set([s.x + s.nx * off, 0, s.z + s.nz * off], i * 6);
     positions.set([s.x + s.nx * off, h, s.z + s.nz * off], i * 6 + 3);
+    const block = Math.floor(s.s / 5);
+    const color = block % 8 === 0 ? [0.82, 0.08, 0.06] : (block % 2 ? [0.76, 0.77, 0.8] : [0.93, 0.92, 0.88]);
+    colors.set(color, i * 6);
+    colors.set(color, i * 6 + 3);
     const a = i * 2;
     const b = ((i + 1) % count) * 2;
     index.push(a, a + 1, b, b, a + 1, b + 1, a, b, a + 1, b, b + 1, a + 1); // beidseitig sichtbar
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.setIndex(index);
   return geo;
 }
@@ -169,11 +157,13 @@ export function createRaceScene(race) {
   const dir = new THREE.DirectionalLight(0xffe8c0, 1.25);
   dir.position.set(40, 70, 20);
   scene.add(dir);
+  const rand = mulberry32(hash(track.def.id));
+  addEnvironmentScenery(scene, track, env, rand);
 
   // Boden
   const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(320, 40),
-    new THREE.MeshLambertMaterial({ color: env.grass })
+    new THREE.PlaneGeometry(640, 640),
+    new THREE.MeshLambertMaterial({ color: 0xa4b19b, map: repeatTexture(GROUND_TEXTURE_URL, 32) })
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.05;
@@ -182,18 +172,13 @@ export function createRaceScene(race) {
   // Fahrbahn + Randsteine + Banden
   const road = new THREE.Mesh(
     ribbonGeometry(track, -track.halfWidth, track.halfWidth, 0.0),
-    new THREE.MeshLambertMaterial({ color: 0x5d6472 })
+    new THREE.MeshLambertMaterial({ color: 0xc5cad6, map: repeatTexture(ROAD_TEXTURE_URL) })
   );
   scene.add(road);
   const kerbMat = new THREE.MeshBasicMaterial({ vertexColors: true });
   scene.add(new THREE.Mesh(kerbGeometry(track, 1, 0.015), kerbMat));
   scene.add(new THREE.Mesh(kerbGeometry(track, -1, 0.015), kerbMat));
-  const centerLine = new THREE.Mesh(
-    ribbonGeometry(track, -0.15, 0.15, 0.012),
-    new THREE.MeshBasicMaterial({ color: 0x8a8f9a })
-  );
-  scene.add(centerLine);
-  const barrierMat = new THREE.MeshBasicMaterial({ color: 0x9aa2b5 });
+  const barrierMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   scene.add(new THREE.Mesh(barrierGeometry(track, 1), barrierMat));
   scene.add(new THREE.Mesh(barrierGeometry(track, -1), barrierMat));
 
@@ -208,36 +193,11 @@ export function createRaceScene(race) {
   startLine.position.set(s0.x, 0.02, s0.z);
   scene.add(startLine);
 
-  // Deko: Bäume + Werbetafeln außerhalb der Strecke
-  const treeGeo = new THREE.ConeGeometry(1.6, 4.5, 6);
-  const treeMat = new THREE.MeshLambertMaterial({ color: 0x1e3d26 });
-  const trunkGeo = new THREE.CylinderGeometry(0.25, 0.3, 1.4, 5);
-  const trunkMat = new THREE.MeshLambertMaterial({ color: 0x4a3626 });
-  const isNearTrack = (x, z, margin) => track.samples.some(
-    (s) => (s.x - x) * (s.x - x) + (s.z - z) * (s.z - z) < margin * margin
-  );
-  let placed = 0;
-  let attempts = 0;
-  const rand = mulberry32(hash(track.def.id));
-  while (placed < 70 && attempts < 600) {
-    attempts++;
-    const x = (rand() - 0.5) * 300;
-    const z = (rand() - 0.5) * 300;
-    if (isNearTrack(x, z, track.halfWidth + track.shoulder + 5)) continue;
-    const tree = new THREE.Group();
-    const cone = new THREE.Mesh(treeGeo, treeMat);
-    cone.position.y = 3.4;
-    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-    trunk.position.y = 0.7;
-    tree.add(cone, trunk);
-    const sc = 0.7 + rand() * 0.9;
-    tree.scale.setScalar(sc);
-    tree.position.set(x, 0, z);
-    scene.add(tree);
-    placed++;
-  }
-
+  // Werbetafeln außerhalb der Strecke
   const adTexts = [['TURBO', '#12151c', '#ffc233'], ['NITRO GP', '#2a1420', '#ff5ca8'], ['BOXENSTOPP', '#101c2a', '#5a9bff'], ['RAKETEN-SHOP', '#1c1210', '#ff8a2a']];
+  const postGeo = new THREE.CylinderGeometry(0.15, 0.15, 2.0, 6);
+  const posts = new THREE.InstancedMesh(postGeo, barrierMat, adTexts.length);
+  const postMatrix = new THREE.Matrix4();
   for (let i = 0; i < 4; i++) {
     const idx = Math.floor((i / 4) * track.count);
     const s = track.samples[idx];
@@ -253,14 +213,16 @@ export function createRaceScene(race) {
     board.position.set(s.x + s.nx * off, 2.6, s.z + s.nz * off);
     board.lookAt(s.x, 2.6, s.z);
     scene.add(board);
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 2.0, 6), barrierMat);
-    post.position.set(board.position.x, 0.9, board.position.z);
-    scene.add(post);
+    postMatrix.makeTranslation(board.position.x, 0.9, board.position.z);
+    posts.setMatrixAt(i, postMatrix);
   }
+  posts.instanceMatrix.needsUpdate = true;
+  posts.computeBoundingSphere();
+  scene.add(posts);
 
   // Fahrzeuge
   const carMeshes = race.cars.map((car) => {
-    const mesh = makeCarMesh(car.color);
+    const mesh = createSupercarMesh({ color: car.color, isPlayer: car.isPlayer, variant: car.id });
     scene.add(mesh);
     return mesh;
   });
@@ -277,6 +239,7 @@ export function createRaceScene(race) {
   const camTarget = new THREE.Vector3();
   let camInit = false;
   let shake = 0;
+  let portrait = false;
 
   const effects = []; // Explosionen etc.
 
@@ -344,8 +307,8 @@ export function createRaceScene(race) {
       const p = race.cars[0].state;
       const fx2 = Math.cos(p.heading);
       const fz2 = Math.sin(p.heading);
-      const dist = 11.5;
-      const height = 5.8;
+      const dist = portrait ? 12.8 : 10.2;
+      const height = portrait ? 5.9 : 4.7;
       const targetPos = new THREE.Vector3(p.x - fx2 * dist, height, p.z - fz2 * dist);
       if (!camInit) { camPos.copy(targetPos); camInit = true; }
       const k = 1 - Math.exp(-dt * 4.5);
@@ -354,24 +317,41 @@ export function createRaceScene(race) {
       const sx = shake > 0 ? (Math.random() - 0.5) * shake : 0;
       const sy = shake > 0 ? (Math.random() - 0.5) * shake * 0.5 : 0;
       camera.position.set(camPos.x + sx, camPos.y + sy, camPos.z + sx);
-      camTarget.set(p.x + fx2 * 9, 1.0, p.z + fz2 * 9);
+      camTarget.set(p.x + fx2 * 8, 0.95, p.z + fz2 * 8);
       camera.lookAt(camTarget);
     },
 
     resize(w, h) {
+      portrait = w < h;
       camera.aspect = w / h;
-      camera.fov = w < h ? 74 : 62; // Hochformat: weiterer Blickwinkel
+      camera.fov = portrait ? 84 : 62;
       camera.updateProjectionMatrix();
     },
 
     dispose() {
+      // Fahrzeuggeometrien und Standardmaterialien sind modulweit geteilt und
+      // bleiben über Rennwechsel hinweg im GPU-Cache. Nur Lack/Livery gehören
+      // der konkreten Szene.
+      for (const car of carMeshes) {
+        scene.remove(car);
+        car.userData.ownedMaterials?.forEach((material) => material.dispose());
+      }
+      const geometries = new Set();
+      const materials = new Set();
+      const textures = new Set();
       scene.traverse((obj) => {
-        if (obj.geometry) obj.geometry.dispose();
+        if (obj.geometry) geometries.add(obj.geometry);
         if (obj.material) {
           const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-          mats.forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); });
+          mats.forEach((material) => {
+            materials.add(material);
+            if (material.map) textures.add(material.map);
+          });
         }
       });
+      textures.forEach((texture) => texture.dispose());
+      materials.forEach((material) => material.dispose());
+      geometries.forEach((geometry) => geometry.dispose());
     },
   };
 }
