@@ -5,8 +5,9 @@ feste Richtung. Der Spieler tippt Spiegel an – sie kippen zwischen `/` und `\`
 und lenken den Strahl um 90° um. Gelöst ist ein Level, wenn der Faden aus Licht
 alle Knoten gleichzeitig durchläuft.
 
-Mehr kann der Spieler nicht tun. Nichts wird gesetzt, nichts verschoben, nichts
-gelöscht: **nur drehen.** Die ganze Schwierigkeit steckt in der Anordnung.
+Später kommen **Prismen** dazu. Sie trennen das weiße Licht in seine beiden
+Grundfarben und führen sie an anderer Stelle wieder zusammen – und einige davon
+setzt der Spieler selbst.
 
 ## Spielen
 
@@ -14,16 +15,16 @@ gelöscht: **nur drehen.** Die ganze Schwierigkeit steckt in der Anordnung.
 
 | | |
 | --- | --- |
-| Spiegel drehen | antippen / anklicken |
+| Bauteil weiterschalten | antippen / anklicken |
 | Zug zurück | `↩ Zurück` oder <kbd>U</kbd> |
 | Level neu | `⟳ Neu` oder <kbd>R</kbd> |
 | Tipp | `💡 Tipp` oder <kbd>H</kbd> |
 | Levelauswahl | `☰` oder <kbd>Esc</kbd> |
-| Ohne Maus | Pfeiltasten bewegen den Fokus, <kbd>Enter</kbd> dreht |
+| Ohne Maus | Pfeiltasten bewegen den Fokus, <kbd>Enter</kbd> schaltet |
 
 Der Tipp ist kein vorgeschriebener Text, sondern gerechnet: Der Solver schaut
-sich die **aktuelle** Spiegelstellung an und nennt einen Spiegel, der von hier
-aus noch gedreht gehört, samt Zahl der verbleibenden Züge.
+sich die **aktuelle** Stellung an und nennt ein Bauteil, das von hier aus noch
+dran ist, samt Zahl der verbleibenden Züge.
 
 ### Auf dem Handy und Tablet
 
@@ -35,22 +36,65 @@ der Home-Leiste heraus.
 
 ## Regeln im Detail
 
-Der Strahl läuft Zelle für Zelle geradeaus, bis eines davon eintritt:
+### Licht hat eine Farbe
+
+Licht ist eine **Menge aus zwei Grundfarben**: Bernstein und Cyan. Weiß ist
+keine dritte Farbe, sondern die Vereinigung der beiden. Die Quelle strahlt weiß.
 
 | trifft auf | passiert |
 | --- | --- |
-| Spiegel | 90°-Umlenkung, weiter |
-| Zielknoten | Knoten leuchtet, Strahl **läuft weiter** |
+| Spiegel | 90°-Umlenkung, Farbe bleibt |
+| **Prisma** | **Bernstein läuft geradeaus, Cyan wird um 90° umgelenkt** |
+| **leere Fassung** | nichts – das Licht läuft hindurch |
+| Zielknoten | Knoten leuchtet, wenn die Farbe passt; Strahl **läuft weiter** |
 | Blocker | Ende |
 | Quelle | Ende |
 | Feldrand | Ende |
 
-Fest sind: Position und Richtung der Quelle, Position der Knoten, Blocker,
-Position aller Spiegel. Veränderbar ist ausschließlich die Ausrichtung der
-drehbaren Spiegel. Verschraubte Spiegel (dunkle Trägerplatte mit vier
-Schraubenköpfen) lenken mit, lassen sich aber nicht drehen.
+Weißes Licht **spaltet sich** an einem Prisma also in zwei Strahlen. Und weil
+die Regel umkehrbar ist, **vereinigt** dasselbe Prisma zwei passend einfallende
+Farbstrahlen wieder zu weißem Licht: Beide verlassen es in derselben Richtung,
+und die Vereinigung ihrer Farbmengen ist wieder Weiß. Es braucht dafür kein
+zweites Bauteil und keine Sonderregel – Spalten und Vereinigen sind dieselbe
+Regel, einmal vorwärts und einmal rückwärts gelesen.
 
-Der **Par-Wert** ist die vom Solver bestimmte Mindestzahl an Drehungen. Wer ihn
+### Knotenfarben
+
+| Knoten | leuchtet bei |
+| --- | --- |
+| `o` | jedem Licht |
+| `A` Bernsteinknoten | **reinem** Bernstein |
+| `C` Cyanknoten | **reinem** Cyan |
+| `W` Weißknoten | weißem, also wiedervereinigtem Licht |
+
+Weißes Licht lässt einen Bernsteinknoten dunkel – es ist ihm zu grell. Erst das
+Prisma trennt sauber genug. Damit hat das Zusammenführen einen zwingenden
+Grund: Ohne Wiedervereinigung bleibt jeder Weißknoten dunkel.
+
+Farbe ist nie das einzige Unterscheidungsmerkmal: Die Knoten haben auch
+verschiedene Formen (Kreis, Dreieck, Viereck, Achteck mit zweitem Reif).
+
+### Fassungen und der Vorrat
+
+Ein Level kann **Fassungen** enthalten und dazu einen **Vorrat an Prismen**.
+Eine Fassung ist eine markierte Zelle, in die ein Prisma passt. Ein Tipp
+schaltet sie weiter:
+
+```
+leer  →  ◆ /  →  ◆ \  →  leer  →  …
+```
+
+Jeder Tipp ist ein Zug. Es gibt immer **mehr Fassungen als Prismen** – welche
+man besetzt, ist Teil des Rätsels. Ist der Vorrat leer, bleibt eine leere
+Fassung stumm.
+
+Fest sind: Position und Richtung der Quelle, Position der Knoten, Blocker und
+aller Bauteile. Veränderbar ist ausschließlich die Ausrichtung der beweglichen
+Bauteile und der Inhalt der Fassungen. Verschraubte Bauteile (dunkle
+Trägerplatte mit vier Schraubenköpfen) wirken mit, lassen sich aber nicht
+antippen.
+
+Der **Par-Wert** ist die vom Solver bestimmte Mindestzahl an Zügen. Wer ihn
 trifft, bekommt drei Sterne. Es gibt keine Zugbegrenzung – niemand wird aus
 einem Level geworfen, weil er zu viel probiert hat.
 
@@ -64,37 +108,43 @@ die Beschriftung der Glyphe wäre sonst verdreht – und ein sichtbarer
 
 ## Die Level
 
-20 Level, von 5×5 mit einem einzigen Spiegel bis 9×9 mit dreizehn drehbaren
-Spiegeln und fünf Knoten. Der Par-Wert steigt von 1 auf 8, nie um mehr als
-einen Zug pro Level.
+Level 1–20 sind das Spiegelspiel: von 5×5 mit einem einzigen Spiegel bis 9×9
+mit dreizehn drehbaren Spiegeln und fünf Knoten, Par von 1 auf 8. Ab Level 21
+kommen die Prismen dazu.
 
 Jedes Level hat **genau eine** kürzeste Lösung – es gibt keine zwei
-gleichwertigen Wege, und damit auch keinen Zufallstreffer. In jedem Level gibt
-es außerdem mindestens zwei drehbare Spiegel mehr, als Züge nötig sind:
-„einfach alles umlegen" funktioniert nirgends.
+gleichwertigen Wege und damit auch keinen Zufallstreffer. In jedem Level gibt
+es außerdem mehr bewegliche Bauteile, als Züge nötig sind: „einfach alles
+umlegen" funktioniert nirgends.
 
-Drei der späten Level (`l13`, `l17`, `l19`) enthalten je einen **Ablenkspiegel**
-– einen drehbaren Spiegel, den das Licht in keiner Stellung berührt. Ohne ihn
-wüsste ein aufmerksamer Spieler, dass jeder sichtbare Spiegel gebraucht wird,
-und könnte allein daraus auf die Lösung schließen. Die Spalte `Deko` in
-`npm run sim:lumen` weist sie aus; `check:lumen` sorgt dafür, dass es bei
-Ablenkung bleibt und nicht die halbe Fläche Attrappe wird.
+Einige der späten Level enthalten **Ablenkbauteile** – bewegliche Teile, die
+das Licht in keiner Stellung berührt. Ohne sie wüsste ein aufmerksamer Spieler,
+dass jedes sichtbare Bauteil gebraucht wird, und könnte allein daraus auf die
+Lösung schließen. Die Spalte `Deko` in `npm run sim:lumen` weist sie aus;
+`check:lumen` sorgt dafür, dass es bei Ablenkung bleibt und nicht die halbe
+Fläche Attrappe wird.
 
-Neue Mechaniken kommen einzeln und mit einem Satz Erklärung: Spiegel drehen
-(l01), der Faden läuft hinter einem Knoten weiter (l02), Blocker (l03), feste
-Spiegel (l04), Kreuzungen (l06), vier Knoten auf einem Faden (l11), das große
-Feld (l16).
+Neue Mechaniken kommen einzeln und werden erklärt. Für die kleinen Sachen
+genügt ein Satz Toast (`hint`): Spiegel drehen (l01), der Faden läuft hinter
+einem Knoten weiter (l02), Blocker (l03), feste Spiegel (l04), Kreuzungen
+(l06), vier Knoten auf einem Faden (l11), das große Feld (l16). Für die drei
+großen gibt es eine einmalige **Lehrkarte** mit Zeichnung (`teach`): das
+Prisma, die Knotenfarben und die Fassungen. `check:lumen` erzwingt, dass jede
+davon genau einmal und bei ihrem ersten Auftreten erklärt wird.
 
 ## Aufbau
 
 ```
-level.js      Datenmodell, Spiegelphysik, Textformat der Level
-beam.js       Strahlverfolgung – rein aus Level + Spiegelstellungen
-game.js       Sitzung: drehen, zurück, neu, Sternbewertung
+optics.js     Farbmodell und Bauteilverhalten – die einzige Stelle, an der
+              steht, was ein Bauteil mit Licht macht
+level.js      Datenmodell, Regler, Textformat der Level
+beam.js       Strahlverfolgung als Fixpunkt – rein aus Level + Reglerstellung
+game.js       Sitzung: schalten, zurück, neu, Sternbewertung
 levels.js     Levelsammlung im Textformat
+teach.js      Zeichnungen der Lehrkarten
 layout.js     Geometrie – geteilt von Renderer und Eingabe
 render.js     Wahl der Darstellung: WebGL2, sonst 2D-Canvas
-gfx/          WebGL2-Renderer (Shader, Bloom) und der 2D-Rückfall
+gfx/          WebGL2-Renderer (Shader, Bloom), der 2D-Rückfall und die Palette
 input.js      Finger, Maus, Tastatur
 progress.js   Fortschritt im localStorage
 audio.js      synthetischer Klang über die Web Audio API
@@ -102,13 +152,49 @@ main.js       Verdrahtung, Bildschirme
 sim/          Simulation & Solver ohne Browser (eigene README)
 ```
 
-`level.js`, `beam.js`, `game.js` und `levels.js` sind vollständig DOM-frei.
-Genau deshalb lässt sich das Spiel ohne Browser durchspielen und prüfen.
+`optics.js`, `level.js`, `beam.js`, `game.js` und `levels.js` sind vollständig
+DOM-frei. Genau deshalb lässt sich das Spiel ohne Browser durchspielen und
+prüfen.
+
+### Warum die Optik ein eigenes Modul ist
+
+`beam.js` kennt kein einziges Bauteil beim Namen. Es fragt nur
+`interact(art, zustand, richtung, farben)` und bekommt die austretenden
+Strahlen zurück. Ein neues Spielprinzip ist deshalb ein Eintrag in `DEVICES` –
+und nicht ein Eingriff in die Strahlverfolgung, den Solver, die Abnahme und
+zwei Renderer.
+
+Dieselbe Trennung zieht sich durch: Der Solver kennt nur **Regler** mit `n`
+Zuständen, nicht Spiegel und Fassungen. Die Szene läuft über `level.devices`
+und ordnet jeder Art in einer Tabelle einen Sprite zu. Die Farben stehen einmal
+in `gfx/palette.js` und gelten für beide Renderer.
+
+### Warum die Strahlverfolgung ein Fixpunkt ist
+
+Solange es nur Spiegel gab, war der Lichtweg ein Pfad: Ein Spiegel ist eine
+umkehrbare Abbildung, die Quelle verschluckt einfallendes Licht, also konnte
+der Strahl gar nicht in einen Kreis geraten.
+
+Ein Prisma macht aus einem Strahl zwei und ist damit nicht mehr umkehrbar –
+Ringe im Lichtweg sind jetzt wirklich möglich. Statt sie mit einer
+Schleifenerkennung abzufangen, rechnet `beam.js` einen **Fixpunkt** über
+
+```
+(Zelle, Laufrichtung)  →  Farbmaske
+```
+
+Farbmasken wachsen nur (Vereinigung zweier Strahlen = ODER der Masken), der
+Zustandsraum ist endlich. Damit terminiert die Rechnung garantiert nach
+höchstens `Breite · Höhe · 4 · 2` Schritten, ganz gleich wie viele Prismen im
+Feld stehen. Die Wiedervereinigung fällt dabei kostenlos ab – sie *ist* die
+Mengenvereinigung. Und weil der Fixpunkt der kleinste ist, bleibt ein Ring, der
+sich nur selbst speisen würde, dunkel: Licht entsteht ausschließlich an der
+Quelle.
 
 ## Ohne Browser testen
 
 ```bash
-npm run check:lumen                # Physik, Sitzungslogik, Abnahme aller Level
+npm run check:lumen                # Optik, Sitzungslogik, Abnahme aller Level
 npm run sim:lumen                  # Kennzahlentabelle
 npm run sim:lumen -- --show=l05    # Start- und Lösungsbild als ASCII
 ```
@@ -125,6 +211,8 @@ l05 · Serpentine  (7×7)
 · · · · · · ·
 Züge 3 / Par 3  ·  Ziele 3/3  ·  GELÖST  ·  3★
 ```
+
+Farbiges Licht bekommt eigene Linien: `─│` weiß, `═║` Bernstein, `┈┊` Cyan.
 
 Details in [`sim/README.md`](sim/README.md): warum der Solver erschöpfend suchen
 darf, was `check:lumen` alles abnimmt und wie man ein neues Level einbaut.
@@ -154,10 +242,17 @@ Ein Level ist ein Array aus gleich langen Zeilen:
 | --- | --- |
 | `.` | leer |
 | `#` | Blocker |
-| `o` | Zielknoten |
 | `>` `<` `^` `v` | Lichtquelle mit Strahlrichtung |
-| `/` `\` | drehbarer Spiegel in dieser Ausrichtung |
+| `o` | Knoten für jedes Licht |
+| `A` `C` `W` | Bernstein-, Cyan-, Weißknoten |
+| `/` `\` | drehbarer Spiegel |
 | `1` `2` | fester Spiegel (`/` bzw. `\`) |
+| `p` `q` | drehbares Prisma (`/` bzw. `\`) |
+| `3` `4` | festes Prisma |
+| `_` | leere Fassung |
+
+Dazu die Felder `prisms` (Vorrat, nur bei Fassungen), `hint` (Toast beim
+Levelstart) und `teach` (`{ id, title, body }` – einmalige Lehrkarte).
 
 In JS-Strings muss `\` als `\\` geschrieben werden. `par` wird von
 `check:lumen` gegen den Solver geprüft – ein falscher Wert ist ein Testfehler,

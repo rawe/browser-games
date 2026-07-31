@@ -1,53 +1,34 @@
-// Datenmodell eines Lumenweber-Levels: Zelltypen, Richtungen, Spiegel-Physik
-// und das Textformat, in dem Level geschrieben werden.
+// Datenmodell eines Lumenweber-Levels: Zellen, Bauteile, Regler und das
+// Textformat, in dem Level geschrieben werden.
 //
-// Dieses Modul ist bewusst DOM-frei – es wird sowohl vom Spiel im Browser als
-// auch von der Headless-Simulation unter `sim/` benutzt.
+// Die Optik selbst steht in `optics.js` – hier geht es nur um Aufbau und
+// Zustandsraum. Beides ist DOM-frei und wird sowohl vom Spiel im Browser als
+// auch von der Simulation unter `sim/` benutzt.
 
-/** Die vier Laufrichtungen des Strahls. y zeigt nach unten (Bildschirmraster). */
-export const DIRS = {
-  R: { dx: 1, dy: 0 },
-  L: { dx: -1, dy: 0 },
-  U: { dx: 0, dy: -1 },
-  D: { dx: 0, dy: 1 },
-};
-
-export const DIR_KEYS = ['R', 'L', 'U', 'D'];
-
-/**
- * Umlenkung an einem Spiegel, nach den Regeln echter Optik: Ein `/` wirft einen
- * nach rechts laufenden Strahl nach oben, ein `\` nach unten.
- *
- * Der Spielentwurf hatte die beiden Tabellen vertauscht (dort ging der Strahl
- * am `/` nach unten). Das Verhalten ist dasselbe, nur die Beschriftung der
- * Glyphe wäre verdreht – und ein sichtbarer `/`-Spiegel, der nach unten
- * ablenkt, sieht auf dem Schirm schlicht falsch aus. Deshalb hier die
- * physikalische Variante.
- */
-export const REFLECT = {
-  '/': { R: 'U', U: 'R', L: 'D', D: 'L' },
-  '\\': { R: 'D', D: 'R', L: 'U', U: 'L' },
-};
-
-/** Der andere Zustand eines drehbaren Spiegels. */
-export const flipOrient = (orient) => (orient === '/' ? '\\' : '/');
+import { DIRS, interact } from './optics.js';
 
 /**
  * Zeichenlegende des Textformats.
  *
- *   .  leer                     #  Blocker
- *   o  Zielpunkt                >  < ^ v  Lichtquelle mit Richtung
- *   /  drehbarer Spiegel „/“    \  drehbarer Spiegel „\“
- *   1  fester Spiegel „/“       2  fester Spiegel „\“
+ *   .      leer                        #  Blocker
+ *   > < ^ v  Lichtquelle mit Richtung
+ *   o      Knoten für jedes Licht      A  Bernsteinknoten
+ *   C      Cyanknoten                  W  Weißknoten
+ *   / \    drehbarer Spiegel           1  2  fester Spiegel („/“ bzw. „\“)
+ *   p q    drehbares Prisma            3  4  festes Prisma
+ *   _      leere Fassung für ein Prisma aus dem Vorrat
  *
- * Feste Spiegel sind Ziffern, weil sie „festgeschraubt“ sind: Sie lenken das
- * Licht mit, lassen sich aber nicht antippen.
+ * Festgeschraubte Bauteile sind Ziffern: Sie wirken mit, lassen sich aber nicht
+ * antippen.
  */
 export const SYMBOLS = {
   '.': { type: 'empty' },
   ' ': { type: 'empty' },
   '#': { type: 'wall' },
-  o: { type: 'target' },
+  o: { type: 'target', want: 'any' },
+  A: { type: 'target', want: 'amber' },
+  C: { type: 'target', want: 'cyan' },
+  W: { type: 'target', want: 'white' },
   '>': { type: 'source', dir: 'R' },
   '<': { type: 'source', dir: 'L' },
   '^': { type: 'source', dir: 'U' },
@@ -56,17 +37,28 @@ export const SYMBOLS = {
   '\\': { type: 'mirror', orient: '\\', locked: false },
   1: { type: 'mirror', orient: '/', locked: true },
   2: { type: 'mirror', orient: '\\', locked: true },
+  p: { type: 'prism', orient: '/', locked: false },
+  q: { type: 'prism', orient: '\\', locked: false },
+  3: { type: 'prism', orient: '/', locked: true },
+  4: { type: 'prism', orient: '\\', locked: true },
+  _: { type: 'socket' },
+};
+
+/** Zustandsräume der Bauteile. Ein Regler zykliert genau diese Liste durch. */
+const STATES = {
+  diagonal: ['/', '\\'],
+  socket: [null, '/', '\\'],
 };
 
 /** Umkehrung der Legende – für die ASCII-Ausgabe der Simulation. */
-export function symbolFor(cell) {
+export function symbolFor(cell, state) {
   switch (cell.type) {
     case 'wall': return '#';
-    case 'target': return 'o';
+    case 'target': return { any: 'o', amber: 'A', cyan: 'C', white: 'W' }[cell.want];
     case 'source': return { R: '>', L: '<', U: '^', D: 'v' }[cell.dir];
-    case 'mirror':
-      if (cell.locked) return cell.orient === '/' ? '1' : '2';
-      return cell.orient;
+    case 'mirror': return cell.locked ? (state === '/' ? '1' : '2') : state;
+    case 'prism': return cell.locked ? (state === '/' ? '3' : '4') : (state === '/' ? 'p' : 'q');
+    case 'socket': return state === null ? '_' : (state === '/' ? 'p' : 'q');
     default: return '.';
   }
 }
@@ -75,10 +67,10 @@ export function symbolFor(cell) {
  * Baut aus der Kurzschreibweise ein vollständiges Level-Objekt.
  *
  * Die Struktur (Rechteckigkeit, bekannte Zeichen) wird immer geprüft. Die
- * Spielbarkeit (Quelle, Ziel, drehbarer Spiegel) nur mit `validate` – so lassen
- * sich in den Tests auch bewusst unvollständige Raster bauen.
+ * Spielbarkeit nur mit `validate` – so lassen sich in den Tests auch bewusst
+ * unvollständige Raster bauen.
  *
- * @param {object} def  { id, name, hint, rows: string[] , par? }
+ * @param {object} def  { id, name, hint, teach, prisms, par, rows: string[] }
  * @param {{validate?: boolean}} [options]
  */
 export function parseLevel(def, { validate = true } = {}) {
@@ -90,7 +82,8 @@ export function parseLevel(def, { validate = true } = {}) {
   const width = rows[0].length;
 
   const cells = [];
-  const mirrors = [];
+  const devices = [];
+  const controls = [];
   const sources = [];
   const targets = [];
 
@@ -103,28 +96,52 @@ export function parseLevel(def, { validate = true } = {}) {
       const ch = line[x];
       const proto = SYMBOLS[ch];
       if (!proto) throw new Error(`Level ${def.id}: unbekanntes Zeichen "${ch}" bei (${x},${y})`);
-      const cell = { ...proto, x, y };
-      if (cell.type === 'mirror') {
-        cell.index = mirrors.length;
-        mirrors.push({ x, y, index: cell.index, start: cell.orient, locked: cell.locked });
+      const cell = { ...proto, x, y, device: -1 };
+
+      if (cell.type === 'mirror' || cell.type === 'prism' || cell.type === 'socket') {
+        const states = cell.type === 'socket' ? STATES.socket : STATES.diagonal;
+        // Festgeschraubt heißt: ein einziger Zustand, also kein Regler.
+        const fixed = cell.locked === true;
+        const device = {
+          index: devices.length,
+          kind: cell.type,
+          x,
+          y,
+          locked: fixed,
+          states: fixed ? [cell.orient] : states,
+          start: fixed || cell.type === 'socket' ? 0 : states.indexOf(cell.orient),
+          control: -1,
+        };
+        if (!fixed) {
+          device.control = controls.length;
+          controls.push(device);
+        }
+        cell.device = device.index;
+        devices.push(device);
       }
+
       if (cell.type === 'source') sources.push({ x, y, dir: cell.dir });
-      if (cell.type === 'target') targets.push({ x, y, index: targets.length });
+      if (cell.type === 'target') targets.push({ x, y, want: cell.want, index: targets.length });
       cells.push(cell);
     }
   }
 
+  const sockets = devices.filter((d) => d.kind === 'socket');
   const level = {
     id: def.id,
     name: def.name,
     hint: def.hint ?? '',
+    teach: def.teach ?? null,
     width,
     height,
     cells,
-    mirrors,
+    devices,
+    controls,
+    sockets,
     sources,
     targets,
-    rotatable: mirrors.filter((m) => !m.locked).map((m) => m.index),
+    /** Wie viele Prismen liegen im Vorrat? Nur Fassungen können sie aufnehmen. */
+    prisms: def.prisms ?? 0,
     par: def.par ?? null,
     rows: [...rows],
   };
@@ -138,21 +155,79 @@ export function cellAt(level, x, y) {
   return level.cells[y * level.width + x];
 }
 
-/** Startausrichtung aller Spiegel als Array (Index = mirror.index). */
-export function startOrientations(level) {
-  return level.mirrors.map((m) => m.start);
+/** Startstellung aller Regler als Array von Zustands-Indizes. */
+export function startConfig(level) {
+  return level.controls.map((c) => c.start);
 }
+
+/** Aktueller Zustand eines Bauteils unter dieser Reglerstellung. */
+export function deviceState(level, config, device) {
+  return device.control === -1 ? device.states[device.start] : device.states[config[device.control]];
+}
+
+/** Zustand des Bauteils auf einer Zelle – oder `undefined`, wenn dort keines liegt. */
+export function cellState(level, config, cell) {
+  return cell.device === -1 ? undefined : deviceState(level, config, level.devices[cell.device]);
+}
+
+/** Wie viele Prismen aus dem Vorrat stecken gerade in Fassungen? */
+export function placedPrisms(level, config) {
+  let n = 0;
+  for (const socket of level.sockets) {
+    if (deviceState(level, config, socket) !== null) n += 1;
+  }
+  return n;
+}
+
+/** Wie viele Prismen liegen noch im Vorrat? */
+export const prismsLeft = (level, config) => level.prisms - placedPrisms(level, config);
+
+/**
+ * Zugkosten von einer Reglerstellung zur anderen.
+ *
+ * Jeder Regler zykliert seine Zustände in einer festen Reihenfolge – ein
+ * Spiegel mit zwei, eine Fassung mit drei. Weil die Regler voneinander
+ * unabhängig sind, ist die Zugreihenfolge egal und die Mindestzahl an Zügen
+ * schlicht die Summe der zyklischen Abstände. Genau das macht die vollständige
+ * Suche in `sim/solver.js` ohne Pfadsuche möglich.
+ */
+export function configCost(level, from, to) {
+  let cost = 0;
+  for (let i = 0; i < level.controls.length; i += 1) {
+    const k = level.controls[i].states.length;
+    cost += (to[i] - from[i] + k) % k;
+  }
+  return cost;
+}
+
+/**
+ * Ist diese Reglerstellung überhaupt erreichbar?
+ *
+ * Es können nie mehr Prismen in Fassungen stecken, als im Vorrat liegen.
+ */
+export const configAllowed = (level, config) => placedPrisms(level, config) <= level.prisms;
 
 /** Wirft, wenn ein Level strukturell nicht spielbar ist. */
 export function validateLevel(level) {
   const err = (msg) => { throw new Error(`Level ${level.id}: ${msg}`); };
   if (level.sources.length === 0) err('keine Lichtquelle');
   if (level.targets.length === 0) err('kein Zielpunkt');
-  if (level.rotatable.length === 0) err('kein drehbarer Spiegel – nichts zu tun');
+  if (level.controls.length === 0) err('kein beweglicher Regler – nichts zu tun');
   if (level.width < 3 || level.height < 3) err('Raster kleiner als 3×3');
   for (const s of level.sources) {
     const { dx, dy } = DIRS[s.dir];
     if (!cellAt(level, s.x + dx, s.y + dy)) err(`Lichtquelle bei (${s.x},${s.y}) strahlt sofort aus dem Feld`);
   }
+  if (level.sockets.length > 0 && level.prisms < 1) {
+    err(`${level.sockets.length} Fassungen, aber kein Prisma im Vorrat`);
+  }
+  if (level.prisms > 0 && level.sockets.length === 0) {
+    err(`${level.prisms} Prismen im Vorrat, aber keine Fassung`);
+  }
+  if (level.sockets.length > 0 && level.prisms >= level.sockets.length) {
+    err(`${level.prisms} Prismen auf ${level.sockets.length} Fassungen – ohne freie Fassung gibt es nichts zu entscheiden`);
+  }
+  // Die Optik muss jedes vorkommende Bauteil kennen.
+  for (const cell of level.cells) interact(cell.type, '/', 'R', 3);
   return level;
 }

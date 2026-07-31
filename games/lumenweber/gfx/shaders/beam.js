@@ -3,12 +3,17 @@
 // Geometrisch ist er nur eine Handvoll Rechtecke (siehe `createBeamBuffer`).
 // Alles Aussehen entsteht hier: Der Fragment-Shader kennt zu jedem Pixel den
 // senkrechten Abstand zur Mittellinie und die bis dahin zurückgelegte
-// Bogenlänge. Aus dem Abstand wird das Querprofil (weißer Kern, farbiger Hof),
+// Bogenlänge. Aus dem Abstand wird das Querprofil (heißer Kern, farbiger Hof),
 // aus der Bogenlänge der Energiefluss in Laufrichtung.
+//
+// Die Farbe kommt vom Eckpunkt, nicht aus einem Uniform: Hinter einem Prisma
+// laufen Bernstein und Cyan gleichzeitig über das Brett, und beide sollen in
+// einem Zeichenaufruf durchgehen.
 //
 // Gezeichnet wird additiv. Wo der Faden sich selbst kreuzt, summieren sich die
 // Rechtecke von allein zu einem hellen Knoten – genau der gewünschte Effekt,
-// ohne Sonderbehandlung.
+// ohne Sonderbehandlung. Und wo sich zwei Farben wieder vereinigen, ergibt
+// dieselbe Addition ganz von selbst wieder weißes Licht.
 
 import { HEAD } from './common.js';
 
@@ -16,15 +21,21 @@ export const BEAM_VERT = `${HEAD}
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aLocal;   // u längs, v quer (CSS-Pixel)
 layout(location = 2) in vec4 aMeta;    // Segmentlänge · Bogenlänge · Halbbreite · Kraft
+layout(location = 3) in vec3 aWarm;    // Farbe knapp neben dem Kern
+layout(location = 4) in vec3 aCool;    // Farbe des weiten Hofs
 
 uniform vec2 uCssRes;
 
 out vec2 vLocal;
 flat out vec4 vMeta;
+flat out vec3 vWarm;
+flat out vec3 vCool;
 
 void main() {
   vLocal = aLocal;
   vMeta = aMeta;
+  vWarm = aWarm;
+  vCool = aCool;
   vec2 clip = (aPos / uCssRes) * 2.0 - 1.0;
   gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
 }`;
@@ -32,6 +43,8 @@ void main() {
 export const BEAM_FRAG = `${HEAD}
 in vec2 vLocal;
 flat in vec4 vMeta;
+flat in vec3 vWarm;
+flat in vec3 vCool;
 out vec4 outColor;
 
 uniform float uTime;
@@ -39,8 +52,6 @@ uniform float uCalm;
 uniform float uCore;      // Radius des heißen Kerns in Pixeln
 uniform float uHalo;      // Radius des farbigen Hofs in Pixeln
 uniform float uCell;
-uniform vec3 uWarm;       // Farbe knapp neben dem Kern
-uniform vec3 uCool;       // Farbe des weiten Hofs
 uniform float uReveal;    // bis hierher ist der Faden gewebt (Bogenlänge px)
 uniform float uWave;      // Position der Siegeswelle (px), < 0 = aus
 uniform float uGain;
@@ -83,9 +94,12 @@ void main() {
 
   float boost = 1.0 + wave * 1.5 + front * 1.6;
 
-  vec3 col = vec3(1.0) * inner * (1.15 + 0.85 * packet) * pulse;
-  col += uWarm * mid * 0.55;
-  col += uCool * outer * 0.34;
+  // Der Kern bleibt heiß, nimmt aber einen Hauch der Fadenfarbe an – sonst
+  // sähen ein Bernstein- und ein Cyanfaden in der Mitte gleich aus.
+  vec3 core = mix(vec3(1.0), vWarm, 0.30);
+  vec3 col = core * inner * (1.15 + 0.85 * packet) * pulse;
+  col += vWarm * mid * 0.55;
+  col += vCool * outer * 0.34;
   col += vec3(1.0, 0.94, 0.80) * wave * (inner * 1.2 + mid * 0.6);
 
   outColor = vec4(col * energy * woven * boost * uGain, 1.0);

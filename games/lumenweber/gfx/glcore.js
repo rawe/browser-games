@@ -190,8 +190,15 @@ export function createSpriteBatch(gl, program, capacity) {
   };
 }
 
-/** Attribute je Strahl-Eckpunkt: Position, Segmentkoordinate, Metadaten. */
-export const BEAM_FLOATS = 8;
+/**
+ * Attribute je Strahl-Eckpunkt: Position, Segmentkoordinate, Metadaten und die
+ * beiden Farben des Fadens.
+ *
+ * Die Farbe steckt am Eckpunkt und nicht in einem Uniform, weil seit den
+ * Prismen mehrere verschiedenfarbige Fäden gleichzeitig auf dem Brett liegen –
+ * sie sollen in einem einzigen Zeichenaufruf durchgehen.
+ */
+export const BEAM_FLOATS = 14;
 
 /**
  * Streifen aus Dreiecken für den Lichtfaden.
@@ -220,17 +227,28 @@ export function createBeamBuffer(gl, program, maxSegments) {
   gl.vertexAttribPointer(1, 2, gl.FLOAT, false, stride, 8);   // u längs, v quer
   gl.enableVertexAttribArray(2);
   gl.vertexAttribPointer(2, 4, gl.FLOAT, false, stride, 16);  // Länge, Bogenmaß, Radius, Kraft
+  gl.enableVertexAttribArray(3);
+  gl.vertexAttribPointer(3, 3, gl.FLOAT, false, stride, 32);  // Farbe neben dem Kern
+  gl.enableVertexAttribArray(4);
+  gl.vertexAttribPointer(4, 3, gl.FLOAT, false, stride, 44);  // Farbe des weiten Hofs
   gl.bindVertexArray(null);
+
+  let tintWarm = [1, 1, 1];
+  let tintCool = [1, 1, 1];
 
   const put = (i, x, y, u, v, len, arc, half, energy) => {
     const o = i * BEAM_FLOATS;
     data[o] = x; data[o + 1] = y; data[o + 2] = u; data[o + 3] = v;
     data[o + 4] = len; data[o + 5] = arc; data[o + 6] = half; data[o + 7] = energy;
+    data[o + 8] = tintWarm[0]; data[o + 9] = tintWarm[1]; data[o + 10] = tintWarm[2];
+    data[o + 11] = tintCool[0]; data[o + 12] = tintCool[1]; data[o + 13] = tintCool[2];
   };
 
   return {
     get vertexCount() { return vertices; },
     reset() { vertices = 0; },
+    /** Farbe für alle folgenden Segmente setzen. */
+    setTint(warm, cool) { tintWarm = warm; tintCool = cool; },
     /**
      * Ein Segment von (ax,ay) nach (bx,by) in CSS-Pixeln. `arc` ist die bis
      * hierher zurückgelegte Bogenlänge – daraus entsteht der Energiefluss.

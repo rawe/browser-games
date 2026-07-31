@@ -1,17 +1,18 @@
 // Lumenweber – Verdrahtung von Logik, Darstellung und Bedienung.
 //
-// Die Spiellogik liegt vollständig in `game.js`/`beam.js` und weiß nichts vom
-// DOM. Hier kommt nur zusammen, was der Browser beisteuert: Canvas, Eingabe,
-// Bildschirme, Fortschritt.
+// Die Spiellogik liegt vollständig in `game.js`/`beam.js`/`optics.js` und weiß
+// nichts vom DOM. Hier kommt nur zusammen, was der Browser beisteuert: Canvas,
+// Eingabe, Bildschirme, Fortschritt.
 
 import { levels } from './levels.js';
-import { createSession, toggleAt, undo, resetSession, rating } from './game.js';
+import { createSession, cycleAt, undo, resetSession, rating } from './game.js';
 import { createRenderer } from './render.js';
 import { createInput } from './input.js';
 import { solveFrom } from './sim/solver.js';
+import { teachArt } from './teach.js';
 import {
   loadProgress, recordSolve, isUnlocked, nextOpenIndex, totalStars,
-  hasSeenRules, markRulesSeen,
+  hasSeenRules, markRulesSeen, hasSeenTeach, markTeachSeen,
 } from './progress.js';
 import * as audio from './audio.js';
 
@@ -24,14 +25,19 @@ const el = {
   hudLevel: $('hud-level'),
   hudName: $('hud-name'),
   hudTargets: $('hud-targets'),
+  hudPrisms: $('hud-prisms'),
   hudMoves: $('hud-moves'),
   controls: $('controls'),
   toast: $('toast'),
   screenTitle: $('screen-title'),
   screenLevels: $('screen-levels'),
   screenRules: $('screen-rules'),
+  screenTeach: $('screen-teach'),
   screenWin: $('screen-win'),
   levelGrid: $('level-grid'),
+  teachTitle: $('teach-title'),
+  teachBody: $('teach-body'),
+  teachArt: $('teach-art'),
   winName: $('win-name'),
   winStars: $('win-stars'),
   winDetail: $('win-detail'),
@@ -44,15 +50,19 @@ let index = 0;
 let session = null;
 let toastTimer = 0;
 let winTimer = 0;
-let litBefore = 0;
+
+/** Züge sind nicht mehr nur Drehungen – seit es Fassungen gibt auch Griffe. */
+const turns = (n) => `${n} ${n === 1 ? 'Zug' : 'Züge'}`;
 
 /* ---------- Bildschirme ---------- */
 
-const overlays = [el.screenTitle, el.screenLevels, el.screenRules, el.screenWin];
+const overlays = [el.screenTitle, el.screenLevels, el.screenRules, el.screenTeach, el.screenWin];
 
 function showOverlay(node) {
   for (const o of overlays) o.hidden = o !== node;
-  const playing = node === null || node === el.screenWin;
+  // Sieg und Lehrkarte legen sich über das laufende Spiel – HUD und Bedienleiste
+  // bleiben stehen, damit sich die Brettgröße darunter nicht verschiebt.
+  const playing = node === null || node === el.screenWin || node === el.screenTeach;
   el.hud.hidden = !playing || !session;
   el.controls.hidden = !playing || !session;
 }
@@ -90,7 +100,6 @@ function startLevel(i) {
   index = Math.max(0, Math.min(levels.length - 1, i));
   const level = levels[index];
   session = createSession(level);
-  litBefore = session.lit;
   renderer.setLevel(level);
   renderer.setSession(session);
   // Erst die Bildschirme schließen, dann messen: HUD und Bedienleiste sind
@@ -98,6 +107,11 @@ function startLevel(i) {
   closeOverlays();
   updateHud();
   layout();
+  // Eine neue Mechanik wird genau einmal erklärt, und zwar vor dem ersten Zug.
+  if (level.teach && !hasSeenTeach(level.teach.id)) {
+    showTeach(level.teach);
+    return;
+  }
   if (level.hint) showToast(level.hint, 6200);
   else hideToast();
 }
@@ -110,21 +124,32 @@ function updateHud() {
   el.hudMoves.textContent = `↻ ${session.moves}/${level.par}`;
   el.hudTargets.classList.toggle('chip--good', session.solved);
   el.hudMoves.classList.toggle('chip--over', session.moves > level.par);
+
+  // Prismenvorrat: gefüllte Rauten liegen bereit, hohle stecken in Fassungen.
+  el.hudPrisms.hidden = level.prisms === 0;
+  if (level.prisms > 0) {
+    const left = session.prismsLeft;
+    el.hudPrisms.textContent = '◆'.repeat(left) + '◇'.repeat(level.prisms - left);
+    el.hudPrisms.title = `${left} von ${level.prisms} Prismen im Vorrat`;
+    el.hudPrisms.classList.toggle('chip--empty', left === 0);
+  }
 }
 
 function onTap(x, y) {
-  if (!session || !el.screenWin.hidden) return;
+  if (!session || !el.screenWin.hidden || !el.screenTeach.hidden) return;
   audio.unlockAudio();
   const before = session.lit;
-  if (!toggleAt(session, x, y)) {
+  const stock = session.prismsLeft;
+  if (!cycleAt(session, x, y)) {
     audio.playBlocked();
     return;
   }
   renderer.tapAt(x, y);
-  audio.playTurn();
+  if (session.prismsLeft < stock) audio.playPlace();
+  else if (session.prismsLeft > stock) audio.playLift();
+  else audio.playTurn();
   if (session.lit > before) audio.playLit(session.lit - 1);
   else if (session.lit < before) audio.playUnlit();
-  litBefore = session.lit;
   updateHud();
   if (session.solved) finishLevel();
 }
@@ -141,13 +166,30 @@ function finishLevel() {
     el.winName.textContent = level.name;
     el.winStars.innerHTML = Array.from({ length: 3 }, (_, i) =>
       `<span class="star${i < stars ? ' is-on' : ''}" style="--d:${i * 120}ms">★</span>`).join('');
-    const turns = `${session.moves} ${session.moves === 1 ? 'Drehung' : 'Drehungen'}`;
     el.winDetail.textContent = stars === 3
-      ? `${turns} – der kürzeste Weg.`
-      : `${turns} · Par ${level.par}. Kürzer geht es noch.`;
+      ? `${turns(session.moves)} – der kürzeste Weg.`
+      : `${turns(session.moves)} · Par ${level.par}. Kürzer geht es noch.`;
     $('btn-next').textContent = index + 1 < levels.length ? 'Weiter' : 'Zur Auswahl';
     showOverlay(el.screenWin);
   }, 900);
+}
+
+/* ---------- Lehrkarte ---------- */
+
+function showTeach(teach) {
+  el.teachTitle.textContent = teach.title;
+  el.teachBody.textContent = teach.body;
+  el.teachArt.innerHTML = teachArt(teach.id);
+  hideToast();
+  showOverlay(el.screenTeach);
+}
+
+function closeTeach() {
+  const level = levels[index];
+  if (level.teach) markTeachSeen(level.teach.id);
+  closeOverlays();
+  layout();
+  if (level.hint) showToast(level.hint, 6200);
 }
 
 /* ---------- Hinweise ---------- */
@@ -166,27 +208,32 @@ function hideToast() {
   toastTimer = setTimeout(() => { el.toast.hidden = true; }, 320);
 }
 
+/** Wie heißt das Bauteil, auf das der Tipp zeigt – samt passendem Artikel? */
+function nameOf(device, state) {
+  if (device.kind === 'mirror') return 'dem markierten Spiegel';
+  if (device.kind === 'prism') return 'dem markierten Prisma';
+  return state === null ? 'der markierten Fassung' : 'dem markierten Prisma';
+}
+
 /**
- * Tipp: Der Solver rechnet von der *aktuellen* Stellung aus und nennt einen
- * Spiegel, der noch gedreht gehört – plus die Zahl der verbleibenden Züge.
+ * Tipp: Der Solver rechnet von der *aktuellen* Stellung aus und nennt ein
+ * Bauteil, das noch dran ist – plus die Zahl der verbleibenden Züge.
  */
 function giveHint() {
   if (!session) return;
   const level = levels[index];
   let solution;
-  try { solution = solveFrom(level, session.orientations); } catch { solution = null; }
+  try { solution = solveFrom(level, session.config); } catch { solution = null; }
   if (!solution?.solvable || solution.moves.length === 0) {
     showToast(level.hint || 'Alle Knoten liegen auf dem Faden – fertig.', 4000);
     return;
   }
-  const mirror = level.mirrors[solution.moves[0]];
-  renderer.tapAt(mirror.x, mirror.y);
-  renderer.setCursor({ x: mirror.x, y: mirror.y });
-  const rest = solution.moves.length;
-  showToast(
-    `Noch ${rest} ${rest === 1 ? 'Drehung' : 'Drehungen'}. Fang mit dem markierten Spiegel an.`,
-    4500,
-  );
+  const control = solution.moves[0];
+  const device = level.controls[control];
+  renderer.tapAt(device.x, device.y);
+  renderer.setCursor({ x: device.x, y: device.y });
+  const what = nameOf(device, device.states[session.config[control]]);
+  showToast(`Noch ${turns(solution.moves.length)}. Fang mit ${what} an.`, 4500);
 }
 
 /* ---------- Größe ---------- */
@@ -256,6 +303,7 @@ $('btn-rules').addEventListener('click', () => { markRulesSeen(); showOverlay(el
 $('btn-rules-close').addEventListener('click', () => {
   if (session) closeOverlays(); else startLevel(nextOpenIndex(levels, progress));
 });
+$('btn-teach-close').addEventListener('click', closeTeach);
 $('btn-menu').addEventListener('click', openLevels);
 $('btn-help').addEventListener('click', () => showOverlay(el.screenRules));
 $('btn-levels-close').addEventListener('click', () => {

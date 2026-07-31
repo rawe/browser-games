@@ -24,6 +24,7 @@
       </div>
       <div class="hud-stats">
         <span id="hud-targets" class="chip" title="erhellte Ziele">◉ 0/0</span>
+        <span id="hud-prisms" class="chip chip--prism" title="Prismen im Vorrat" hidden>◆</span>
         <span id="hud-moves" class="chip" title="Züge / Par">↻ 0/0</span>
       </div>
       <button id="btn-help" class="icon-btn" type="button" aria-label="Spielregeln">?</button>
@@ -73,10 +74,25 @@
           <li><b class="rule-mark rule-fixed">╱</b><span><b>Verschraubte Spiegel</b> sitzen auf einer dunklen Platte mit vier Schraubenköpfen. Sie lenken mit, lassen sich aber nicht drehen.</span></li>
           <li><b class="rule-mark rule-wall">█</b><span><b>Blocker</b> verschlucken das Licht. Dahinter ist Schatten.</span></li>
           <li><b class="rule-mark rule-target">◉</b><span><b>Knoten</b> leuchten auf, wenn der Faden sie durchläuft – und er läuft dahinter weiter.</span></li>
+          <li><b class="rule-mark rule-prism">◆</b><span><b>Prismen</b> trennen die Farben: <b class="ink-amber">Bernstein</b> läuft geradeaus hindurch, <b class="ink-cyan">Cyan</b> biegt um 90° ab. Wo beide wieder in dieselbe Richtung laufen, ist das Licht erneut weiß.</span></li>
+          <li><b class="rule-mark rule-socket">◇</b><span><b>Fassungen</b> nehmen ein Prisma aus dem Vorrat auf. Jeder Tipp schaltet weiter: leer → <code>/</code> → <code>\</code> → leer. Es gibt immer mehr Fassungen als Prismen – die Wahl gehört zum Rätsel.</span></li>
           <li><b class="rule-mark rule-win">✦</b><span><b>Gelöst</b>, sobald alle Knoten gleichzeitig leuchten. Wer den Par-Wert trifft, holt drei Sterne.</span></li>
         </ul>
         <div class="panel-actions">
           <button id="btn-rules-close" class="cta" type="button">Verstanden</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Neue Mechanik: einmalige Erklärkarte -->
+    <section id="screen-teach" class="overlay overlay--teach" hidden>
+      <div class="panel panel--teach">
+        <p class="teach-kicker">Neu</p>
+        <h2 id="teach-title">–</h2>
+        <div id="teach-art" class="teach-art-box"></div>
+        <p id="teach-body" class="teach-body"></p>
+        <div class="panel-actions">
+          <button id="btn-teach-close" class="cta" type="button">Verstanden</button>
         </div>
       </div>
     </section>

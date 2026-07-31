@@ -5,8 +5,14 @@
 // Spiel auch dort spielbar bleibt, wo kein WebGL2-Kontext zustande kommt –
 // alte Geräte, abgeschaltete Hardwarebeschleunigung, Kontextverlust ohne
 // Wiederherstellung.
+//
+// Schlicht heißt aber nicht unvollständig: Jedes Bauteil und jede Lichtfarbe,
+// die das Spiel kennt, muss auch hier gezeichnet werden. Ein Prisma, das man
+// nicht sieht, macht das Level unlösbar.
 
 import { computeLayout, cellCenter, gridToPixel } from '../layout.js';
+import { deviceState } from '../level.js';
+import { beamCss, TARGET_CSS } from './palette.js';
 
 const PALETTE = {
   bgTop: '#070912',
@@ -17,11 +23,11 @@ const PALETTE = {
   wallEdge: 'rgba(120,150,220,0.25)',
   mirror: '#a8d8ff',
   mirrorLocked: '#6f7f9c',
-  beamCore: '#e8f6ff',
-  beamGlow: '#4aa8ff',
+  prismAmber: '#ffb343',
+  prismCyan: '#4de6ff',
+  socket: 'rgba(150,200,255,0.55)',
   source: '#ffd9a0',
   targetOff: 'rgba(150,170,210,0.45)',
-  targetOn: '#ffe6a8',
 };
 
 /** Deterministischer Zufall für das Sternenfeld – gleicher Hintergrund je Level. */
@@ -39,6 +45,8 @@ function rng(seed) {
 const lerp = (a, b, t) => a + (b - a) * t;
 /** Rahmenratenunabhängiges Annähern. */
 const approach = (current, target, rate, dt) => lerp(current, target, 1 - Math.exp(-rate * dt));
+
+const angleOf = (orient) => (orient === '\\' ? Math.PI / 4 : -Math.PI / 4);
 
 export function createCanvas2dRenderer(canvas) {
   const ctx = canvas.getContext('2d');
@@ -58,8 +66,9 @@ export function createCanvas2dRenderer(canvas) {
   let celebrateAt = -1e9;
   let lastNow = 0;
 
-  /** Animationszustände je Spiegel / Ziel, damit nichts hart umspringt. */
-  let mirrorAngle = [];
+  /** Animationszustände je Bauteil / Ziel, damit nichts hart umspringt. */
+  let deviceAngle = [];
+  let devicePresence = [];
   let targetGlow = [];
   let beamPhase = 0;
 
@@ -90,7 +99,9 @@ export function createCanvas2dRenderer(canvas) {
 
   function setLevel(next) {
     level = next;
-    mirrorAngle = level ? level.mirrors.map((m) => (m.start === '/' ? -Math.PI / 4 : Math.PI / 4)) : [];
+    const devices = level ? level.devices : [];
+    deviceAngle = devices.map((d) => angleOf(d.states[d.start]));
+    devicePresence = devices.map((d) => (d.states[d.start] === null ? 0 : 1));
     targetGlow = level ? level.targets.map(() => 0) : [];
     ripples = [];
     celebrateAt = -1e9;
@@ -164,7 +175,24 @@ export function createCanvas2dRenderer(canvas) {
     }
   }
 
-  function drawBeam(now) {
+  /** Eine Polylinie in Pixel übersetzen. */
+  function tracePath(points) {
+    const { cell, originX, originY } = layout;
+    ctx.beginPath();
+    points.forEach((p, i) => {
+      const px = originX + p.x * cell;
+      const py = originY + p.y * cell;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    });
+  }
+
+  /**
+   * Der Lichtfaden – vier gestapelte Striche je Linie, von weit und schwach
+   * nach schmal und hell. Die Farbe hängt an der Linie: Hinter einem Prisma
+   * laufen Bernstein und Cyan getrennt, und wo sie sich wieder treffen, legt
+   * die additive Mischung sie von selbst zu Weiß zusammen.
+   */
+  function drawBeam() {
     if (!session?.trace) return;
     const { cell } = layout;
     const width = cell * 0.11;
@@ -174,26 +202,21 @@ export function createCanvas2dRenderer(canvas) {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    const passes = [
-      { w: width * 5.5, a: 0.10, c: PALETTE.beamGlow },
-      { w: width * 2.6, a: 0.22, c: PALETTE.beamGlow },
-      { w: width * 1.25, a: 0.55, c: PALETTE.beamCore },
-      { w: width * 0.5, a: 0.95, c: '#ffffff' },
-    ];
-
-    for (const pass of passes) {
-      ctx.lineWidth = pass.w;
-      ctx.strokeStyle = pass.c;
-      ctx.globalAlpha = pass.a;
-      ctx.beginPath();
-      for (const points of session.trace.paths) {
-        points.forEach((p, i) => {
-          const px = layout.originX + p.x * cell;
-          const py = layout.originY + p.y * cell;
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        });
+    for (const { points, colors } of session.trace.paths) {
+      const css = beamCss(colors);
+      const passes = [
+        { w: width * 5.5, a: 0.10, c: css.glow },
+        { w: width * 2.6, a: 0.22, c: css.glow },
+        { w: width * 1.25, a: 0.55, c: css.core },
+        { w: width * 0.5, a: 0.95, c: '#ffffff' },
+      ];
+      for (const pass of passes) {
+        ctx.lineWidth = pass.w;
+        ctx.strokeStyle = pass.c;
+        ctx.globalAlpha = pass.a;
+        tracePath(points);
+        ctx.stroke();
       }
-      ctx.stroke();
     }
 
     // Energie, die sichtbar durch den Faden läuft.
@@ -202,15 +225,10 @@ export function createCanvas2dRenderer(canvas) {
     ctx.lineWidth = width * 0.9;
     ctx.setLineDash([cell * 0.12, cell * 0.5]);
     ctx.lineDashOffset = -beamPhase;
-    ctx.beginPath();
-    for (const points of session.trace.paths) {
-      points.forEach((p, i) => {
-        const px = layout.originX + p.x * cell;
-        const py = layout.originY + p.y * cell;
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      });
+    for (const { points } of session.trace.paths) {
+      tracePath(points);
+      ctx.stroke();
     }
-    ctx.stroke();
     ctx.setLineDash([]);
     ctx.restore();
   }
@@ -255,20 +273,26 @@ export function createCanvas2dRenderer(canvas) {
     }
   }
 
+  /** Wie viele Ecken bekommt ein Knoten? Auch ohne Farbe bleibt er lesbar. */
+  const TARGET_CORNERS = { any: 0, amber: 3, cyan: 4, white: 8 };
+
   function drawTargets(now) {
     const { cell } = layout;
     level.targets.forEach((t, i) => {
       const { px, py } = cellCenter(layout, t.x, t.y);
       const lit = targetGlow[i];
       const r = cell * 0.26;
+      const tint = TARGET_CSS[t.want];
+      const corners = TARGET_CORNERS[t.want];
 
       if (lit > 0.01) {
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         const g = ctx.createRadialGradient(px, py, 0, px, py, cell * (0.55 + 0.35 * lit));
-        g.addColorStop(0, `rgba(255,240,200,${0.9 * lit})`);
-        g.addColorStop(0.45, `rgba(255,200,110,${0.35 * lit})`);
-        g.addColorStop(1, 'rgba(255,180,80,0)');
+        g.addColorStop(0, `rgba(255,255,255,${0.7 * lit})`);
+        g.addColorStop(0.45, tint);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = 0.55 * lit;
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.arc(px, py, cell * 0.9, 0, Math.PI * 2);
@@ -276,68 +300,195 @@ export function createCanvas2dRenderer(canvas) {
         ctx.restore();
       }
 
+      ctx.save();
+      ctx.translate(px, py);
       ctx.lineWidth = Math.max(2, cell * 0.055);
-      ctx.strokeStyle = lit > 0.5 ? PALETTE.targetOn : PALETTE.targetOff;
+      ctx.strokeStyle = lit > 0.5 ? tint : PALETTE.targetOff;
+
+      // Kreis für „jedes Licht“, sonst ein Vieleck – die Form nennt die Farbe
+      // auch dann, wenn man Farben schlecht unterscheidet.
       ctx.beginPath();
-      ctx.arc(px, py, r, 0, Math.PI * 2);
+      if (corners === 0) {
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+      } else {
+        for (let k = 0; k < corners; k += 1) {
+          // Halbe Segmentbreite versetzt: oben liegt eine Fläche, keine Spitze –
+          // genauso rechnet es der Shader in `sprite.js`.
+          const a = -Math.PI / 2 + ((k + 0.5) / corners) * Math.PI * 2;
+          const fx = Math.cos(a) * r;
+          const fy = Math.sin(a) * r;
+          if (k === 0) ctx.moveTo(fx, fy); else ctx.lineTo(fx, fy);
+        }
+        ctx.closePath();
+      }
       ctx.stroke();
+
+      // Der Weißknoten trägt einen zweiten Reif: Er will beide Farben.
+      if (t.want === 'white') {
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.6, 0, Math.PI * 2);
+        ctx.lineWidth = Math.max(1, cell * 0.03);
+        ctx.stroke();
+      }
 
       const inner = r * (0.35 + 0.25 * lit * (0.9 + 0.1 * Math.sin(now / 260)));
       ctx.fillStyle = lit > 0.5 ? '#fff8e6' : 'rgba(150,170,210,0.35)';
       ctx.beginPath();
-      ctx.arc(px, py, inner, 0, Math.PI * 2);
+      ctx.arc(0, 0, inner, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
     });
   }
 
-  function drawMirrors(now) {
-    const { cell } = layout;
-    level.mirrors.forEach((m, i) => {
-      const { px, py } = cellCenter(layout, m.x, m.y);
-      const angle = mirrorAngle[i];
-      const half = cell * 0.34;
-      const isLit = session?.trace?.litMirrors.has(i);
-      const isHover = hover && hover.x === m.x && hover.y === m.y && !m.locked;
-
+  /** Ein Spiegel: eine schmale Glasscheibe auf der Diagonalen. */
+  function strokeMirror(cell, locked, lit) {
+    const half = cell * 0.34;
+    if (lit) {
       ctx.save();
-      ctx.translate(px, py);
-
-      // Fassung: drehbare Spiegel bekommen einen hellen Ring, feste einen dunklen.
-      ctx.beginPath();
-      ctx.arc(0, 0, cell * 0.42, 0, Math.PI * 2);
-      ctx.strokeStyle = m.locked
-        ? 'rgba(110,125,155,0.55)'
-        : `rgba(150,200,255,${isHover ? 0.7 : 0.32})`;
-      ctx.lineWidth = m.locked ? Math.max(2, cell * 0.05) : Math.max(1.5, cell * 0.032);
-      if (m.locked) ctx.setLineDash([cell * 0.1, cell * 0.07]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      ctx.rotate(angle);
-      if (isLit) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.strokeStyle = 'rgba(120,200,255,0.35)';
-        ctx.lineWidth = cell * 0.3;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(-half, 0);
-        ctx.lineTo(half, 0);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      const g = ctx.createLinearGradient(0, -cell * 0.06, 0, cell * 0.06);
-      g.addColorStop(0, m.locked ? '#c7d2e6' : '#ffffff');
-      g.addColorStop(0.5, m.locked ? PALETTE.mirrorLocked : PALETTE.mirror);
-      g.addColorStop(1, m.locked ? '#3d465c' : '#3f7fbf');
-      ctx.strokeStyle = g;
-      ctx.lineWidth = Math.max(3, cell * 0.11);
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = 'rgba(120,200,255,0.35)';
+      ctx.lineWidth = cell * 0.3;
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(-half, 0);
       ctx.lineTo(half, 0);
       ctx.stroke();
+      ctx.restore();
+    }
+    const g = ctx.createLinearGradient(0, -cell * 0.06, 0, cell * 0.06);
+    g.addColorStop(0, locked ? '#c7d2e6' : '#ffffff');
+    g.addColorStop(0.5, locked ? PALETTE.mirrorLocked : PALETTE.mirror);
+    g.addColorStop(1, locked ? '#3d465c' : '#3f7fbf');
+    ctx.strokeStyle = g;
+    ctx.lineWidth = Math.max(3, cell * 0.11);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-half, 0);
+    ctx.lineTo(half, 0);
+    ctx.stroke();
+  }
+
+  /**
+   * Ein Prisma: ein Glaskeil auf der Diagonalen, dessen Flanken die beiden
+   * Grundfarben tragen. Oben biegt Cyan ab, unten läuft Bernstein durch.
+   */
+  function strokePrism(cell, locked, lit, scale) {
+    const half = cell * 0.38 * scale;
+    const thick = cell * 0.21 * scale;
+
+    if (lit) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.4;
+      const flare = ctx.createLinearGradient(0, -thick * 2, 0, thick * 2);
+      flare.addColorStop(0, PALETTE.prismCyan);
+      flare.addColorStop(0.5, '#ffffff');
+      flare.addColorStop(1, PALETTE.prismAmber);
+      ctx.fillStyle = flare;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, half * 1.2, thick * 2.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    const g = ctx.createLinearGradient(0, -thick, 0, thick);
+    g.addColorStop(0, locked ? '#2c5f70' : PALETTE.prismCyan);
+    g.addColorStop(0.5, locked ? '#e8eef6' : '#ffffff');
+    g.addColorStop(1, locked ? '#6b4a20' : PALETTE.prismAmber);
+    ctx.fillStyle = g;
+    ctx.globalAlpha = locked ? 0.75 : 1;
+    ctx.beginPath();
+    ctx.moveTo(-half, 0);
+    ctx.lineTo(0, -thick);
+    ctx.lineTo(half, 0);
+    ctx.lineTo(0, thick);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = Math.max(1, cell * 0.018);
+    ctx.stroke();
+  }
+
+  /**
+   * Eine leere Fassung: vier Eckwinkel am Zellenrand und innen der gestrichelte
+   * Umriss dessen, was hineingehört.
+   *
+   * Die Eckwinkel sitzen bewusst weit außen – eine Fassung liegt oft mitten im
+   * hellen Strahl, und der überstrahlt alles innerhalb seines Hofs.
+   */
+  function strokeSocket(cell, ready, isHover, now) {
+    const half = cell * 0.38;
+    const thick = cell * 0.21;
+    const r = cell * 0.42;
+    const arm = cell * 0.16;
+    const breathe = ready ? 0.62 + 0.38 * (0.5 + 0.5 * Math.sin(now / 500)) : 0.45;
+
+    ctx.save();
+    ctx.globalAlpha = breathe * (isHover ? 1 : 0.85);
+    ctx.strokeStyle = isHover || ready ? '#c8ecff' : PALETTE.socket;
+    ctx.lineCap = 'round';
+
+    ctx.lineWidth = Math.max(2, cell * 0.045);
+    ctx.beginPath();
+    for (const sx of [-1, 1]) {
+      for (const sy of [-1, 1]) {
+        ctx.moveTo(sx * r, sy * (r - arm));
+        ctx.lineTo(sx * r, sy * r);
+        ctx.lineTo(sx * (r - arm), sy * r);
+      }
+    }
+    ctx.stroke();
+
+    ctx.globalAlpha *= 0.7;
+    ctx.lineWidth = Math.max(1.5, cell * 0.032);
+    ctx.setLineDash([cell * 0.08, cell * 0.06]);
+    ctx.beginPath();
+    ctx.moveTo(-half, 0);
+    ctx.lineTo(0, -thick);
+    ctx.lineTo(half, 0);
+    ctx.lineTo(0, thick);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function drawDevices(now) {
+    const { cell } = layout;
+    const ready = session.prismsLeft > 0;
+    level.devices.forEach((device, i) => {
+      const { px, py } = cellCenter(layout, device.x, device.y);
+      const isLit = session?.trace?.litDevices.has(i);
+      const isHover = Boolean(hover && hover.x === device.x && hover.y === device.y && !device.locked);
+      const presence = devicePresence[i];
+
+      ctx.save();
+      ctx.translate(px, py);
+
+      if (device.kind === 'socket' && presence < 0.995) {
+        strokeSocket(cell, ready, isHover, now);
+      }
+
+      if (presence > 0.005) {
+        // Fassung: bewegliche Bauteile bekommen einen hellen Ring, feste einen
+        // dunklen, gestrichelten.
+        ctx.globalAlpha = presence;
+        ctx.beginPath();
+        ctx.arc(0, 0, cell * 0.42, 0, Math.PI * 2);
+        ctx.strokeStyle = device.locked
+          ? 'rgba(110,125,155,0.55)'
+          : `rgba(150,200,255,${isHover ? 0.7 : 0.32})`;
+        ctx.lineWidth = device.locked ? Math.max(2, cell * 0.05) : Math.max(1.5, cell * 0.032);
+        if (device.locked) ctx.setLineDash([cell * 0.1, cell * 0.07]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.rotate(deviceAngle[i]);
+        if (device.kind === 'mirror') strokeMirror(cell, device.locked, isLit);
+        else strokePrism(cell, device.locked, isLit, presence);
+      }
       ctx.restore();
     });
   }
@@ -388,9 +539,10 @@ export function createCanvas2dRenderer(canvas) {
     if (!level || !session) return;
 
     // Zustände weich nachführen
-    session.orientations.forEach((o, i) => {
-      const target = o === '/' ? -Math.PI / 4 : Math.PI / 4;
-      mirrorAngle[i] = approach(mirrorAngle[i], target, 18, dt);
+    level.devices.forEach((device, i) => {
+      const orient = deviceState(level, session.config, device);
+      devicePresence[i] = approach(devicePresence[i], orient === null ? 0 : 1, 16, dt);
+      if (orient !== null) deviceAngle[i] = approach(deviceAngle[i], angleOf(orient), 18, dt);
     });
     level.targets.forEach((t, i) => {
       const on = session.trace.litTargets.has(`${t.x},${t.y}`) ? 1 : 0;
@@ -401,9 +553,9 @@ export function createCanvas2dRenderer(canvas) {
 
     drawGrid();
     drawWalls();
-    drawBeam(now);
+    drawBeam();
     drawTargets(now);
-    drawMirrors(now);
+    drawDevices(now);
     drawSources(now);
     drawOverlays(now);
   }
