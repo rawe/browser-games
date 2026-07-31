@@ -20,6 +20,12 @@ export const games = [
     coverAlt: 'Der Fürst der Sturmlanze und der Kriegshäuptling des Frostwolfs stehen sich vor ihren Bannern im nächtlichen Alteractal gegenüber',
   },
   {
+    slug: 'lumenweber',
+    title: 'Lumenweber',
+    description: 'Lichträtsel: Dreh die Spiegel, webe den Strahl durch alle Knoten.',
+    emoji: '✦',
+  },
+  {
     slug: 'super-cars',
     title: 'Super Cars',
     description: 'Arcade-Rennen mit Raketen, Tuning-Shop und Meisterschaft – 3D von schräg hinten.',
