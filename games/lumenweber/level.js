@@ -242,6 +242,7 @@ export function levelIssues(level) {
   const issues = [];
   const error = (text) => issues.push({ level: 'error', text });
   const warn = (text) => issues.push({ level: 'warning', text });
+  const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 
   if (level.sources.length === 0) error('Keine Lichtquelle – ohne sie bleibt das Brett dunkel.');
   if (level.targets.length === 0) error('Kein Knoten – es gibt nichts zu erhellen.');
@@ -259,13 +260,17 @@ export function levelIssues(level) {
     }
   }
   if (level.sockets.length > 0 && level.prisms < 1) {
-    error(`${level.sockets.length} Fassungen, aber kein Prisma im Vorrat.`);
+    error(`${n(level.sockets.length, 'Fassung', 'Fassungen')}, aber kein Prisma im Vorrat.`);
   }
   if (level.prisms > 0 && level.sockets.length === 0) {
-    error(`${level.prisms} Prismen im Vorrat, aber keine Fassung, die eines aufnimmt.`);
+    error(`${n(level.prisms, 'Prisma', 'Prismen')} im Vorrat, aber keine Fassung, die eines aufnimmt.`);
   }
-  if (level.sockets.length > 0 && level.prisms >= level.sockets.length) {
-    warn(`${level.prisms} Prismen auf ${level.sockets.length} Fassungen – ohne freie Fassung gibt es nichts zu entscheiden.`);
+  // Die Rätselfrage „welche Fassung besetze ich?“ stellt sich erst ab **zwei**
+  // Fassungen. Bei genau einer bleibt die Wahl „leer, / oder \“ – da gibt es
+  // sehr wohl etwas zu entscheiden, und eine Warnung wäre nicht nur falsch,
+  // sondern unentrinnbar: Ein Prisma ist bei einer Fassung das Minimum.
+  if (level.sockets.length > 1 && level.prisms >= level.sockets.length) {
+    warn(`${n(level.prisms, 'Prisma', 'Prismen')} auf ${n(level.sockets.length, 'Fassung', 'Fassungen')} – ohne freie Fassung gibt es nichts zu entscheiden.`);
   }
   // Die Optik muss jedes vorkommende Bauteil kennen.
   for (const cell of level.cells) {

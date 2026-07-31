@@ -29,7 +29,7 @@ async function copy(text, node) {
   }
 }
 
-export function createShareScreens({ host, library, openLevel }) {
+export function createShareScreens({ host, library, openLevel, backToLibrary }) {
   const el = {
     share: $('screen-share'),
     shareUrl: $('share-url'),
@@ -44,6 +44,8 @@ export function createShareScreens({ host, library, openLevel }) {
 
   let sharing = null;
   let incoming = null;
+  /** Kam das angebotene Level aus einem Link oder aus dem Einfügefeld? */
+  let incomingFrom = 'link';
 
   function openShare(entry) {
     sharing = entry;
@@ -71,8 +73,9 @@ export function createShareScreens({ host, library, openLevel }) {
    * passiert von selbst – ein geöffneter Link darf keine stille Nebenwirkung
    * auf einem fremden Gerät haben.
    */
-  function offerShared(draft) {
+  function offerShared(draft, from = 'link') {
     incoming = draft;
+    incomingFrom = from;
     el.sharedName.textContent = draft.name;
     const size = `${draft.rows[0]?.length ?? 0}×${draft.rows.length}`;
     el.sharedDetail.textContent = Number.isInteger(draft.best)
@@ -108,9 +111,14 @@ export function createShareScreens({ host, library, openLevel }) {
     const trimmed = String(text).trim();
     if (!trimmed) throw new Error('Da steht nichts.');
     // Sowohl die ganze Adresse als auch nur der Code sollen funktionieren –
-    // welchen der beiden jemand aus einer Nachricht kopiert, ist Zufall.
+    // welchen der beiden jemand aus einer Nachricht kopiert, ist Zufall. Steckt
+    // der Code in einer Adresse, wird das Fragment richtig zerlegt, damit auch
+    // ein angehängtes „&…“ nicht mitgelesen wird.
     const at = trimmed.indexOf(`${SHARE_KEY}=`);
-    const draft = decodeLevel(at === -1 ? trimmed : trimmed.slice(at + SHARE_KEY.length + 1));
+    const code = at === -1
+      ? trimmed
+      : new URLSearchParams(trimmed.slice(at)).get(SHARE_KEY) ?? '';
+    const draft = decodeLevel(code);
     const check = inspect(draft, 'geteilt');
     if (!check.ok) throw new Error(`Dieses Level ist nicht spielbar: ${check.errors[0].text}`);
     return draft;
@@ -122,21 +130,27 @@ export function createShareScreens({ host, library, openLevel }) {
   });
 
   $('btn-share-copy-code').addEventListener('click', async () => {
-    const ok = await copy(encodeLevel(sharing), el.shareUrl);
-    host.toast(ok ? 'Code kopiert.' : 'Kopieren ging nicht – nimm den Link.', 2800);
+    const code = encodeLevel(sharing);
+    if (await copy(code, null)) { host.toast('Code kopiert.', 2800); return; }
+    // Ohne Zwischenablage-Recht bleibt nur Markieren – dann muss im Feld aber
+    // auch der Code stehen und nicht die Adresse, sonst kopiert man das Falsche.
+    el.shareUrl.value = code;
+    el.shareUrl.focus();
+    el.shareUrl.select();
+    host.toast('Der Code ist markiert – jetzt kopieren.', 3600);
   });
 
-  $('btn-share-close').addEventListener('click', () => host.showOverlay(null));
+  $('btn-share-close').addEventListener('click', () => backToLibrary());
 
   $('btn-import-open').addEventListener('click', () => {
     try {
-      offerShared(parseInput(el.importBox.value));
+      offerShared(parseInput(el.importBox.value), 'einfügen');
     } catch (error) {
       el.importError.textContent = String(error.message ?? error);
       el.importError.hidden = false;
     }
   });
-  $('btn-import-close').addEventListener('click', () => host.showOverlay(null));
+  $('btn-import-close').addEventListener('click', () => backToLibrary());
 
   /**
    * Übernehmen: neuer Eintrag, frische ID, nichts überschrieben.
@@ -155,7 +169,13 @@ export function createShareScreens({ host, library, openLevel }) {
   }
 
   $('btn-shared-play').addEventListener('click', () => host.playShared(incoming));
-  $('btn-shared-skip').addEventListener('click', () => host.leaveShared());
+  // Wer aus der Bibliothek heraus eingefügt hat, will beim Verwerfen dorthin
+  // zurück – und nicht aufs Titelbild geworfen werden.
+  $('btn-shared-skip').addEventListener('click', () => {
+    const fromPaste = incomingFrom === 'einfügen';
+    incoming = null;
+    if (fromPaste) backToLibrary(); else host.leaveShared();
+  });
   $('btn-shared-keep').addEventListener('click', keepShared);
 
   return { openShare, openImport, offerShared, keepShared, noteSolved, parseInput };

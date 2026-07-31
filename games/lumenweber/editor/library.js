@@ -49,8 +49,6 @@ export const getLevel = (id) => readStudio().levels.find((l) => l.id === id) ?? 
 
 export const countLevels = () => readStudio().levels.length;
 
-export const bestOf = (id) => getLevel(id)?.best ?? null;
-
 /**
  * Anlegen oder überschreiben.
  *
@@ -67,14 +65,8 @@ export function saveLevel(entry) {
   return { ok: writeStudio(data), entry: next };
 }
 
-export function renameLevel(id, name) {
-  const data = readStudio();
-  const entry = data.levels.find((l) => l.id === id);
-  if (!entry) return { ok: false, entry: null };
-  entry.name = String(name).slice(0, MAX_NAME) || 'Ohne Namen';
-  entry.updated = Date.now();
-  return { ok: writeStudio(data), entry };
-}
+// Umbenannt wird im Editor über das Namensfeld – ein eigener Weg dafür wäre
+// eine zweite Stelle, an der derselbe Name entsteht.
 
 export function deleteLevel(id) {
   const data = readStudio();

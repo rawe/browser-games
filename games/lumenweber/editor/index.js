@@ -67,11 +67,13 @@ export function createStudio(host) {
     boardPanel: $('editor-board'),
     boardW: $('board-w'),
     boardH: $('board-h'),
-    boardP: $('board-p'),
-    boardPrismRow: $('board-prisms-row'),
     boardNote: $('board-note'),
+    prisms: $('btn-prisms'),
+    prismCount: $('prism-count'),
+    socketCount: $('socket-count'),
     check: $('screen-check'),
     checkBody: $('check-body'),
+    checkTest: $('btn-check-test'),
   };
 
   /** Der laufende Entwurf. */
@@ -83,6 +85,30 @@ export function createStudio(host) {
   let toolId = 'mirror';
   let report = { level: null, errors: [], warnings: [], ok: false };
   let dirty = false;
+  /** Ist der Editorbildschirm gerade der sichtbare? Steuert, wohin „Zurück“ führt. */
+  let editing = false;
+
+  /** Wie viele Fassungen liegen auf dem Brett? */
+  const socketsOf = (rows) => countChars(rows)._ ?? 0;
+
+  /**
+   * Den Prismenvorrat an die Fassungen angleichen.
+   *
+   * Muss nach **jeder** Änderung am Raster laufen – auch nach einer
+   * Größenänderung, nicht nur nach einem Pinselstrich. Sonst bleibt ein Vorrat
+   * für Fassungen stehen, die es nicht mehr gibt, und das Level ist ungültig,
+   * ohne dass man ihm ansieht, warum.
+   *
+   * Die Regel: ohne Fassung kein Vorrat, mit Fassungen mindestens eines und
+   * höchstens eines weniger, als Fassungen da sind – sonst bliebe keine frei.
+   * Bei genau einer Fassung ist das Minimum zugleich das Maximum.
+   */
+  function syncPrisms() {
+    const sockets = socketsOf(draft.rows);
+    if (sockets === 0) { draft.prisms = 0; return; }
+    const most = Math.max(1, sockets - 1);
+    draft.prisms = Math.min(most, Math.max(1, draft.prisms));
+  }
 
   /* ---------- Entwurf → Brett ---------- */
 
@@ -126,6 +152,11 @@ export function createStudio(host) {
       p.textContent = line.text;
       return p;
     }));
+
+    // Ein Level mit Fehlern lässt sich nicht spielen. Ein Knopf, der auf einen
+    // Druck sichtbar nichts tut, ist schlimmer als ein abgeschalteter.
+    el.checkTest.disabled = !report.ok;
+    el.checkTest.textContent = report.ok ? '▶ Jetzt durchspielen' : '▶ Erst die Fehler beheben';
   }
 
   function paintBoardPanel() {
@@ -134,12 +165,18 @@ export function createStudio(host) {
     el.boardW.textContent = String(w);
     el.boardH.textContent = String(h);
     el.boardSize.textContent = `${w}×${h}`;
-    el.boardP.textContent = String(draft.prisms);
-    const sockets = countChars(draft.rows)._ ?? 0;
-    el.boardPrismRow.hidden = sockets === 0;
+
+    // Der Vorrat zeigt sich, sobald es Fassungen gibt, und verschwindet, wenn
+    // die letzte weg ist – dann gibt es nichts einzustellen.
+    const sockets = socketsOf(draft.rows);
+    el.prisms.hidden = sockets === 0;
+    el.prismCount.textContent = String(draft.prisms);
+    el.socketCount.textContent = String(sockets);
+    el.prisms.disabled = sockets < 3;   // erst ab drei Fassungen gibt es eine Wahl
+
     const space = searchSpaceOf(draft.rows);
-    const parts = [`${space.states.toLocaleString('de-DE')} mögliche Stellungen`];
-    if (sockets > 0) parts.unshift(`${sockets} Fassungen`);
+    const parts = [`${space.states.toLocaleString('de-DE')} ${space.states === 1 ? 'mögliche Stellung' : 'mögliche Stellungen'}`];
+    if (sockets > 0) parts.unshift(`${sockets} ${sockets === 1 ? 'Fassung' : 'Fassungen'}`);
     // `tight` sagt, dass eine Zelle unter die Fingergrenze gerutscht ist
     // (`MIN_TOUCH_CELL` in `layout.js`). Auf einem Telefon passiert das bei den
     // größten Brettern – der Autor sieht es an seinem eigenen Schirm, aber sein
@@ -198,14 +235,15 @@ export function createStudio(host) {
     const tool = toolById(toolId);
     const next = paint(draft.rows, x, y, tool);
     if (!next.changed) return;
+    const socketsBefore = socketsOf(draft.rows);
     draft.rows = next.rows;
     invalidateRecord();
-    // Eine Fassung ohne Vorrat ist immer ein Fehler – ein erstes Prisma dazu ist
-    // offensichtlich gemeint und erspart einen Umweg in die Bretteinstellungen.
-    const sockets = countChars(draft.rows)._ ?? 0;
-    if (sockets === 0) draft.prisms = 0;
-    else if (draft.prisms === 0) draft.prisms = 1;
-    else if (draft.prisms >= sockets) draft.prisms = Math.max(1, sockets - 1);
+    syncPrisms();
+    // Die erste Fassung bringt ihr Prisma gleich mit. Der Hinweis sagt zugleich,
+    // wo der Vorrat steht – sonst sucht ihn niemand.
+    if (socketsBefore === 0 && socketsOf(draft.rows) > 0) {
+      host.toast('Fassung gesetzt. Der Vorrat steht unten als ◆ – tippen ändert ihn.', 4600);
+    }
     dirty = true;
     repaint();
     // Erst nach `setLevel` – das räumt die Wellen des Renderers ab.
@@ -217,31 +255,41 @@ export function createStudio(host) {
   function changeSize(what) {
     const w = draft.rows[0]?.length ?? MIN_SIZE;
     const h = draft.rows.length;
-    const sockets = countChars(draft.rows)._ ?? 0;
-
-    if (what === 'p+' || what === 'p-') {
-      // Der Vorrat ändert das Raster nicht, wohl aber die Aufgabe – der
-      // Bestwert ist danach genauso hinfällig wie nach einem Pinselstrich.
-      const next = what === 'p+'
-        ? Math.min(Math.max(1, sockets - 1), draft.prisms + 1)
-        : Math.max(sockets > 0 ? 1 : 0, draft.prisms - 1);
-      if (next === draft.prisms) return;
-      draft.prisms = next;
-      invalidateRecord();
-    } else {
-      const nextW = clampSize(w + (what === 'w+' ? 1 : what === 'w-' ? -1 : 0));
-      const nextH = clampSize(h + (what === 'h+' ? 1 : what === 'h-' ? -1 : 0));
-      if (nextW === w && nextH === h) {
-        host.toast(`Zwischen ${MIN_SIZE}×${MIN_SIZE} und ${MAX_SIZE}×${MAX_SIZE} – größer wären die Zellen auf dem Handy zu klein.`, 3400);
-        return;
-      }
-      const lost = lostOnResize(draft.rows, nextW, nextH);
-      if (lost > 0) host.toast(`${lost} belegte Zellen fallen weg.`, 2600);
-      draft.rows = resizeRows(draft.rows, nextW, nextH);
-      invalidateRecord();
+    const nextW = clampSize(w + (what === 'w+' ? 1 : what === 'w-' ? -1 : 0));
+    const nextH = clampSize(h + (what === 'h+' ? 1 : what === 'h-' ? -1 : 0));
+    if (nextW === w && nextH === h) {
+      host.toast(`Zwischen ${MIN_SIZE}×${MIN_SIZE} und ${MAX_SIZE}×${MAX_SIZE} – größer wären die Zellen auf dem Handy zu klein.`, 3400);
+      return;
     }
+    const lost = lostOnResize(draft.rows, nextW, nextH);
+    if (lost > 0) {
+      host.toast(`${lost} belegte ${lost === 1 ? 'Zelle fällt' : 'Zellen fallen'} weg.`, 2800);
+    }
+    draft.rows = resizeRows(draft.rows, nextW, nextH);
+    invalidateRecord();
+    // Beim Verkleinern können Fassungen verschwinden – der Vorrat muss
+    // mitgehen, sonst steht er für Fassungen, die es nicht mehr gibt.
+    syncPrisms();
     dirty = true;
     repaint();
+  }
+
+  /**
+   * Prismenvorrat weiterschalten.
+   *
+   * Ein Tipp statt ±, wie überall sonst im Editor. Der Wert läuft zwischen 1
+   * und „eine Fassung weniger, als da sind“ im Kreis; unter drei Fassungen gibt
+   * es nichts zu wählen, dann ist der Knopf abgeschaltet.
+   */
+  function cyclePrisms() {
+    const sockets = socketsOf(draft.rows);
+    const most = Math.max(1, sockets - 1);
+    if (most <= 1) return;
+    draft.prisms = draft.prisms >= most ? 1 : draft.prisms + 1;
+    invalidateRecord();
+    dirty = true;
+    repaint();
+    host.toast(`${draft.prisms} von ${sockets} Fassungen lassen sich besetzen.`, 2600);
   }
 
   /* ---------- Sichern ---------- */
@@ -305,13 +353,28 @@ export function createStudio(host) {
   // Welche Leisten sichtbar sind, entscheidet `showOverlay` im Rahmen anhand
   // der Betriebsart – hier wird nur umgeschaltet, nicht am DOM gezerrt.
   function showEditor() {
+    editing = true;
     host.setMode('editor');
     paintTools();
   }
 
   function hideEditor() {
+    editing = false;
     el.boardPanel.hidden = true;
     el.boardBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  /**
+   * „Zurück“ aus Prüfung, Teilen oder Code.
+   *
+   * Diese Bildschirme lassen sich aus zwei Richtungen öffnen – aus dem Editor
+   * und aus der Bibliothek. Ein pauschales „alle Überlagerungen schließen“
+   * führte aus der Bibliothek heraus auf eine leere Bühne, weil dort weder eine
+   * Sitzung noch der Editor läuft: eine Sackgasse, aus der nur Neuladen half.
+   */
+  function closeSecondary() {
+    if (editing) host.showOverlay(null);
+    else libraryScreen.open();
   }
 
   function openCheck() {
@@ -334,7 +397,13 @@ export function createStudio(host) {
 
   /* ---------- Nebenbildschirme ---------- */
 
-  const share = createShareScreens({ host, library, openLevel: (entry) => edit(entry) });
+  const share = createShareScreens({
+    host,
+    library,
+    openLevel: (entry) => edit(entry),
+    // Träge aufgelöst: `libraryScreen` entsteht erst gleich darunter.
+    backToLibrary: () => closeSecondary(),
+  });
 
   const libraryScreen = createLibraryScreen({
     host,
@@ -356,8 +425,9 @@ export function createStudio(host) {
   el.name.addEventListener('change', () => { draft.name = el.name.value.trim() || 'Ohne Namen'; });
 
   el.status.addEventListener('click', openCheck);
-  $('btn-check-close').addEventListener('click', () => host.showOverlay(null));
-  $('btn-check-test').addEventListener('click', test);
+  $('btn-check-close').addEventListener('click', closeSecondary);
+  el.checkTest.addEventListener('click', test);
+  el.prisms.addEventListener('click', cyclePrisms);
 
   el.boardBtn.addEventListener('click', () => {
     const open = el.boardPanel.hidden;
@@ -372,18 +442,31 @@ export function createStudio(host) {
 
   $('btn-editor-test').addEventListener('click', test);
   $('btn-editor-save').addEventListener('click', () => save());
-  $('btn-editor-close').addEventListener('click', () => {
-    if (dirty) save({ quiet: true });
+  $('btn-editor-close').addEventListener('click', leaveEditor);
+
+  // Wer die Seite verlässt oder neu lädt, soll seinen Entwurf wiederfinden.
+  // `pagehide` feuert auch dort, wo `beforeunload` auf Telefonen still bleibt –
+  // und eine Rückfrage wäre hier ohnehin die schlechtere Antwort als Sichern.
+  window.addEventListener('pagehide', () => { if (dirty && draft) save({ quiet: true }); });
+
+  /**
+   * Editor verlassen – über welchen Weg auch immer.
+   *
+   * Sichert vorher still. Es gibt im Editor keinen Knopf „verwerfen“, und
+   * unbemerkt verlorene Arbeit ist der schlimmere Fehler: Wer ein Level nicht
+   * behalten will, löscht es in der Bibliothek mit einer Rückfrage.
+   */
+  function leaveEditor() {
+    // `draft` ist null, solange niemand ein Level geöffnet hat – dieser Weg ist
+    // zugleich der Einstieg vom Titelbild in die Bibliothek.
+    if (dirty && draft) save({ quiet: true });
     hideEditor();
     libraryScreen.open();
-  });
+  }
 
   return {
-    /** Bibliothek öffnen – der Einstieg vom Titelbild. */
-    openLibrary() {
-      hideEditor();
-      libraryScreen.open();
-    },
+    /** Bibliothek öffnen – der Einstieg vom Titelbild, und der Rückweg. */
+    openLibrary: leaveEditor,
 
     /** Nach dem Probelauf zurück ins Bauen. */
     resume,
@@ -399,9 +482,6 @@ export function createStudio(host) {
 
     /** Das Raster, das gerade auf dem Brett liegt – die Eingabe rechnet daran. */
     get level() { return report.level; },
-
-    /** Bestwert eines gesicherten Levels. */
-    bestOf: library.bestOf,
 
     /**
      * Ein gelöster Durchgang an einem Level aus der Bibliothek.
@@ -427,9 +507,10 @@ export function createStudio(host) {
       const before = best;
       if (before !== null && moves >= before) return before;
       best = moves;
-      if (entryId) library.recordStudioSolve(entryId, moves);
-      else save({ quiet: true });
-      libraryScreen.render();
+      // Raster **und** Bestwert gemeinsam sichern. Schriebe man nur die Zugzahl
+      // in den Eintrag, stünde sie an dem Brett, das zuletzt gesichert wurde –
+      // und das kann seit dem letzten Umbau ein ganz anderes sein.
+      save({ quiet: true });
       paintStatus();
       return before;
     },

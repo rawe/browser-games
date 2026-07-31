@@ -44,9 +44,10 @@ export function checkReport({ errors, warnings, space, best }) {
     lines.push({ tone: 'good', text: 'Aufbau in Ordnung: Quelle, Knoten und bewegliche Bauteile sind da.' });
   }
 
+  const states = `${space.states.toLocaleString('de-DE')} ${space.states === 1 ? 'mögliche Stellung' : 'mögliche Stellungen'}`;
   lines.push({
     tone: 'info',
-    text: `${plural(space.controls, 'bewegliches Bauteil', 'bewegliche Bauteile')} · ${space.states.toLocaleString('de-DE')} mögliche Stellungen`,
+    text: `${plural(space.controls, 'bewegliches Bauteil', 'bewegliche Bauteile')} · ${states}`,
   });
 
   if (errors.length > 0) return lines;

@@ -448,6 +448,9 @@ function layout() {
   // eine der beiden Kopfleisten und eine der beiden Fußleisten sichtbar.
   const hudH = barHeight(el.hud) + barHeight(el.editorBar);
   const ctrlH = barHeight(el.controls) + barHeight(el.editorTools);
+  // Dieselbe Messung hebt den Hinweisbalken über die Fußleiste – die des
+  // Editors ist deutlich höher als die des Spiels (siehe `.toast` im CSS).
+  el.stage.style.setProperty('--bottom-bar', `${ctrlH}px`);
   // Die offene Legende verdeckt das Brett nicht, sie nimmt ihm Platz weg – auf
   // breiten Schirmen rechts, auf schmalen unten. Sonst läge sie über genau den
   // Knoten, die sie erklärt.
@@ -486,8 +489,7 @@ createInput(el.canvas, {
     if (name === 'undo') doUndo();
     if (name === 'hint') giveHint();
     if (name === 'legend') setLegend(!legendOpen);
-    // Aus dem Probelauf führt Esc zurück ans Bauen, nicht in die Levelauswahl.
-    if (name === 'menu') { if (context.kind === 'test') backToEditor(); else openLevels(); }
+    if (name === 'menu') leaveLevel();
   },
 });
 
@@ -510,6 +512,24 @@ function doReset() {
 function openLevels() {
   buildLevelGrid();
   showOverlay(el.screenLevels);
+}
+
+/**
+ * „Raus aus dem laufenden Level“ – ☰ und Escape tun dasselbe.
+ *
+ * Wohin, hängt daran, woher das Level stammt. Vorher führte beides pauschal in
+ * die Kampagnenauswahl: Aus einem eigenen Level gab es dann keinen Rückweg in
+ * die Bibliothek, und aus dem Probelauf war der ungesicherte Entwurf verloren,
+ * sobald man dort ein Kampagnenlevel antippte.
+ */
+function leaveLevel() {
+  if (context.kind === 'test') { backToEditor(); return; }
+  if (context.kind === 'studio' || context.kind === 'shared') {
+    session = null;
+    studio?.openLibrary();
+    return;
+  }
+  openLevels();
 }
 
 /* ---------- Editor ---------- */
@@ -541,9 +561,17 @@ const host = {
     clearShareFragment();
     showOverlay(session ? null : el.screenTitle);
   },
+  /**
+   * „Zurück“ in der Bibliothek führt aufs Titelbild – von dort kam man.
+   *
+   * Vorher hing das an `session`, und die blieb nach einem gespielten eigenen
+   * Level stehen: Man landete wieder in dem längst gelösten Level, ohne
+   * Siegbildschirm und ohne Rückweg.
+   */
   leaveStudio() {
+    session = null;
     setMode('play');
-    showOverlay(session ? null : el.screenTitle);
+    showOverlay(el.screenTitle);
   },
   clearShareFragment,
 };
@@ -625,24 +653,47 @@ async function offerSharedFromUrl() {
 
 /* ---------- Knöpfe ---------- */
 
+/**
+ * Die Regelseite merkt sich, woher sie geöffnet wurde.
+ *
+ * Sonst führt „Verstanden“ immer dorthin, wo der Code es vermutet: Vom
+ * Titelbild aus startete es ungefragt die Kampagne, und aus dem Editor heraus
+ * gäbe es gar keinen Rückweg.
+ */
+let rulesFrom = 'spiel';
+
+function openRules(from) {
+  rulesFrom = from;
+  markRulesSeen();
+  showOverlay(el.screenRules);
+}
+
 $('btn-play').addEventListener('click', () => {
   audio.unlockAudio();
-  if (!hasSeenRules()) {
-    markRulesSeen();
-    showOverlay(el.screenRules);
-    return;
-  }
+  if (!hasSeenRules()) { openRules('erstesSpiel'); return; }
   startLevel(nextOpenIndex(levels, progress));
 });
-$('btn-rules').addEventListener('click', () => { markRulesSeen(); showOverlay(el.screenRules); });
+$('btn-rules').addEventListener('click', () => openRules('titel'));
+$('btn-help').addEventListener('click', () => openRules('spiel'));
+$('btn-editor-help').addEventListener('click', () => openRules('editor'));
+
 $('btn-rules-close').addEventListener('click', () => {
-  if (session) closeOverlays(); else startLevel(nextOpenIndex(levels, progress));
+  if (rulesFrom === 'erstesSpiel') startLevel(nextOpenIndex(levels, progress));
+  else if (rulesFrom === 'titel') showOverlay(el.screenTitle);
+  else if (rulesFrom === 'editor') showOverlay(null);   // Betriebsart ist noch „editor“
+  else if (session) closeOverlays();
+  else showOverlay(el.screenTitle);
 });
+
 $('btn-teach-close').addEventListener('click', closeTeach);
-$('btn-menu').addEventListener('click', openLevels);
-$('btn-help').addEventListener('click', () => showOverlay(el.screenRules));
+$('btn-menu').addEventListener('click', leaveLevel);
 $('btn-levels-close').addEventListener('click', () => {
   if (session) closeOverlays(); else showOverlay(el.screenTitle);
+});
+$('btn-levels-title').addEventListener('click', () => {
+  session = null;
+  setMode('play');
+  showOverlay(el.screenTitle);
 });
 el.hudTargets.addEventListener('click', () => setLegend(!legendOpen));
 $('btn-legend-close').addEventListener('click', () => setLegend(false));

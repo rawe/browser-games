@@ -158,11 +158,25 @@
 
 /* ---------- Hinweis ---------- */
 
+/* Der Hinweisbalken liegt über allem.
+ *
+ * Vorher hatte er gar keinen `z-index` und lag damit unter der Werkzeugleiste
+ * des Editors (`z-index: 2`) und unter jeder Überlagerung (`z-index: 5`).
+ * Ausgerechnet dort, wo eine Rückmeldung am nötigsten ist – „gesichert“,
+ * „Link kopiert“, „Konnte nicht speichern“ –, war sie unsichtbar. Ein Hinweis,
+ * den niemand sieht, ist schlimmer als keiner: Man hält das Programm für stumm.
+ *
+ * Die Höhe richtet sich nach der jeweils sichtbaren Fußleiste; `--bottom-bar`
+ * setzt `layout()` in `main.js` aus derselben Messung, mit der auch das Brett
+ * eingepasst wird. Damit rutscht der Balken nie unter die Bedienleiste des
+ * Spiels und nie unter die höhere Werkzeugleiste des Editors.
+ */
 .toast {
   position: absolute;
   left: 50%;
   translate: -50% 0;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 4.4rem);
+  z-index: 6;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--bottom-bar, 3.4rem) + 1rem);
   max-width: min(30rem, calc(100vw - 1.6rem));
   padding: 0.6rem 0.9rem;
   border-radius: 0.9rem;

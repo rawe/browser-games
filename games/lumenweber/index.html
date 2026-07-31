@@ -58,7 +58,10 @@
       <input id="editor-name" class="editor-name" type="text" maxlength="60"
         aria-label="Name des Levels" placeholder="Levelname" />
       <button id="editor-status" class="chip chip--btn" type="button"
-        aria-controls="screen-check" title="Prüfergebnis anzeigen">○ ungeprüft</button>
+        aria-controls="screen-check" title="Prüfergebnis anzeigen">○ ungetestet</button>
+      <!-- Beim Bauen schlägt man nach, was ein Prisma tut – der „?“ der
+           Spiel-Kopfzeile ist hier ausgeblendet, also braucht es einen eigenen. -->
+      <button id="btn-editor-help" class="icon-btn" type="button" aria-label="Spielregeln">?</button>
     </header>
 
     <footer id="editor-tools" class="editor-tools" hidden>
@@ -66,6 +69,11 @@
       <div class="editor-actions">
         <button id="btn-board" class="pill" type="button" aria-expanded="false"
           aria-controls="editor-board">⤢ <span id="board-size">7×7</span></button>
+        <!-- Der Prismenvorrat gehört sichtbar in die Bedienleiste, nicht in die
+             Größenklappe: Wer eine Fassung setzt, muss den Vorrat sofort sehen
+             und ändern können. Ein Tipp schaltet ihn weiter. -->
+        <button id="btn-prisms" class="pill pill--prism" type="button" hidden
+          title="Prismen im Vorrat – tippen schaltet weiter">◆ <span id="prism-count">1</span>/<span id="socket-count">2</span></button>
         <button id="btn-editor-test" class="pill pill--go" type="button">▶ Testen</button>
         <button id="btn-editor-save" class="pill pill--go" type="button">✓ Sichern</button>
       </div>
@@ -83,12 +91,6 @@
           <button class="step" type="button" data-size="h-" aria-label="niedriger">−</button>
           <output id="board-h">7</output>
           <button class="step" type="button" data-size="h+" aria-label="höher">+</button>
-        </div>
-        <div class="board-row" id="board-prisms-row">
-          <span class="board-label">Prismen im Vorrat</span>
-          <button class="step" type="button" data-size="p-" aria-label="weniger Prismen">−</button>
-          <output id="board-p">0</output>
-          <button class="step" type="button" data-size="p+" aria-label="mehr Prismen">+</button>
         </div>
         <p id="board-note" class="board-note"></p>
       </div>
@@ -206,6 +208,9 @@
         <ol id="level-grid" class="level-grid"></ol>
         <div class="panel-actions">
           <button id="btn-levels-close" class="ghost" type="button">Zurück</button>
+          <!-- Ohne diesen Knopf war das Titelbild – und damit der Editor –
+               unerreichbar, sobald einmal ein Level lief. -->
+          <button id="btn-levels-title" class="ghost" type="button">Titelbild</button>
           <a class="ghost" href="../../index.html">Alle Spiele</a>
         </div>
       </div>

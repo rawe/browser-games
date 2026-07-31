@@ -72,6 +72,22 @@ export function createInput(canvas, handlers) {
   const onContextMenu = (event) => event.preventDefault();
 
   const onKeyDown = (event) => {
+    // Tippt jemand in ein Textfeld, gehören die Tasten dorthin und nicht ans
+    // Spiel. Ohne diese Prüfung verschluckt der Lauscher am `window` die
+    // Buchstaben r, u, h und l samt `preventDefault` – ein Level ließe sich
+    // nicht „Rubin“ nennen, und Escape spränge aus dem Namensfeld gleich in
+    // die Bibliothek.
+    const target = event.target;
+    if (target instanceof HTMLElement
+      && (target.isContentEditable
+        || target.tagName === 'INPUT'
+        || target.tagName === 'TEXTAREA'
+        || target.tagName === 'SELECT')) return;
+
+    // Tastenkürzel des Browsers (Neu laden, Suchen, Tab wechseln) bleiben dem
+    // Browser.
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+
     const level = handlers.getLevel();
     if (!level) return;
     const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];

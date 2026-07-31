@@ -44,7 +44,11 @@ const toBase64Url = (bytes) => {
 };
 
 const fromBase64Url = (text) => {
-  const padded = text.replace(/-/g, '+').replace(/_/g, '/');
+  // Leerzeichen und Umbrüche **vor** der Auffüllrechnung entfernen: `atob`
+  // überliest sie zwar, aber sie zählen in `length` mit, und dann stimmt die
+  // Zahl der „=“ nicht mehr. Genau so zerbrach ein Code, den ein Mailprogramm
+  // umgebrochen hatte – je nach Zahl der Umbrüche mal ja, mal nein.
+  const padded = text.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
   const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
   return Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
 };
@@ -130,9 +134,16 @@ export function readShareFragment(hash = location.hash) {
   return found || null;
 }
 
-/** Vollständige Adresse zum Weitergeben. */
+/**
+ * Vollständige Adresse zum Weitergeben.
+ *
+ * Die Abfrage der eigenen Adresse wird **verworfen**. Wer selbst über
+ * `?level=3` ins Spiel gekommen ist, hätte sonst einen Link erzeugt, der beim
+ * Empfänger stumm das eingebaute Level 3 startet statt das geteilte anzubieten.
+ */
 export function shareUrl(draft, base = location.href) {
   const url = new URL(base);
+  url.search = '';
   url.hash = `${SHARE_KEY}=${encodeLevel(draft)}`;
   return url.toString();
 }

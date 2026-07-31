@@ -569,6 +569,22 @@ check('mindestens fünf Level vorhanden', levels.length >= 5, `${levels.length}`
   eq('… und wird als Warnung gemeldet', full.warnings.length, 1);
   check('… bleibt für die Kampagne ein Fehler',
     (() => { try { validateLevel(full.level); return false; } catch { return true; } })());
+
+  // Bei genau **einer** Fassung gibt es nichts anzumahnen: Ein Prisma ist dort
+  // das Minimum, und die Wahl „leer, / oder \“ bleibt bestehen. Vorher setzte
+  // der Editor den Vorrat selbst auf 1 und warnte anschließend darüber – eine
+  // Warnung, die sich nicht abstellen ließ.
+  const single = inspect({ name: 'x', rows: ['.._', '>.#', '..o'], prisms: 1 });
+  eq('eine Fassung mit einem Prisma ist fehlerfrei', single.errors.length, 0);
+  eq('… und wird auch nicht angemahnt', single.warnings.length, 0);
+
+  // Einzahl und Mehrzahl in den Meldungen
+  const one = inspect({ name: 'x', rows: ['..o', '>._', '...'], prisms: 0 });
+  check('Meldung sagt „1 Fassung“, nicht „1 Fassungen“',
+    one.errors.some((e) => e.text.startsWith('1 Fassung,')), one.errors.map((e) => e.text).join(' / '));
+  const stock = inspect({ name: 'x', rows: ['..o', '>./', '...'], prisms: 1 });
+  check('Meldung sagt „1 Prisma“, nicht „1 Prismen“',
+    stock.errors.some((e) => e.text.startsWith('1 Prisma ')), stock.errors.map((e) => e.text).join(' / '));
 }
 
 {
@@ -642,6 +658,27 @@ check('mindestens fünf Level vorhanden', levels.length >= 5, `${levels.length}`
   // Auch die kodierte Zeichenkette selbst ist gedeckelt, bevor irgendetwas
   // entschlüsselt wird.
   bad('unsinnig lange Zeichenkette', 'A'.repeat(50000));
+}
+
+{
+  // Ein Mailprogramm bricht lange Links um. Vorher entschied die Zahl der
+  // Umbrüche modulo vier darüber, ob der Code noch las – bei 76 Zeichen je
+  // Zeile ging es, bei 78 nicht.
+  const draft = { name: 'Umbruch', rows: ['>.o', './.', '...'], prisms: 0, best: 3 };
+  const code = encodeLevel(draft);
+  const chop = (n) => code.replace(new RegExp(`(.{${n}})`, 'g'), '$1\n');
+  for (const width of [40, 60, 72, 76, 78, 80]) {
+    eq(`umgebrochener Code (alle ${width} Zeichen) wird gelesen`,
+      decodeLevel(chop(width)).name, 'Umbruch');
+  }
+  eq('Code mit Leerzeichen und Rändern wird gelesen',
+    decodeLevel(`  ${code.slice(0, 10)} ${code.slice(10)}\n`).name, 'Umbruch');
+
+  // Der erzeugte Link darf keine Abfrage mitschleppen: `?level=3` startet beim
+  // Empfänger stumm das eingebaute Level 3, statt das geteilte anzubieten.
+  const url = shareUrl(draft, 'https://example.org/spiel/?level=3');
+  check('geteilter Link trägt keine Abfrage mehr', !url.includes('level=3'), url);
+  check('… und das Level steckt weiterhin im Fragment', url.includes(`#${SHARE_KEY}=`));
 }
 
 /* ---------- Editor: Bewertung ohne Par ---------- */
