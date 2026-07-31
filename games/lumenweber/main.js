@@ -45,6 +45,14 @@ const el = {
 
 const renderer = createRenderer(el.canvas);
 
+// `?level=7` springt direkt in ein eingebautes Level und öffnet dabei das ganze
+// Gitter – zum Durchtesten. Bewusst nur numerisch: geteilte Level bringen später
+// ihre Daten im Fragment mit (`#level=<encoded>`) und kollidieren so nicht.
+const devLevel = (() => {
+  const n = Number(new URLSearchParams(location.search).get('level'));
+  return Number.isInteger(n) && n >= 1 && n <= levels.length ? n - 1 : null;
+})();
+
 let progress = loadProgress();
 let index = 0;
 let session = null;
@@ -75,7 +83,7 @@ function buildLevelGrid() {
   el.levelGrid.replaceChildren();
   levels.forEach((level, i) => {
     const done = progress[level.id];
-    const open = isUnlocked(levels, i, progress);
+    const open = devLevel !== null || isUnlocked(levels, i, progress);
     const li = document.createElement('li');
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -326,7 +334,8 @@ new ResizeObserver(layout).observe(el.stage);
 
 buildLevelGrid();
 layout();
-showOverlay(el.screenTitle);
+if (devLevel !== null) startLevel(devLevel);
+else showOverlay(el.screenTitle);
 
 let raf = 0;
 const loop = (now) => { renderer.frame(now); raf = requestAnimationFrame(loop); };
