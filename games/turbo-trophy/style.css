@@ -1,13 +1,21 @@
+/* Die Palette ist aus dem Titelbild abgeleitet: Asphalt und Grasnarbe stellen
+   zusammen rund die Hälfte des Bildes, die Akzente stammen von Randstein,
+   Zielflagge und den vier Wagen. Dadurch sitzt das Hero-Bild nicht als
+   Fremdkörper über dem Menü, sondern teilt sich dessen Farben. */
 :root {
-  --ink: #0c1020;
-  --panel: #161b33;
-  --border: #2c3560;
-  --amiga: #ffd23f;
-  --hot: #ff4f7b;
-  --ok: #5be07a;
-  --cy: #54d6ff;
-  --txt: #e8ecff;
-  --muted: #8b93c4;
+  --ink: #0e1210;          /* Nachtasphalt */
+  --panel: #1b211a;        /* aufgehellter Asphalt */
+  --border: #3d4a30;       /* Grasnarbe am Streckenrand */
+  --amiga: #f5c518;        /* gelber Wagen */
+  --hot: #d2402f;          /* Randstein-Rot */
+  --ok: #7ab829;           /* Gras */
+  --cy: #4fc9e8;           /* blauer Wagen, Turbo-Spur */
+  --txt: #eef0e6;          /* Randstein-Weiß */
+  --muted: #9aa489;
+  --sunk: #141a12;         /* nicht gewählte Schalter */
+  --shadow-amiga: #9a7a12;
+  --shadow-ok: #4a7a18;
+  --shadow-hot: #8a2418;
 }
 
 * {
@@ -48,7 +56,7 @@ body {
   right: 8px;
   width: 96px;
   height: 96px;
-  background: rgba(6, 10, 24, 0.72);
+  background: rgba(8, 12, 9, 0.74);
   border: 2px solid var(--border);
   border-radius: 6px;
 }
@@ -73,7 +81,7 @@ body {
 }
 
 .tag {
-  background: rgba(6, 10, 24, 0.72);
+  background: rgba(8, 12, 9, 0.74);
   border: 2px solid var(--border);
   border-radius: 6px;
   padding: 3px 8px;
@@ -110,7 +118,7 @@ body {
 
 @keyframes turbo-pulse {
   50% {
-    box-shadow: 0 0 0 4px rgba(255, 210, 63, 0.3);
+    box-shadow: 0 0 0 4px rgba(245, 197, 24, 0.3);
   }
 }
 
@@ -118,7 +126,7 @@ body {
   width: 44px;
   height: 6px;
   border-radius: 3px;
-  background: rgba(12, 16, 32, 0.3);
+  background: rgba(14, 18, 16, 0.3);
   overflow: hidden;
 }
 
@@ -135,7 +143,7 @@ body {
 
 @keyframes gas-pulse {
   50% {
-    box-shadow: 0 0 0 4px rgba(91, 224, 122, 0.25);
+    box-shadow: 0 0 0 4px rgba(122, 184, 41, 0.25);
   }
 }
 
@@ -149,7 +157,7 @@ body {
 #hud-health {
   width: 150px;
   height: 14px;
-  background: #101530;
+  background: var(--sunk);
   border: 2px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
@@ -158,7 +166,7 @@ body {
 #hud-health-fill {
   height: 100%;
   width: 100%;
-  background: linear-gradient(90deg, #5be07a, #b9e05b);
+  background: linear-gradient(90deg, var(--ok), #c8dd3a);
   transition: width 0.15s;
 }
 
@@ -178,7 +186,7 @@ body {
   font-size: min(15vw, 84px);
   letter-spacing: 4px;
   color: var(--amiga);
-  text-shadow: 0 4px 0 #000, 0 0 24px rgba(255, 210, 63, 0.5);
+  text-shadow: 0 4px 0 #000, 0 0 24px rgba(245, 197, 24, 0.5);
 }
 
 #submessage {
@@ -204,7 +212,7 @@ body {
 
 .tc-btn {
   border: 3px solid var(--border);
-  background: rgba(22, 27, 51, 0.82);
+  background: rgba(27, 33, 26, 0.84);
   color: var(--txt);
   font-family: inherit;
   font-weight: bold;
@@ -218,7 +226,7 @@ body {
 
 .tc-btn:active,
 .tc-btn.on {
-  background: #2a3468;
+  background: #2b3524;
   border-color: var(--amiga);
   transform: translateY(2px);
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
@@ -295,7 +303,7 @@ body {
 /* Leerer Bestand: sichtbar tot statt heimlich wirkungslos. */
 .tc-btn.item:disabled {
   opacity: 0.4;
-  border-color: #232a4d;
+  border-color: #2c3623;
   box-shadow: none;
 }
 
@@ -332,19 +340,19 @@ body {
    kurzen Antippen muss auf einen Blick sichtbar sein. */
 .tc-btn.gas.latched {
   background: var(--ok);
-  border-color: #eafff0;
+  border-color: #f2ffe6;
   color: var(--ink);
-  box-shadow: 0 4px 0 #2c7a42, 0 0 18px rgba(91, 224, 122, 0.55);
+  box-shadow: 0 4px 0 var(--shadow-ok), 0 0 18px rgba(122, 184, 41, 0.55);
   transform: none;
 }
 
 .tc-btn.gas.latched small {
-  color: rgba(12, 16, 32, 0.75);
+  color: rgba(14, 18, 16, 0.75);
 }
 
 .tc-btn.gas.latched.on {
   transform: translateY(2px);
-  box-shadow: 0 2px 0 #2c7a42, 0 0 18px rgba(91, 224, 122, 0.55);
+  box-shadow: 0 2px 0 var(--shadow-ok), 0 0 18px rgba(122, 184, 41, 0.55);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -357,7 +365,7 @@ body {
 #overlay {
   position: absolute;
   inset: 0;
-  background: radial-gradient(120% 100% at 50% 0%, #1b2247 0%, #0c1020 60%);
+  background: radial-gradient(120% 100% at 50% 0%, #232b1e 0%, var(--ink) 62%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -384,12 +392,112 @@ body {
   font-size: min(8vw, 36px);
 }
 
+/* ---------- Titel-Hero ----------
+   Das Titelbild läuft im eigenen Seitenverhältnis (12/5), damit von der
+   S-Kurve nichts wegfällt – links der Pink-Wagen, rechts Zielflagge und Feld.
+   Nur wenn die Höhe knapp wird (Querformat), darf oben und unten Gras
+   wegschneiden; die Strecke bleibt dabei stehen. */
+.menu-hero {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  aspect-ratio: 12 / 5;
+  /* Der Hero hat nur absolut positionierte Kinder, seine Min-Content-Höhe ist
+     also 0. Im scrollenden Flex-Container würde er sonst plattgedrückt. */
+  flex: none;
+  margin: 2px 0 12px;
+  border: 3px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.menu-hero img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 50%;
+}
+
+/* Zwei Verläufe: der diagonale dunkelt die Grasnarbe oben links ab, auf der
+   das Logo sitzt; der senkrechte bindet den Fuß ins Menü ein. Beide lassen
+   die rechte Bildhälfte frei – dort stehen Feld, Zielflagge und Öllache. */
+.menu-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, rgb(14 18 16 / 0%) 58%, rgb(14 18 16 / 88%) 100%),
+    linear-gradient(100deg, rgb(14 18 16 / 86%) 0%, rgb(14 18 16 / 42%) 38%, rgb(14 18 16 / 0%) 62%);
+}
+
+/* Zielflaggen-Kante als Fuß des Heros – dasselbe Motiv wie rechts im Bild. */
+.menu-hero::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 8px;
+  background:
+    repeating-conic-gradient(var(--txt) 0% 25%, #11150f 0% 50%) 0 0 / 16px 16px;
+  opacity: 0.9;
+}
+
+/* Logo auf die freie Grasnarbe oben links – so bleiben der pinke Wagen unten
+   links und das Feld oben rechts unverdeckt. */
+.hero-logo {
+  position: absolute;
+  left: 14px;
+  top: 12px;
+  margin: 0;
+  font-size: min(9vw, 38px);
+  font-weight: bold;
+  line-height: 0.92;
+  letter-spacing: 2px;
+  color: var(--amiga);
+  text-shadow: 3px 3px 0 var(--hot), 6px 6px 0 #000;
+}
+
+.hero-badge {
+  position: absolute;
+  bottom: 17px;
+  right: 12px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  /* Dunkel statt gefüllt: Gelb bleibt allein dem Logo vorbehalten, sonst
+     zieht der Blick an zwei Stellen gleich stark. */
+  background: rgb(14 18 16 / 82%);
+  border: 2px solid var(--amiga);
+  color: var(--amiga);
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 1.5px;
+}
+
 .sub {
   color: var(--cy);
   letter-spacing: 2px;
   font-size: 13px;
   margin-bottom: 14px;
   text-align: center;
+}
+
+/* Querformat auf dem Handy: der Hero darf nicht den halben Bildschirm
+   fressen, bevor der erste Knopf sichtbar wird. */
+@media (orientation: landscape) and (max-height: 460px) {
+  .menu-hero {
+    aspect-ratio: auto;
+    height: 30vh;
+    min-height: 96px;
+  }
+
+  .hero-logo {
+    font-size: min(7vh, 32px);
+  }
 }
 
 .panel {
@@ -507,17 +615,17 @@ button.buy {
   border-radius: 8px;
   padding: 9px 10px;
   min-width: 86px;
-  box-shadow: 0 3px 0 #8f741a;
+  box-shadow: 0 3px 0 var(--shadow-amiga);
   cursor: pointer;
 }
 
 button.buy:active {
   transform: translateY(2px);
-  box-shadow: 0 1px 0 #8f741a;
+  box-shadow: 0 1px 0 var(--shadow-amiga);
 }
 
 button.buy:disabled {
-  background: #3a4270;
+  background: #333c2a;
   color: var(--muted);
   box-shadow: none;
   cursor: default;
@@ -536,7 +644,7 @@ button.seg {
   font-size: 12px;
   letter-spacing: 1px;
   color: var(--txt);
-  background: #101530;
+  background: var(--sunk);
   border: 2px solid var(--border);
   border-radius: 8px;
   padding: 10px 4px;
@@ -567,18 +675,18 @@ button.big {
   border-radius: 12px;
   padding: 15px 26px;
   margin-top: 6px;
-  box-shadow: 0 4px 0 #2c7a42;
+  box-shadow: 0 4px 0 var(--shadow-ok);
   cursor: pointer;
 }
 
 button.big:active {
   transform: translateY(2px);
-  box-shadow: 0 2px 0 #2c7a42;
+  box-shadow: 0 2px 0 var(--shadow-ok);
 }
 
 button.big.alt {
   background: var(--hot);
-  box-shadow: 0 4px 0 #8f2143;
+  box-shadow: 0 4px 0 var(--shadow-hot);
   color: #fff;
 }
 
@@ -641,7 +749,7 @@ table.results tr.me td {
 #editor {
   position: absolute;
   inset: 0;
-  background: radial-gradient(120% 100% at 50% 0%, #1b2247 0%, #0c1020 60%);
+  background: radial-gradient(120% 100% at 50% 0%, #232b1e 0%, var(--ink) 62%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -678,7 +786,7 @@ table.results tr.me td {
 /* Abbrechen sieht anders aus als Speichern – sonst greift man auf dem Handy
    nach dem falschen der beiden gleich aussehenden Knöpfe. */
 .ed-top .buy.ed-quiet {
-  background: #101530;
+  background: var(--sunk);
   color: var(--muted);
   border: 2px solid var(--border);
   box-shadow: none;
@@ -809,7 +917,7 @@ table.results tr.me td {
 button.buy.danger {
   background: var(--hot);
   color: #fff;
-  box-shadow: 0 3px 0 #8f2143;
+  box-shadow: 0 3px 0 var(--shadow-hot);
 }
 
 .ed-field {
@@ -839,7 +947,7 @@ button.buy.danger {
 .ed-cycle {
   height: 10px;
   margin-top: 8px;
-  background: #101530;
+  background: var(--sunk);
   border: 2px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
@@ -862,7 +970,7 @@ button.buy.danger {
 #ed-json-text {
   width: 100%;
   margin-bottom: 8px;
-  background: #101530;
+  background: var(--sunk);
   color: var(--txt);
   border: 2px solid var(--border);
   border-radius: 8px;
@@ -884,7 +992,7 @@ button.buy.danger {
   font-size: 11px;
   letter-spacing: 1px;
   color: var(--txt);
-  background: rgba(6, 10, 24, 0.82);
+  background: rgba(8, 12, 9, 0.84);
   border: 2px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
