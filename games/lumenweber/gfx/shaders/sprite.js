@@ -1,9 +1,10 @@
 // Alle Spielsteine in einem Shader.
 //
-// Wand, Ziel, Spiegel, Quelle, Ring, Funke: gezeichnet wird immer derselbe
-// gedrehte Quad, und erst `vKind` entscheidet, welche Abstandsfunktion darin
-// ausgewertet wird. Das kostet einen Sprung pro Pixel, spart aber Dutzende
-// Zeichenaufrufe – auf Mobil-GPUs ist das der bessere Handel.
+// Wand, Ziel, Spiegel, Prisma, Fassung, Quelle, Ring, Funke: gezeichnet wird
+// immer derselbe gedrehte Quad, und erst `vKind` entscheidet, welche
+// Abstandsfunktion darin ausgewertet wird. Das kostet einen Sprung pro Pixel,
+// spart aber Dutzende Zeichenaufrufe – auf Mobil-GPUs ist das der bessere
+// Handel.
 //
 // Die lokalen Koordinaten laufen von -1 bis 1 über die halbe Kantenlänge des
 // Sprites. Kantenglättung kommt durchweg aus `fwidth` und passt sich damit von
@@ -11,6 +12,9 @@
 
 import { HEAD, NOISE, SDF } from './common.js';
 import { KIND } from '../kinds.js';
+import { PRISM_AMBER, PRISM_CYAN } from '../palette.js';
+
+const glslVec3 = (c) => `vec3(${c.map((v) => v.toFixed(4)).join(', ')})`;
 
 export const SPRITE_VERT = `${HEAD}
 layout(location = 0) in vec2 aQuad;
@@ -53,15 +57,55 @@ ${SDF}
 const int K_WALL = ${KIND.WALL};
 const int K_TARGET = ${KIND.TARGET};
 const int K_MIRROR = ${KIND.MIRROR};
+const int K_PRISM = ${KIND.PRISM};
+const int K_SOCKET = ${KIND.SOCKET};
 const int K_SOURCE = ${KIND.SOURCE};
 const int K_CURSOR = ${KIND.CURSOR};
 const int K_BEZEL = ${KIND.BEZEL};
 const int K_TARGET_GLOW = ${KIND.TARGET_GLOW};
 const int K_MIRROR_GLINT = ${KIND.MIRROR_GLINT};
+const int K_PRISM_GLINT = ${KIND.PRISM_GLINT};
 const int K_SOURCE_CORONA = ${KIND.SOURCE_CORONA};
 const int K_RING = ${KIND.RING};
 const int K_SPARK = ${KIND.SPARK};
 const int K_HALO = ${KIND.HALO};
+
+const vec3 C_AMBER = ${glslVec3(PRISM_AMBER)};
+const vec3 C_CYAN = ${glslVec3(PRISM_CYAN)};
+
+/**
+ * Farbe und Form eines Knotens hängen an seiner Wunschfarbe.
+ *
+ * Nicht nur die Farbe: Auch die Zahl der Facetten ändert sich (6 · 3 · 4 · 8),
+ * und der Weißknoten trägt einen zweiten Ring. Wer Farben schlecht
+ * unterscheidet, erkennt den Knoten trotzdem an der Form.
+ */
+vec3 wantColor(float want) {
+  if (want < 0.5) return vec3(1.00, 0.78, 0.38);
+  if (want < 1.5) return C_AMBER;
+  if (want < 2.5) return C_CYAN;
+  return vec3(0.88, 0.94, 1.00);
+}
+
+float wantFacets(float want) {
+  if (want < 0.5) return 6.0;
+  if (want < 1.5) return 3.0;
+  if (want < 2.5) return 4.0;
+  return 8.0;
+}
+
+/**
+ * Abstand zu einem regelmäßigen Vieleck mit n Ecken, Spitze nach oben.
+ *
+ * Ein Knoten für beliebiges Licht bleibt ein Kreis, die farbigen bekommen
+ * Dreieck, Viereck und Achteck. Der 2D-Rückfall zeichnet dieselben Formen –
+ * sie sind Teil der Auskunft, nicht Dekoration.
+ */
+float sdNgon(vec2 p, float r, float n) {
+  float a = atan(p.y, p.x) + 1.5707963;
+  float seg = 6.2831853 / n;
+  return cos(floor(0.5 + a / seg) * seg - a) * length(p) - r;
+}
 
 /* ---------- Materie (deckend) ---------- */
 
@@ -80,25 +124,31 @@ vec4 drawWall(vec2 p, float aa) {
   return vec4(col, body);
 }
 
-vec4 drawTarget(vec2 p, float aa, float lit, float seed) {
+vec4 drawTarget(vec2 p, float aa, float lit, float seed, float want) {
   float r = length(p);
   float ang = atan(p.y, p.x);
   float t = mix(uTime, 0.0, uCalm);
+  vec3 tint = wantColor(want);
+  float facets = wantFacets(want);
 
   // Ungetroffen atmet der Knoten langsam – er wartet sichtbar auf Licht.
   float wait = 0.94 + 0.06 * sin(t * 1.5 + seed * 6.28);
   float ringR = mix(0.60 * wait, 0.63, lit);
-  float ringD = abs(r - ringR) - mix(0.045, 0.062, lit);
-  float ring = fill(ringD, aa);
+  float shape = want < 0.5 ? r - ringR : sdNgon(p, ringR, facets);
+  float ring = stroke(shape, mix(0.045, 0.062, lit), aa);
 
-  // Sechs Facetten geben dem Ring Struktur und drehen sich sehr träge.
-  float facet = 0.5 + 0.5 * cos(ang * 6.0 - t * 0.25 + seed);
-  vec3 ringCol = mix(vec3(0.20, 0.28, 0.48), vec3(1.00, 0.78, 0.38), lit);
+  // Facetten geben dem Ring Struktur und drehen sich sehr träge.
+  float facet = 0.5 + 0.5 * cos(ang * facets - t * 0.25 + seed);
+  vec3 ringCol = mix(vec3(0.20, 0.28, 0.48), tint, lit);
   ringCol *= 0.70 + 0.55 * facet;
+
+  // Der Weißknoten trägt einen zweiten, engeren Reif: Er will beide Farben.
+  float twin = step(2.5, want) * stroke(r - ringR * 0.62, 0.026, aa);
+  ring = clamp(ring + twin * 0.85, 0.0, 1.0);
 
   float coreR = mix(0.15 * wait, 0.27, lit);
   float core = fill(r - coreR, aa);
-  vec3 coreCol = mix(vec3(0.10, 0.15, 0.28), vec3(1.00, 0.96, 0.86), lit);
+  vec3 coreCol = mix(vec3(0.10, 0.15, 0.28), mix(vec3(1.0), tint, 0.35), lit);
 
   float a = clamp(ring + core, 0.0, 1.0);
   vec3 col = ringCol * ring + coreCol * core;
@@ -128,11 +178,81 @@ vec4 drawMirror(vec2 p, float aa, float locked, float lit, float seed) {
   return vec4(col, body);
 }
 
+/**
+ * Das Prisma: ein Glaskeil, der auf der Diagonalen liegt.
+ *
+ * Anders als der Spiegel ist es keine dünne Scheibe, sondern ein Körper mit
+ * zwei Flanken – und die sind gefärbt. Oben, wohin das Cyan abbiegt, schimmert
+ * es blaugrün; unten, wo der Bernstein geradeaus hindurchläuft, warm. Der
+ * Spieler sieht damit schon am Stein, was er tut, bevor Licht ihn trifft.
+ */
+vec4 drawPrism(vec2 p, float aa, float locked, float lit, float seed) {
+  float t = mix(uTime, 0.0, uCalm);
+
+  // Ein gedrungener Keil, kein Blatt: dreimal so dick wie eine Spiegelscheibe.
+  // Das ist Absicht – auf einen Blick muss klar sein, dass hier etwas anderes
+  // steht als ein Spiegel, auch wenn beide auf der Diagonalen liegen.
+  float d = abs(p.x) * 0.55 + abs(p.y) * 1.25 - 0.42;
+  float body = fill(d, aa);
+
+  // Die beiden Flanken tragen die beiden Grundfarben – oben biegt Cyan ab,
+  // unten läuft Bernstein hindurch. Auch verschraubt bleibt das sichtbar; die
+  // Farbe ist die Auskunft des Bauteils, nicht seine Verzierung.
+  float side = smoothstep(-0.10, 0.10, p.y);
+  vec3 col = mix(C_CYAN * 0.72, C_AMBER * 0.72, side);
+  col *= mix(1.0, 0.62, locked);
+
+  // Heller Grat auf der Mittelachse: die Kante, an der sich das Licht trennt.
+  float spine = exp(-pow(p.y / 0.05, 2.0)) * (1.0 - smoothstep(0.45, 0.95, abs(p.x)));
+  col += vec3(1.0, 0.99, 0.96) * spine * mix(0.75, 1.25, lit);
+
+  // Ein Spektrum wandert träge durch das Glas – kein Blech, sondern Optik.
+  float sweep = fract(p.x * 0.45 + t * 0.06 + seed);
+  col += mix(C_AMBER, C_CYAN, sweep) * 0.20 * (1.0 - locked * 0.6)
+    * exp(-pow(p.y / 0.24, 2.0));
+
+  // Facettenkante ringsum, oben kalt und unten warm gebrochen.
+  col += mix(C_CYAN, C_AMBER, side) * stroke(d, 0.038, aa) * 0.85;
+  col += vec3(1.0) * stroke(d, 0.014, aa) * 0.35;
+  col += mix(C_CYAN, C_AMBER, side) * lit * 0.40;
+
+  return vec4(col, body);
+}
+
+/**
+ * Die leere Fassung: eine Halterung, in der noch nichts steckt.
+ *
+ * Sie ist absichtlich zurückhaltend – ein gestrichelter Umriss in Form des
+ * Prismas, das hineingehört. Solange noch ein Prisma im Vorrat liegt (ready),
+ * atmet sie; ist der Vorrat leer, wird sie still.
+ */
+vec4 drawSocket(vec2 p, float aa, float ready, float hover) {
+  float t = mix(uTime, 0.0, uCalm);
+  vec2 q = abs(p);
+
+  // Vier Eckwinkel am Zellenrand. Sie sitzen bewusst weit außen: Eine Fassung
+  // liegt oft mitten im hellen Strahl, und der überstrahlt alles, was innerhalb
+  // seines Hofs liegt. Nur außerhalb bleibt sie ablesbar.
+  float bracket = stroke(max(q.x, q.y) - 0.84, 0.048, aa)
+    * smoothstep(0.38, 0.60, min(q.x, q.y));
+
+  // Innen, gestrichelt, der Umriss dessen, was hineingehört.
+  float d = abs(p.x) * 0.55 + abs(p.y) * 1.25 - 0.42;
+  float dash = 0.5 + 0.5 * sin(atan(p.y, p.x * 0.42) * 7.0 + t * 0.4);
+  float ghost = stroke(d, 0.034, aa) * smoothstep(0.28, 0.62, dash);
+
+  // Solange noch ein Prisma im Vorrat liegt, atmet sie; ist er leer, wird sie still.
+  float breathe = mix(0.62, 0.62 + 0.38 * (0.5 + 0.5 * sin(t * 2.0)), ready);
+  vec3 col = mix(vec3(0.40, 0.58, 0.88), vec3(0.84, 0.96, 1.00), max(hover, ready * 0.55));
+  float a = clamp(bracket * 0.95 + ghost * 0.65, 0.0, 1.0) * breathe;
+  return vec4(col, a);
+}
+
 vec4 drawBezel(vec2 p, float aa, float locked, float hover, float lit) {
   float r = length(p);
   float ang = atan(p.y, p.x);
 
-  // Verschraubt bekommt eine dunkle Trägerplatte: Der Spiegel sitzt sichtbar
+  // Verschraubt bekommt eine dunkle Trägerplatte: Das Bauteil sitzt sichtbar
   // in einer Fassung und lädt schon dadurch nicht zum Antippen ein.
   float plate = fill(r - 0.80, aa) * locked;
 
@@ -197,17 +317,19 @@ vec4 drawCursor(vec2 p, float aa) {
 
 /* ---------- Licht (additiv) ---------- */
 
-vec3 drawTargetGlow(vec2 p, float lit, float impact, float seed) {
+vec3 drawTargetGlow(vec2 p, float lit, float impact, float seed, float want) {
   float r = length(p);
   float ang = atan(p.y, p.x);
   float t = mix(uTime, 0.0, uCalm);
+  vec3 tint = wantColor(want);
 
   float halo = exp(-r * r * 6.5) * 0.55 + 0.12 / (1.0 + r * r * 40.0);
-  float rays = (0.55 + 0.45 * cos(ang * 8.0 - t * 0.6 + seed * 6.0)) * exp(-r * r * 3.6) * 0.26;
-  vec3 col = vec3(1.00, 0.80, 0.45) * (halo + rays) * lit;
+  float rays = (0.55 + 0.45 * cos(ang * wantFacets(want) * 1.35 - t * 0.6 + seed * 6.0))
+    * exp(-r * r * 3.6) * 0.26;
+  vec3 col = tint * (halo + rays) * lit;
 
   // Einschlag: ein kurzer weißer Kern, der schnell in das ruhige Glühen fällt.
-  col += vec3(1.0, 0.97, 0.92) * impact * exp(-r * r * 9.0) * 1.1;
+  col += mix(vec3(1.0), tint, 0.25) * impact * exp(-r * r * 9.0) * 1.1;
   return col;
 }
 
@@ -218,6 +340,29 @@ vec3 drawMirrorGlint(vec2 p, float lit) {
   float spot = exp(-dot(p, p) * 26.0);
   vec3 col = vec3(0.55, 0.82, 1.00) * streak * 0.85;
   col += vec3(1.0) * (cross * exp(-dot(p, p) * 3.0) * 0.30 + spot * 0.55);
+  return col * lit;
+}
+
+/**
+ * Der Glanz eines arbeitenden Prismas: ein Spektrum, das aus der Kante tritt.
+ *
+ * split sagt, ob hier gerade wirklich getrennt oder vereinigt wird – dann
+ * fächert das Licht sichtbar auf, sonst glimmt nur die Kante.
+ */
+vec3 drawPrismGlint(vec2 p, float lit, float split) {
+  float r = length(p);
+  float t = mix(uTime, 0.0, uCalm);
+
+  float edge = exp(-pow(p.y / 0.055, 2.0)) * (1.0 - smoothstep(0.2, 0.95, abs(p.x)));
+  float spot = exp(-r * r * 24.0);
+
+  // Zwei Fächer, nach oben kalt, nach unten warm – die Trennung selbst.
+  float fanUp = exp(-pow((p.y + 0.20) / 0.13, 2.0)) * exp(-p.x * p.x * 2.2);
+  float fanDown = exp(-pow((p.y - 0.20) / 0.13, 2.0)) * exp(-p.x * p.x * 2.2);
+  float shimmer = 0.82 + 0.18 * sin(t * 3.1 + p.x * 5.0);
+
+  vec3 col = vec3(1.0) * (edge * 0.55 + spot * 0.65);
+  col += (C_CYAN * fanUp + C_AMBER * fanDown) * split * 0.85 * shimmer;
   return col * lit;
 }
 
@@ -261,9 +406,13 @@ void main() {
   if (kind == K_WALL) {
     rgba = drawWall(p, aa);
   } else if (kind == K_TARGET) {
-    rgba = drawTarget(p, aa, vParams.x, vParams.z);
+    rgba = drawTarget(p, aa, vParams.x, vParams.z, vParams.w);
   } else if (kind == K_MIRROR) {
     rgba = drawMirror(p, aa, vParams.x, vParams.y, vParams.z);
+  } else if (kind == K_PRISM) {
+    rgba = drawPrism(p, aa, vParams.x, vParams.y, vParams.z);
+  } else if (kind == K_SOCKET) {
+    rgba = drawSocket(p, aa, vParams.x, vParams.y);
   } else if (kind == K_BEZEL) {
     rgba = drawBezel(p, aa, vParams.x, vParams.y, vParams.z);
   } else if (kind == K_SOURCE) {
@@ -271,9 +420,11 @@ void main() {
   } else if (kind == K_CURSOR) {
     rgba = drawCursor(p, aa);
   } else if (kind == K_TARGET_GLOW) {
-    rgba = vec4(drawTargetGlow(p, vParams.x, vParams.y, vParams.z), 1.0);
+    rgba = vec4(drawTargetGlow(p, vParams.x, vParams.y, vParams.z, vParams.w), 1.0);
   } else if (kind == K_MIRROR_GLINT) {
     rgba = vec4(drawMirrorGlint(p, vParams.x), 1.0);
+  } else if (kind == K_PRISM_GLINT) {
+    rgba = vec4(drawPrismGlint(p, vParams.x, vParams.y), 1.0);
   } else if (kind == K_SOURCE_CORONA) {
     rgba = vec4(drawSourceCorona(p), 1.0);
   } else if (kind == K_RING) {

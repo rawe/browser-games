@@ -50,6 +50,17 @@ export const playTurn = () => {
   tone({ freq: 2400, dur: 0.05, type: 'sine', gain: 0.12 });
 };
 
+/** Ein Prisma rastet in eine Fassung ein – heller, mit aufsteigendem Glas. */
+export const playPlace = () => {
+  tone({ freq: 620, dur: 0.12, type: 'triangle', gain: 0.3, slide: 420 });
+  tone({ freq: 1860, dur: 0.09, type: 'sine', gain: 0.14, delay: 0.04 });
+};
+
+/** Ein Prisma wird wieder aus der Fassung genommen. */
+export const playLift = () => {
+  tone({ freq: 900, dur: 0.13, type: 'triangle', gain: 0.26, slide: -420 });
+};
+
 /** Ein Knoten ist neu aufgeleuchtet. */
 export const playLit = (index = 0) =>
   tone({ freq: 523.25 * (1 + index * 0.25), dur: 0.35, type: 'sine', gain: 0.4 });

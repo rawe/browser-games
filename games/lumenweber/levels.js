@@ -5,8 +5,11 @@
 //   .  leer          #  Blocker        o  Zielpunkt
 //   >  < ^ v  Lichtquelle mit Strahlrichtung
 //   /  \  drehbarer Spiegel            1  2  fester Spiegel („/“ bzw. „\“)
+//   A  C  W  Knoten für Bernstein, Cyan, weißes Licht
+//   p  q  drehbares Prisma             3  4  festes Prisma („/“ bzw. „\“)
+//   _  leere Fassung – `prisms` sagt, wie viele Prismen im Vorrat liegen
 //
-// `par` ist die vom Solver bestimmte Mindestzahl an Drehungen. Sie wird von
+// `par` ist die vom Solver bestimmte Mindestzahl an Zügen. Sie wird von
 // `npm run check:lumen` gegengeprüft – ein falscher Wert ist ein Testfehler.
 
 import { parseLevel } from './level.js';
@@ -299,6 +302,175 @@ export const levelDefs = [
       '../o..o./',
       '../.o.../',
       '../..\\...',
+    ],
+  },
+  {
+    id: 'l21',
+    name: 'Zweifarbig',
+    teach: {
+      id: 'prisma',
+      title: 'Das Prisma',
+      body: 'Ein Prisma trennt das Licht: Bernstein läuft geradeaus hindurch, Cyan wird um 90° abgelenkt – genau wie an einem Spiegel derselben Lage. Aus einem weißen Faden werden so zwei, und jeder will seinen eigenen Weg.',
+    },
+    par: 3,
+    rows: [
+      '.........',
+      '..\\.../..',
+      '.........',
+      '>.3...../',
+      '.........',
+      '....o./.o',
+      '.........',
+    ],
+  },
+  {
+    id: 'l22',
+    name: 'Bernsteinpfad',
+    teach: {
+      id: 'farbe',
+      title: 'Farbige Knoten',
+      body: 'Ein Bernsteinknoten leuchtet nur in reinem Bernstein, ein Cyanknoten nur in reinem Cyan. Weißes Licht ist ihnen zu grell – erst hinter dem Prisma ist der Faden sauber genug.',
+    },
+    par: 4,
+    rows: [
+      '..v......',
+      '....C../.',
+      '.........',
+      '..4....\\.',
+      '..../....',
+      '......A..',
+      '../...\\..',
+      '.........',
+    ],
+  },
+  {
+    id: 'l23',
+    name: 'Wiedervereint',
+    hint: 'Verlassen Bernstein und Cyan dasselbe Prisma in derselben Richtung, ist das Licht dahinter wieder weiß.',
+    par: 5,
+    rows: [
+      '.......',
+      '.......',
+      '..\\../W',
+      '.....C.',
+      '>.3.//3',
+      '....A..',
+      '....\\.\\',
+    ],
+  },
+  {
+    id: 'l24',
+    name: 'Die Fassung',
+    teach: {
+      id: 'fassung',
+      title: 'Die Fassung',
+      body: 'Eine leere Fassung ist für das Licht nicht vorhanden. Tippe sie an, und ein Prisma aus dem Vorrat rastet ein; der nächste Tipp dreht es, der übernächste nimmt es wieder heraus. Es liegen weniger Prismen bereit, als Fassungen da sind – such dir die richtige aus.',
+    },
+    prisms: 1,
+    par: 5,
+    rows: [
+      '.........',
+      '.C.......',
+      '.........',
+      '>._._._./',
+      '.........',
+      './..\\...A',
+      '.........',
+    ],
+  },
+  {
+    id: 'l25',
+    name: 'Scherenschnitt',
+    hint: 'Die Blocker lassen nur einer Fassung beide Farbwege offen.',
+    prisms: 1,
+    par: 6,
+    rows: [
+      '.........',
+      '.C..#.A./',
+      '..##.....',
+      '>.__.__.\\',
+      '..#...#..',
+      './...\\...',
+    ],
+  },
+  {
+    id: 'l26',
+    name: 'Doppelnaht',
+    hint: 'Zwei Prismen im Vorrat: Das erste trennt den Faden, das zweite näht ihn wieder zusammen.',
+    prisms: 2,
+    par: 7,
+    rows: [
+      '..\\._C/.',
+      '........',
+      '........',
+      '>._A.__/',
+      '.......W',
+      '.....W.\\',
+    ],
+  },
+  {
+    id: 'l27',
+    name: 'Wendeglas',
+    hint: 'Auch ein Prisma lässt sich drehen – nur versetzen kann man es nicht.',
+    par: 8,
+    rows: [
+      '.........',
+      '>.p.A.q./',
+      '.........',
+      '.........',
+      '../C/....',
+      '..W.....\\',
+      '..../.\\..',
+    ],
+  },
+  {
+    id: 'l28',
+    name: 'Nadelöhr',
+    prisms: 1,
+    par: 9,
+    rows: [
+      '>.4./....',
+      '.\\....../',
+      '....A....',
+      '../C../._',
+      '.........',
+      '......_..',
+      '.W../__o\\',
+    ],
+  },
+  {
+    id: 'l29',
+    name: 'Buntgewebe',
+    prisms: 2,
+    par: 10,
+    rows: [
+      '.........',
+      '>._._./..',
+      '.\\..W....',
+      '......A..',
+      '.._......',
+      '......_./',
+      '.........',
+      '../C....\\',
+      './..o.\\..',
+    ],
+  },
+  {
+    id: 'l30',
+    name: 'Weberknoten',
+    hint: 'Trennen, weit auseinanderführen, wieder zusammenbringen – und unterwegs nichts verlieren.',
+    prisms: 2,
+    par: 11,
+    rows: [
+      '>._..._./',
+      '.o../....',
+      '....W...A',
+      '.._.....3',
+      '.\\...o_.\\',
+      '.........',
+      '../C..3..',
+      '.........',
+      './..\\....',
     ],
   },
 ];

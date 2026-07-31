@@ -22,7 +22,7 @@ export const games = [
   {
     slug: 'lumenweber',
     title: 'Lumenweber',
-    description: 'Lichträtsel: Dreh die Spiegel, webe den Strahl durch alle Knoten.',
+    description: 'Lichträtsel: Dreh die Spiegel, spalte den Strahl im Prisma, webe ihn durch alle Knoten.',
     emoji: '✦',
   },
   {

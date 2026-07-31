@@ -50,8 +50,12 @@ const CONTEXT_ATTRS = {
 const MAX_DEVICE_PIXELS = 2_800_000;
 const MAX_DPR = 2;
 
-const MAX_SPRITES = 1024;
-const MAX_BEAM_SEGMENTS = 512;
+// Ein Prisma vervielfacht Fäden und damit Segmente: Aus einem Strahl können
+// bis zu `Breite · Höhe · 4` Zustände werden. Die Grenzen liegen deshalb
+// großzügig – `addSegment` verwirft bei Überlauf stillschweigend, und ein
+// halb gezeichneter Lichtweg wäre schlimmer als ein paar Kilobyte mehr.
+const MAX_SPRITES = 2048;
+const MAX_BEAM_SEGMENTS = 2048;
 
 /**
  * @returns {object|null} Renderer oder `null`, wenn kein WebGL2 zustande kommt.
@@ -280,8 +284,6 @@ export function createWebglRenderer(canvas) {
     beamProgram.u1f('uCell', Math.max(1, cell));
     beamProgram.u1f('uCore', Math.max(1.1, cell * 0.036));
     beamProgram.u1f('uHalo', Math.max(5, cell * 0.24));
-    beamProgram.u3f('uWarm', 0.55, 0.82, 1.0);
-    beamProgram.u3f('uCool', 0.18, 0.44, 1.0);
     beamProgram.u1f('uReveal', scene.state.reveal);
     beamProgram.u1f('uWave', scene.state.wave);
     beamProgram.u1f('uGain', gpu.floatOk ? 1.20 : 0.9);

@@ -8,6 +8,7 @@
 
 import { levels, levelById } from '../levels.js';
 import { levelReport, fuzzLevel, showStart, showSolved } from './headless.js';
+import { ASCII_LEGEND } from './ascii.js';
 
 const args = process.argv.slice(2);
 const flag = (name, fallback = null) => {
@@ -39,9 +40,11 @@ if (show) {
     console.log(showStart(level));
     console.log(`\n── Lösung ────────────────────────────`);
     console.log(showSolved(level));
+    if (level.teach) console.log(`\n▸ ${level.teach.title}: ${level.teach.body}`);
     if (level.hint) console.log(`\n„${level.hint}“`);
     console.log();
   }
+  console.log(`── Zeichen ───────────────────────────\n${ASCII_LEGEND}`);
   process.exit(0);
 }
 
@@ -57,15 +60,20 @@ table(reports, [
   { label: 'Name', get: (r) => r.name },
   { label: 'Größe', get: (r) => r.size },
   { label: 'Spiegel', get: (r) => r.mirrors, right: true },
-  { label: 'dreh', get: (r) => r.rotatable, right: true },
+  { label: 'Prism', get: (r) => r.prisms, right: true },
+  { label: 'Fass', get: (r) => r.sockets, right: true },
+  { label: 'Vorrat', get: (r) => (r.stock ? `${r.usedPrisms}/${r.stock}` : '·'), right: true },
   { label: 'fest', get: (r) => r.locked, right: true },
   { label: 'Block', get: (r) => r.walls, right: true },
-  { label: 'Ziele', get: (r) => r.targets, right: true },
+  { label: 'Ziele', get: (r) => (r.colored ? `${r.targets} (${r.colored})` : r.targets), right: true },
+  { label: 'Regler', get: (r) => r.controls, right: true },
+  { label: 'Zust.', get: (r) => r.states, right: true },
   { label: 'Start', get: (r) => r.litAtStart, right: true },
   { label: 'Par', get: (r) => r.solvedPar, right: true },
   { label: 'Lös.', get: (r) => r.solutions, right: true },
   { label: 'opt.', get: (r) => r.optimal, right: true },
-  { label: 'Deko', get: (r) => r.idleMirrors, right: true },
+  { label: 'Deko', get: (r) => r.idleControls, right: true },
+  { label: 'Fäden', get: (r) => r.paths, right: true },
   { label: 'Länge', get: (r) => r.beamLength, right: true },
   { label: 'OK', get: (r) => (r.ok ? '✓' : '✗') },
 ]);
@@ -75,6 +83,7 @@ if (taps > 0) {
   console.log();
   for (const level of levels) {
     const f = fuzzLevel(level, { taps, seed: 1234 });
-    console.log(`${level.id}  ${f.taps} Tipps  ·  gelöst in ${f.solvedSeen} Zuständen  ·  längster Faden ${f.maxLength}`);
+    console.log(`${level.id}  ${f.taps} Tipps  ·  gelöst in ${f.solvedSeen} Zuständen`
+      + `  ·  längster Faden ${f.maxLength}  ·  bis zu ${f.maxPaths} Linien`);
   }
 }

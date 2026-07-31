@@ -8,6 +8,8 @@
   --glass-line: rgba(140, 180, 255, 0.18);
   --glow: #7cc4ff;
   --gold: #ffd98a;
+  --amber: #ffb343;
+  --cyan: #4de6ff;
 
   margin: 0;
   height: 100dvh;
@@ -93,6 +95,15 @@
 
 .chip--good { color: var(--gold); border-color: rgba(255, 217, 138, 0.55); }
 .chip--over { color: #ff9f9f; }
+
+/* Prismenvorrat: gefüllte Rauten liegen bereit, hohle stecken in Fassungen. */
+.chip--prism {
+  color: var(--cyan);
+  letter-spacing: 0.12em;
+  border-color: rgba(77, 230, 255, 0.35);
+}
+
+.chip--prism.chip--empty { color: var(--ink-dim); border-color: var(--glass-line); }
 
 .icon-btn {
   flex: none;
@@ -303,6 +314,60 @@
 .rule-fixed { border-style: dashed; }
 .rule-wall { color: #4d5a78; }
 .rule-target, .rule-win { color: var(--gold); }
+
+/* Das Prisma trägt beide Grundfarben – schon im Regelzeichen. */
+.rule-prism {
+  color: transparent;
+  background:
+    linear-gradient(180deg, var(--cyan), #ffffff 50%, var(--amber)) padding-box text,
+    rgba(255, 255, 255, 0.05);
+  -webkit-background-clip: text, padding-box;
+  background-clip: text, padding-box;
+}
+
+.rule-socket { color: var(--ink-dim); border-style: dashed; }
+
+.ink-amber { color: var(--amber); }
+.ink-cyan { color: var(--cyan); }
+
+/* ---------- Lehrkarte ---------- */
+
+/* Sie liegt über dem laufenden Brett – deshalb bleibt der Hintergrund licht
+   genug, dass man sieht, worauf sich die Erklärung bezieht. */
+.overlay--teach {
+  background: radial-gradient(110% 80% at 50% 40%, rgba(24, 38, 78, 0.55), rgba(4, 6, 14, 0.86));
+  backdrop-filter: blur(4px);
+}
+
+.panel--teach { width: min(26rem, 100%); text-align: center; }
+
+.teach-kicker {
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+
+.teach-art-box {
+  margin: 0.9rem 0 0.4rem;
+  padding: 0.6rem;
+  border-radius: 0.9rem;
+  background: rgba(4, 8, 20, 0.7);
+  border: 1px solid var(--glass-line);
+}
+
+.teach-art { display: block; width: 100%; height: auto; }
+
+.teach-body {
+  margin: 0.6rem 0 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: #cfdcf5;
+  text-wrap: pretty;
+}
+
+.panel--teach .panel-actions { justify-content: center; }
 
 /* ---------- Levelauswahl ---------- */
 

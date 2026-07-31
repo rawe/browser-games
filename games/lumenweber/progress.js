@@ -58,3 +58,17 @@ export function hasSeenRules() {
 export function markRulesSeen() {
   try { localStorage.setItem(`${KEY}:rules`, '1'); } catch { /* egal */ }
 }
+
+/**
+ * Lehrkarten: Jede neue Mechanik wird genau einmal erklärt.
+ *
+ * Eigener Schlüssel je Karte, damit eine neue Mechanik später dazukommen kann,
+ * ohne den Fortschritt anzufassen – dieselbe Trennung wie beim Regelbildschirm.
+ */
+export function hasSeenTeach(id) {
+  try { return localStorage.getItem(`${KEY}:teach:${id}`) === '1'; } catch { return false; }
+}
+
+export function markTeachSeen(id) {
+  try { localStorage.setItem(`${KEY}:teach:${id}`, '1'); } catch { /* egal */ }
+}
