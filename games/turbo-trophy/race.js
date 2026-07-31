@@ -17,12 +17,16 @@ import { useItem } from './weapons.js';
 
 export { useItem };
 
-export const PLAYER_COLOR = '#ff4f7b';
+// Lackfarben am Titelbild gemessen – deutlich gesättigter als die früheren
+// Pastelltöne, sonst fällt das Feld gegen die kräftige Umgebung ab. Die Werte
+// stehen hier als Literale und nicht als Import aus `render/palette.js`, damit
+// die Simulation renderfrei bleibt; die Farbtabelle dort führt sie mit.
+export const PLAYER_COLOR = '#f52d62';
 
 const RIVALS = [
-  { name: 'BLAU', color: '#54d6ff' },
-  { name: 'GELB', color: '#ffd23f' },
-  { name: 'LILA', color: '#9d6bff' },
+  { name: 'BLAU', color: '#01bce9' },
+  { name: 'GELB', color: '#fbb501' },
+  { name: 'LILA', color: '#8c46f4' },
 ];
 
 const COUNTDOWN_TICKS = 210;   // 3,5 Sekunden Ampelphase
