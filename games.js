@@ -6,12 +6,6 @@
 // auf den gehashten Dateinamen um (nackte Strings kopiert der Build nicht mit).
 export const games = [
   {
-    slug: 'snake',
-    title: 'Snake',
-    description: 'Der Klassiker – iss, wachse, weiche dir selbst aus.',
-    emoji: '🐍',
-  },
-  {
     slug: 'alterac',
     title: 'Alterac Combat Simulator',
     description: 'Taktik-Autobattler: Routen planen, Truppen fusionieren, Punkte halten – dann läuft die Schlacht von allein.',

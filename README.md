@@ -48,7 +48,7 @@ games/<name>/       Ein Verzeichnis pro Spiel
 
 ## Neues Spiel anlegen
 
-1. Verzeichnis `games/<name>/` mit eigener `index.html` erstellen (Vorlage: `games/snake/`).
+1. Verzeichnis `games/<name>/` mit eigener `index.html` erstellen (Vorlage: `games/lumenweber/`).
 2. Eintrag in `games.js` ergänzen.
 3. Fertig – der Build erkennt neue Spiele automatisch.
 
