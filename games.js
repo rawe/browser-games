@@ -6,12 +6,6 @@
 // auf den gehashten Dateinamen um (nackte Strings kopiert der Build nicht mit).
 export const games = [
   {
-    slug: 'snake',
-    title: 'Snake',
-    description: 'Der Klassiker – iss, wachse, weiche dir selbst aus.',
-    emoji: '🐍',
-  },
-  {
     slug: 'alterac',
     title: 'Alterac Combat Simulator',
     description: 'Taktik-Autobattler: Routen planen, Truppen fusionieren, Punkte halten – dann läuft die Schlacht von allein.',
@@ -24,17 +18,23 @@ export const games = [
     title: 'Lumenweber',
     description: 'Lichträtsel: Dreh die Spiegel, spalte den Strahl im Prisma, webe ihn durch alle Knoten.',
     emoji: '✦',
+    cover: new URL('./games/lumenweber/assets/title-banner.webp', import.meta.url).href,
+    coverAlt: 'Ein Prisma teilt weißes Licht in einen cyanfarbenen und einen bernsteinfarbenen Pfad, die an einem zweiten Prisma wieder weiß zusammenlaufen',
   },
   {
     slug: 'super-cars',
     title: 'Super Cars',
     description: 'Arcade-Rennen mit Raketen, Tuning-Shop und Meisterschaft – 3D von schräg hinten.',
     emoji: '🏎️',
+    cover: new URL('./games/super-cars/assets/title-banner.webp', import.meta.url).href,
+    coverAlt: 'Ein roter Sportwagen verfolgt drei Rivalen und eine Rakete auf einer kurvigen 3D-Rennstrecke bei Sonnenuntergang',
   },
   {
     slug: 'turbo-trophy',
     title: 'Turbo Trophy',
     description: 'Arcade-Rennen mit Raketen, Werkstatt und Meisterschaft über mehrere Saisons – 2D von oben im Amiga-Stil.',
     emoji: '🏁',
+    cover: new URL('./games/turbo-trophy/assets/title-banner.webp', import.meta.url).href,
+    coverAlt: 'Vier farbige Pixelautos liefern sich aus der Draufsicht ein bewaffnetes Rennen auf einer geschwungenen Strecke',
   },
 ];
