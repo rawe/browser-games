@@ -10,6 +10,8 @@ import { createHud } from './hud.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
 
+const TITLE_BANNER_URL = new URL('./assets/title-banner.webp', import.meta.url).href;
+
 const canvas = document.getElementById('scene');
 const overlay = document.getElementById('overlay');
 const panel = document.getElementById('panel');
@@ -67,7 +69,7 @@ function showMenu() {
   audio.engineOff();
   showPanel(`
     <div class="menu-hero" aria-hidden="true">
-      <img src="./assets/title-banner.webp" alt="" width="1536" height="640">
+      <img src="${TITLE_BANNER_URL}" alt="" width="1536" height="640">
       <div class="menu-logo"><span>Super</span> Cars</div>
       <div class="menu-badge">LOW-POLY COMBAT RACING</div>
     </div>
