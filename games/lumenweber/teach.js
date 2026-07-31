@@ -8,6 +8,8 @@
 // das Bild. `sim/checks.js` erzwingt, dass jede Mechanik genau einmal bei ihrem
 // ersten Auftreten erklärt wird.
 
+import { nodeShape, nodeCss } from './nodes.js';
+
 const AMBER = '#ffb343';
 const CYAN = '#4de6ff';
 const WHITE = '#eaf4ff';
@@ -43,24 +45,14 @@ const socket = (cx, cy) => {
     fill="none" stroke="${DIM}" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.75"/>`;
 };
 
-/** Ein Knoten in der Form, die seine Wunschfarbe hat. */
-function node(cx, cy, want, r = 11) {
-  const color = { any: '#ffc76a', amber: AMBER, cyan: CYAN, white: WHITE }[want];
-  const corners = { any: 0, amber: 3, cyan: 4, white: 8 }[want];
-  let shape;
-  if (corners === 0) {
-    shape = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="2.4"/>`;
-  } else {
-    const pts = Array.from({ length: corners }, (_, k) => {
-      const a = -Math.PI / 2 + ((k + 0.5) / corners) * Math.PI * 2;
-      return `${(cx + Math.cos(a) * r).toFixed(1)},${(cy + Math.sin(a) * r).toFixed(1)}`;
-    }).join(' ');
-    shape = `<polygon points="${pts}" fill="none" stroke="${color}" stroke-width="2.4"/>`;
-  }
-  const twin = want === 'white'
-    ? `<circle cx="${cx}" cy="${cy}" r="${r * 0.6}" fill="none" stroke="${color}" stroke-width="1.3"/>` : '';
-  return `${shape}${twin}<circle cx="${cx}" cy="${cy}" r="${r * 0.34}" fill="${color}"/>`;
-}
+/**
+ * Ein Knoten in der Form, die seine Wunschfarbe hat.
+ *
+ * Form und Farbe kommen aus `nodes.js`, genau wie auf dem Brett und in der
+ * Legende – eine Erklärung, die anders aussieht als das Erklärte, richtet mehr
+ * Schaden an als keine.
+ */
+const node = (cx, cy, want, r = 11) => nodeShape(cx, cy, want, r);
 
 export const TEACH_ART = {
   // Weißes Licht läuft in das Prisma und kommt zweifarbig wieder heraus.
@@ -75,11 +67,11 @@ export const TEACH_ART = {
   // Jede Farbe hat ihren eigenen Knoten – und jeder Knoten seine eigene Form.
   farbe: frame(`
     ${node(30, 48, 'any')}${node(85, 48, 'amber')}${node(140, 48, 'cyan')}
-    <text x="30" y="82" fill="${DIM}" font-size="11" text-anchor="middle">jedes</text>
-    <text x="85" y="82" fill="${AMBER}" font-size="11" text-anchor="middle">Bernstein</text>
-    <text x="140" y="82" fill="${CYAN}" font-size="11" text-anchor="middle">Cyan</text>
+    <text x="30" y="82" fill="${nodeCss('any')}" font-size="11" text-anchor="middle">jedes</text>
+    <text x="85" y="82" fill="${nodeCss('amber')}" font-size="11" text-anchor="middle">Bernstein</text>
+    <text x="140" y="82" fill="${nodeCss('cyan')}" font-size="11" text-anchor="middle">Cyan</text>
     ${node(180, 48, 'white')}
-    <text x="180" y="82" fill="${WHITE}" font-size="11" text-anchor="middle">weiß</text>
+    <text x="180" y="82" fill="${nodeCss('white')}" font-size="11" text-anchor="middle">weiß</text>
   `),
 
   // Aus dem Vorrat in eine von mehreren Fassungen – die Wahl gehört zum Rätsel.

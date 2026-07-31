@@ -19,6 +19,7 @@ setzt der Spieler selbst.
 | Zug zurück | `↩ Zurück` oder <kbd>U</kbd> |
 | Level neu | `⟳ Neu` oder <kbd>R</kbd> |
 | Tipp | `💡 Tipp` oder <kbd>H</kbd> |
+| Legende der Knoten | `◉ 2/4` in der Kopfzeile oder <kbd>L</kbd> |
 | Levelauswahl | `☰` oder <kbd>Esc</kbd> |
 | Ohne Maus | Pfeiltasten bewegen den Fokus, <kbd>Enter</kbd> schaltet |
 
@@ -73,6 +74,38 @@ Grund: Ohne Wiedervereinigung bleibt jeder Weißknoten dunkel.
 
 Farbe ist nie das einzige Unterscheidungsmerkmal: Die Knoten haben auch
 verschiedene Formen (Kreis, Dreieck, Viereck, Achteck mit zweitem Reif).
+
+#### Wie ein Knoten seine Farbe zeigt
+
+Im ganzen Spiel gilt eine Aussage, und zwar ausnahmslos:
+
+> **Die Farbe am Knoten ist die Farbe, die durch ihn hindurchpasst.
+> Kein Farbton heißt: keine Forderung.**
+
+Daraus folgen zwei Entscheidungen, die leicht wieder verlorengehen:
+
+* Ein Knoten trägt seine Wunschfarbe **schon bevor Licht ihn trifft** – gedämpft
+  (`TARGET_DIM_*` in `gfx/palette.js`), aber im Farbton eindeutig. Zeigte er sie
+  erst beim Treffer, stünde die Auskunft genau dann zur Verfügung, wenn niemand
+  sie mehr braucht; beim Lösen bliebe nur die Eckenzahl, und die liest sich bei
+  kleiner Zelle schlecht.
+* Der `o`-Knoten ist **farblos**, nicht goldgelb. Gold heißt hier überall
+  Bernstein – Quelle, Faden, der gerade Anteil hinter dem Prisma. Ein goldener
+  „nimmt alles"-Knoten behauptet das Gegenteil dessen, was er tut.
+
+`nodes.js` hält Form, Farbe und Klartext dazu an einer Stelle; Brett, Legende,
+Erklärkarte und Regelseite greifen alle darauf zu. Was durch welchen Knoten
+passt, kommt dort aus `accepts()` selbst statt aus einer zweiten Tabelle – eine
+Legende, die von der Regel abweicht, ist schlimmer als gar keine.
+
+#### Legende
+
+Der Zielzähler `◉ 2/4` in der Kopfzeile ist zugleich der Griff zur Legende
+(Taste `L`). Sie zeigt **nur die Knotenarten dieses Levels**, je mit Symbol,
+Klartext, den drei Lichtsorten als ✓/✗ und dem Zählerstand. Sie legt sich nicht
+über das Brett, sondern nimmt ihm Platz weg – rechts auf breiten Schirmen, unten
+auf schmalen. Sonst läge sie über genau den Knoten, die sie erklärt. Dieselben
+Zeilen stehen vollständig auf der Regelseite hinter `?` (`legend.js`).
 
 ### Fassungen und der Vorrat
 
@@ -141,6 +174,9 @@ level.js      Datenmodell, Regler, Textformat der Level
 beam.js       Strahlverfolgung als Fixpunkt – rein aus Level + Reglerstellung
 game.js       Sitzung: schalten, zurück, neu, Sternbewertung
 levels.js     Levelsammlung im Textformat
+nodes.js      Knotenkunde: Form, Farbe, Klartext – eine Quelle für Brett,
+              Legende, Lehrkarte und Regelseite
+legend.js     die Legendenzeilen, für beide Orte dieselben
 teach.js      Zeichnungen der Lehrkarten
 layout.js     Geometrie – geteilt von Renderer und Eingabe
 render.js     Wahl der Darstellung: WebGL2, sonst 2D-Canvas

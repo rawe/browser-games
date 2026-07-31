@@ -96,6 +96,12 @@
 .chip--good { color: var(--gold); border-color: rgba(255, 217, 138, 0.55); }
 .chip--over { color: #ff9f9f; }
 
+/* Der Zielzähler ist zugleich der Griff zur Legende – er muss als Knopf zu
+   erkennen sein, ohne die ruhige Kopfzeile zu zerreißen. */
+.chip--btn { color: inherit; cursor: pointer; font-family: inherit; }
+.chip--btn:hover { border-color: var(--glow); }
+.chip--btn[aria-expanded='true'] { border-color: var(--glow); background: rgba(124, 196, 255, 0.16); }
+
 /* Prismenvorrat: gefüllte Rauten liegen bereit, hohle stecken in Fassungen. */
 .chip--prism {
   color: var(--cyan);
@@ -313,7 +319,12 @@
 .rule-mirror, .rule-fixed { color: #a8d8ff; }
 .rule-fixed { border-style: dashed; }
 .rule-wall { color: #4d5a78; }
-.rule-target, .rule-win { color: var(--gold); }
+.rule-win { color: var(--gold); }
+
+/* Das Knotenzeichen trägt die Farbe des farblosen Knotens – golden hieße hier
+   „will Bernstein“, und das gilt eben nur für einen von vieren. `--node-*`
+   setzt main.js aus palette.js, damit Regelseite und Brett nicht abdriften. */
+.rule-target { color: var(--node-any, #8a99bd); }
 
 /* Das Prisma trägt beide Grundfarben – schon im Regelzeichen. */
 .rule-prism {
@@ -329,6 +340,128 @@
 
 .ink-amber { color: var(--amber); }
 .ink-cyan { color: var(--cyan); }
+
+.rules-sub { margin: 1.4rem 0 0.3rem; font-size: 1rem; }
+.rules-note { margin: 0 0 0.7rem; color: var(--ink-dim); font-size: 0.84rem; line-height: 1.5; }
+.rules-note b { color: var(--node-any, #8a99bd); }
+
+/* ---------- Legende ---------- */
+
+/* Dieselben Zeilen stehen auf der Regelseite und neben dem Brett – gebaut aus
+   `legend.js`, damit beide Orte nie verschiedene Auskunft geben. */
+
+.legend-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+
+.legend-row {
+  display: grid;
+  grid-template-columns: 2.2rem 1fr;
+  gap: 0.6rem;
+  align-items: start;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-line);
+}
+
+/* Erledigt heißt: zurücktreten. Die Zeile bleibt lesbar, drängt sich aber
+   nicht mehr auf – der Blick soll bei dem hängen, was noch dunkel ist. */
+.legend-row.is-done { opacity: 0.55; }
+
+.legend-icon { display: grid; place-items: center; padding-top: 0.05rem; }
+.node-icon { display: block; }
+
+.legend-text { display: grid; gap: 0.2rem; min-width: 0; }
+
+.legend-head { display: flex; align-items: baseline; gap: 0.5rem; }
+.legend-head b { font-size: 0.92rem; color: var(--ink); }
+
+.legend-count {
+  margin-left: auto;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+}
+
+.legend-count.is-done { color: var(--gold); }
+
+.legend-pass { display: flex; flex-wrap: wrap; gap: 0.3rem 0.5rem; }
+
+.pass {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  font-size: 0.76rem;
+  line-height: 1.3;
+}
+
+/* Wo Farbe steht, geht Licht durch – das Kreuz bleibt bewusst stumm. */
+.pass.is-yes { color: var(--c, var(--ink)); }
+.pass.is-no { color: #5a6785; }
+.pass-mark { font-size: 0.9em; }
+
+.legend-rule { font-size: 0.76rem; line-height: 1.45; color: var(--ink-dim); text-wrap: pretty; }
+
+/* ---------- Legende neben dem Brett ---------- */
+
+.legend {
+  position: absolute;
+  z-index: 4;
+  right: 0.6rem;
+  top: calc(env(safe-area-inset-top, 0px) + 3.6rem);
+  width: min(19rem, calc(100vw - 1.2rem));
+  max-height: calc(100dvh - 11rem);
+  overflow-y: auto;
+  padding: 0.7rem 0.75rem 0.6rem;
+  border-radius: 1rem;
+  background: rgba(10, 15, 30, 0.9);
+  border: 1px solid var(--glass-line);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+}
+
+.legend-bar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.55rem; }
+.legend-title { margin: 0; font-size: 0.86rem; font-weight: 600; letter-spacing: 0.01em; }
+
+.legend-close {
+  margin-left: auto;
+  flex: none;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 0.5rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.legend-close:hover { color: var(--ink); border-color: var(--glass-line); }
+
+.legend-foot { margin: 0.55rem 0 0; font-size: 0.72rem; color: var(--ink-dim); }
+
+.legend-foot kbd {
+  font: inherit;
+  padding: 0.05rem 0.28rem;
+  border-radius: 0.3rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--glass-line);
+}
+
+/* Auf schmalen Schirmen ist rechts kein Platz: Die Legende legt sich als
+   Leiste über den unteren Rand, das Brett rückt darüber. */
+@media (max-width: 47.99rem) {
+  .legend {
+    right: 0.5rem;
+    left: 0.5rem;
+    top: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 4.2rem);
+    width: auto;
+    max-height: 52dvh;
+  }
+
+  .legend-foot { display: none; }
+}
 
 /* ---------- Lehrkarte ---------- */
 

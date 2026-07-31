@@ -23,12 +23,23 @@
         <span id="hud-name" class="hud-name">–</span>
       </div>
       <div class="hud-stats">
-        <span id="hud-targets" class="chip" title="erhellte Ziele">◉ 0/0</span>
+        <button id="hud-targets" class="chip chip--btn" type="button" aria-expanded="false"
+          aria-controls="legend" title="erhellte Ziele – tippen für die Legende">◉ 0/0</button>
         <span id="hud-prisms" class="chip chip--prism" title="Prismen im Vorrat" hidden>◆</span>
         <span id="hud-moves" class="chip" title="Züge / Par">↻ 0/0</span>
       </div>
       <button id="btn-help" class="icon-btn" type="button" aria-label="Spielregeln">?</button>
     </header>
+
+    <!-- Legende: welcher Knoten welches Licht verlangt, für dieses Level -->
+    <aside id="legend" class="legend" aria-label="Legende der Knoten" hidden>
+      <div class="legend-bar">
+        <h2 class="legend-title">Welches Licht passt durch?</h2>
+        <button id="btn-legend-close" class="legend-close" type="button" aria-label="Legende schließen">×</button>
+      </div>
+      <div id="legend-body"></div>
+      <p class="legend-foot">Taste <kbd>L</kbd> blendet die Legende ein und aus.</p>
+    </aside>
 
     <!-- Fußzeile: Aktionen -->
     <footer id="controls" class="controls" hidden>
@@ -73,11 +84,16 @@
           <li><b class="rule-mark rule-mirror">/</b><span><b>Tippe einen Spiegel an</b> – er kippt zwischen <code>/</code> und <code>\</code> und lenkt das Licht um 90° um. Der Faden wird sofort neu gewebt.</span></li>
           <li><b class="rule-mark rule-fixed">╱</b><span><b>Verschraubte Spiegel</b> sitzen auf einer dunklen Platte mit vier Schraubenköpfen. Sie lenken mit, lassen sich aber nicht drehen.</span></li>
           <li><b class="rule-mark rule-wall">█</b><span><b>Blocker</b> verschlucken das Licht. Dahinter ist Schatten.</span></li>
-          <li><b class="rule-mark rule-target">◉</b><span><b>Knoten</b> leuchten auf, wenn der Faden sie durchläuft – und er läuft dahinter weiter.</span></li>
+          <li><b class="rule-mark rule-target">◉</b><span><b>Knoten</b> leuchten auf, wenn der Faden sie durchläuft – und er läuft dahinter weiter. Farbige Knoten verlangen ein bestimmtes Licht; welches, steht unten in der Legende.</span></li>
           <li><b class="rule-mark rule-prism">◆</b><span><b>Prismen</b> trennen die Farben: <b class="ink-amber">Bernstein</b> läuft geradeaus hindurch, <b class="ink-cyan">Cyan</b> biegt um 90° ab. Wo beide wieder in dieselbe Richtung laufen, ist das Licht erneut weiß.</span></li>
           <li><b class="rule-mark rule-socket">◇</b><span><b>Fassungen</b> nehmen ein Prisma aus dem Vorrat auf. Jeder Tipp schaltet weiter: leer → <code>/</code> → <code>\</code> → leer. Es gibt immer mehr Fassungen als Prismen – die Wahl gehört zum Rätsel.</span></li>
           <li><b class="rule-mark rule-win">✦</b><span><b>Gelöst</b>, sobald alle Knoten gleichzeitig leuchten. Wer den Par-Wert trifft, holt drei Sterne.</span></li>
         </ul>
+
+        <h3 class="rules-sub">Welches Licht passt durch welchen Knoten?</h3>
+        <p class="rules-note">Die Farbe am Knoten ist die Farbe, die durch ihn hindurchpasst. Kein Farbton heißt: keine Forderung. Im Spiel zeigt der Knopf <b>◉</b> oben rechts dieselbe Legende für das laufende Level.</p>
+        <div id="rules-legend"></div>
+
         <div class="panel-actions">
           <button id="btn-rules-close" class="cta" type="button">Verstanden</button>
         </div>

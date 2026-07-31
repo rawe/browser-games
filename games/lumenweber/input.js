@@ -90,7 +90,13 @@ export function createInput(canvas, handlers) {
       event.preventDefault();
       return;
     }
-    const action = { r: 'reset', R: 'reset', u: 'undo', U: 'undo', h: 'hint', H: 'hint', Escape: 'menu' }[event.key];
+    const action = {
+      r: 'reset', R: 'reset',
+      u: 'undo', U: 'undo',
+      h: 'hint', H: 'hint',
+      l: 'legend', L: 'legend',
+      Escape: 'menu',
+    }[event.key];
     if (action) { handlers.onAction?.(action); event.preventDefault(); }
   };
 

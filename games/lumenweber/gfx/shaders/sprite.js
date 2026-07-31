@@ -12,7 +12,9 @@
 
 import { HEAD, NOISE, SDF } from './common.js';
 import { KIND } from '../kinds.js';
-import { PRISM_AMBER, PRISM_CYAN } from '../palette.js';
+import {
+  PRISM_AMBER, PRISM_CYAN, TARGET_TINT, TARGET_DIM_MUL, TARGET_DIM_ADD,
+} from '../palette.js';
 
 const glslVec3 = (c) => `vec3(${c.map((v) => v.toFixed(4)).join(', ')})`;
 
@@ -73,18 +75,25 @@ const int K_HALO = ${KIND.HALO};
 const vec3 C_AMBER = ${glslVec3(PRISM_AMBER)};
 const vec3 C_CYAN = ${glslVec3(PRISM_CYAN)};
 
+// Dämpfung eines wartenden Knotens – Regel und Zahlen stehen in palette.js,
+// damit die 2D-Rückfallebene denselben Farbton zeigt.
+const float DIM_MUL = ${TARGET_DIM_MUL.toFixed(4)};
+const vec3 DIM_ADD = ${glslVec3(TARGET_DIM_ADD)};
+
 /**
  * Farbe und Form eines Knotens hängen an seiner Wunschfarbe.
  *
- * Nicht nur die Farbe: Auch die Zahl der Facetten ändert sich (6 · 3 · 4 · 8),
+ * Die Farbe ist die Auskunft: Sie zeigt, welches Licht durch den Knoten passt –
+ * und der »egal«-Knoten bleibt deshalb farblos (siehe palette.js). Die Form
+ * sagt dasselbe noch einmal: Die Zahl der Facetten ändert sich (6 · 3 · 4 · 8),
  * und der Weißknoten trägt einen zweiten Ring. Wer Farben schlecht
- * unterscheidet, erkennt den Knoten trotzdem an der Form.
+ * unterscheidet, erkennt den Knoten trotzdem.
  */
 vec3 wantColor(float want) {
-  if (want < 0.5) return vec3(1.00, 0.78, 0.38);
-  if (want < 1.5) return C_AMBER;
-  if (want < 2.5) return C_CYAN;
-  return vec3(0.88, 0.94, 1.00);
+  if (want < 0.5) return ${glslVec3(TARGET_TINT.any)};
+  if (want < 1.5) return ${glslVec3(TARGET_TINT.amber)};
+  if (want < 2.5) return ${glslVec3(TARGET_TINT.cyan)};
+  return ${glslVec3(TARGET_TINT.white)};
 }
 
 float wantFacets(float want) {
@@ -92,6 +101,11 @@ float wantFacets(float want) {
   if (want < 1.5) return 3.0;
   if (want < 2.5) return 4.0;
   return 8.0;
+}
+
+/** Derselbe Farbton, nur leise – so sieht ein Knoten aus, der noch wartet. */
+vec3 wantColorDim(float want) {
+  return wantColor(want) * DIM_MUL + DIM_ADD;
 }
 
 /**
@@ -139,7 +153,9 @@ vec4 drawTarget(vec2 p, float aa, float lit, float seed, float want) {
 
   // Facetten geben dem Ring Struktur und drehen sich sehr träge.
   float facet = 0.5 + 0.5 * cos(ang * facets - t * 0.25 + seed);
-  vec3 ringCol = mix(vec3(0.20, 0.28, 0.48), tint, lit);
+  // Auch der wartende Knoten trägt schon seine Wunschfarbe – gedämpft, aber im
+  // Farbton eindeutig. Man muss keine Ecken zählen, um zu wissen, was er will.
+  vec3 ringCol = mix(wantColorDim(want), tint, lit);
   ringCol *= 0.70 + 0.55 * facet;
 
   // Der Weißknoten trägt einen zweiten, engeren Reif: Er will beide Farben.
@@ -148,7 +164,10 @@ vec4 drawTarget(vec2 p, float aa, float lit, float seed, float want) {
 
   float coreR = mix(0.15 * wait, 0.27, lit);
   float core = fill(r - coreR, aa);
-  vec3 coreCol = mix(vec3(0.10, 0.15, 0.28), mix(vec3(1.0), tint, 0.35), lit);
+  // Der Kern bleibt dunkel, nimmt aber einen Hauch des Farbtons mit – sonst
+  // wirkt der farbige Ring wie aufgeklebt.
+  vec3 coreDim = mix(vec3(0.10, 0.15, 0.28), wantColorDim(want), 0.45);
+  vec3 coreCol = mix(coreDim, mix(vec3(1.0), tint, 0.35), lit);
 
   float a = clamp(ring + core, 0.0, 1.0);
   vec3 col = ringCol * ring + coreCol * core;
