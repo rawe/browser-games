@@ -210,14 +210,24 @@ export const configAllowed = (level, config) => placedPrisms(level, config) <= l
 /**
  * Kleinstes und größtes Raster.
  *
- * Die Obergrenze ist keine Rechengrenze, sondern eine Fingergrenze: Bei
- * `MIN_TOUCH_CELL` (34 px in `layout.js`) passen auf ein 360 px breites Telefon
- * rund zehn Spalten, bevor eine Zelle zu klein zum sicheren Treffen wird. Sie
- * begrenzt zugleich, was ein geteilter Link an Speicher anfordern kann –
- * `beam.js` legt pro Level `Breite · Höhe · 4` Bytes an.
+ * Die Obergrenze ist keine Rechengrenze, sondern eine **Fingergrenze**.
+ * Gemessen im Editor auf einem 360 px breiten Telefon: Nach Abzug der Leisten
+ * bleiben 344 px Breite, und die Zellgröße ist `min(Breite/Spalten,
+ * Höhe/Zeilen)` – hochkant fesselt also immer die Breite.
+ *
+ *   9×9    38,2 px      11×11  31,3 px
+ *   10×10  34,4 px      12×12  28,7 px
+ *
+ * Bei zehn Spalten liegt die Zelle mit 34,4 px gerade noch über
+ * `MIN_TOUCH_CELL` (34 px in `layout.js`), bei elf darunter. Damit ist jedes
+ * baubare Level auf einem Telefon hochkant sicher zu treffen – ohne dass sich
+ * jemand auf eine Warnung verlassen muss.
+ *
+ * Die Grenze begrenzt zugleich, was ein geteilter Link an Speicher anfordern
+ * kann: `beam.js` legt pro Level `Breite · Höhe · 4` Bytes an.
  */
 export const MIN_SIZE = 3;
-export const MAX_SIZE = 12;
+export const MAX_SIZE = 10;
 
 /**
  * Alles, was an einem Level nicht stimmt – als Liste statt als Ausnahme.

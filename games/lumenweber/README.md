@@ -183,10 +183,28 @@ Renderer, derselbe Lichtfaden, dieselben Farben. **▶ Testen** startet das Leve
 sofort, **✎ Weiterbauen** führt mit einem Tipp zurück. Das ist der meistbegangene
 Weg im Editor und läuft deshalb über keinen Bildschirm dazwischen.
 
-Das Raster ist auf 12×12 begrenzt. Das ist keine Rechengrenze, sondern eine
-Fingergrenze (`MIN_TOUCH_CELL` in `layout.js`): Darüber werden die Zellen auf
-einem schmalen Telefon zu klein zum sicheren Treffen. Schon bei 12×12 weist die
-Bretteinstellung darauf hin, wenn es knapp wird.
+Das Raster ist auf **10×10** begrenzt. Das ist keine Rechengrenze, sondern eine
+Fingergrenze. Gemessen im Editor auf einem 360 px breiten Telefon bleiben nach
+Abzug der Leisten 344 px Breite, und die Zellgröße ist `min(Breite/Spalten,
+Höhe/Zeilen)` – hochkant fesselt also immer die Breite:
+
+| Brett | Zelle | |
+| --- | --- | --- |
+| 9×9 | 38,2 px | ✓ |
+| 10×10 | 34,4 px | ✓ |
+| 11×11 | 31,3 px | ✗ |
+| 12×12 | 28,7 px | ✗ |
+
+Bei zehn Spalten liegt die Zelle gerade noch über `MIN_TOUCH_CELL` (34 px in
+`layout.js`), bei elf darunter. Damit ist jedes baubare Level auf einem Telefon
+hochkant sicher zu treffen, ohne dass sich jemand auf eine Warnung verlassen
+muss. Wo es trotzdem eng wird – ein sehr schmales Gerät, oder quer gehalten –,
+sagt es die Bretteinstellung.
+
+Das Querformat rettet dabei keine Grenze: Bei 800×360 bleiben nur 179 px Höhe,
+und dort ist selbst ein 9×9 mit 19,9 px zu klein. Der Editor ist auf dem Handy
+eine Hochkant-Angelegenheit; das gilt unabhängig von der Rastergröße und schon
+für die eingebauten Level.
 
 ### Bestwert statt Par
 
@@ -232,9 +250,9 @@ bereits für den Sprung in ein eingebautes Level vergeben. Der Schlüssel heißt
 bewusst `geteilt` und nicht `level` – sonst stünde derselbe Name einmal für eine
 Nummer und einmal für ein ganzes Level.
 
-Gemessen bleibt das handlich: die eingebauten Level ergeben Adressen um 270
-Zeichen, ein voll belegtes 12×12 rund 550. Kompression wäre möglich und lohnt den
-asynchronen Pfad nicht. Für Wege, auf denen lange Links zerbrechen (umgebrochene
+Gemessen bleibt das handlich: ein typisches 7×7 ergibt rund 215 Zeichen, das
+größtmögliche Level – 10×10, jede Zelle belegt, Name ausgereizt – 494.
+Kompression wäre möglich und lohnt den asynchronen Pfad nicht. Für Wege, auf denen lange Links zerbrechen (umgebrochene
 Mails), gibt es **Nur den Code** zum Kopieren und **Level aus Code** zum
 Einfügen.
 

@@ -7,11 +7,12 @@
 // vergeben (siehe `main.js`).
 //
 // ── Größe ───────────────────────────────────────────────────────────────────
-// Gemessen an base64url über kompaktem JSON: Das längste eingebaute Level ergibt
-// eine Adresse von 273 Zeichen, ein voll belegtes 12×12 rund 550. Das liegt weit
-// unter allem, was Browser, Mail oder Messenger einschränken. Eine Kompression
-// (`CompressionStream`) würde ein paar hundert Zeichen sparen und dafür den
-// ganzen Pfad asynchron machen – der Preis lohnt sich nicht.
+// Gemessen an base64url über kompaktem JSON: ein typisches 7×7 ergibt eine
+// Adresse von rund 215 Zeichen, das größtmögliche Level – 10×10, jede Zelle
+// belegt, Name ausgereizt – 494. Das liegt weit unter allem, was Browser, Mail
+// oder Messenger einschränken. Eine Kompression (`CompressionStream`) würde ein
+// paar hundert Zeichen sparen und dafür den ganzen Pfad asynchron machen – der
+// Preis lohnt sich nicht.
 //
 // ── Fremder Text ────────────────────────────────────────────────────────────
 // Ein Link ist Eingabe von außen. `decodeLevel` glaubt deshalb nichts, was
