@@ -107,10 +107,15 @@ export function stateAt(session, device) {
 /**
  * Sternbewertung. Der Par-Wert ist die vom Solver ermittelte Mindestzahl an
  * Zügen – wer ihn trifft, hat den kürzesten Weg gefunden.
+ *
+ * Ohne Par gibt es **keine** Sterne, sondern `null`. Ein Stern ist eine Aussage
+ * über Optimalität; wo niemand das Minimum kennt, lässt sie sich nicht treffen.
+ * Selbstgebaute Level, deren Suchraum zu groß für die vollständige Suche war,
+ * zählen deshalb Züge statt Sterne (siehe `editor/`).
  */
 export function rating(level, moves) {
   const par = level.par ?? 0;
-  if (!par) return 3;
+  if (!par) return null;
   if (moves <= par) return 3;
   if (moves <= par + Math.max(2, Math.ceil(par / 2))) return 2;
   return 1;

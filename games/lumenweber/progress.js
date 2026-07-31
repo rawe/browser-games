@@ -72,3 +72,40 @@ export function hasSeenTeach(id) {
 export function markTeachSeen(id) {
   try { localStorage.setItem(`${KEY}:teach:${id}`, '1'); } catch { /* egal */ }
 }
+
+/* ---------- Selbstgebaute Level ---------- */
+//
+// Eigener Schlüssel, eigener Namensraum. Der Fortschritt der Kampagne ist nach
+// `level.id` abgelegt – hieße ein selbstgebautes Level „l07“, überschriebe es
+// den Stand des siebten eingebauten Levels. Zwei Schlösser dagegen: ein zweiter
+// Speicherschlüssel und IDs, die mit „u“ beginnen (`STUDIO_PREFIX`).
+//
+// Geteilte Level schreiben hier gar nichts, solange sie niemand übernimmt.
+
+const STUDIO_KEY = 'lumenweber:studio:v1';
+
+/** Präfix aller selbstgebauten Level-IDs. Eingebaute heißen `l01`…`l30`. */
+export const STUDIO_PREFIX = 'u';
+
+/** Gehört diese ID einem selbstgebauten Level? */
+export const isStudioId = (id) => typeof id === 'string' && id.startsWith(STUDIO_PREFIX);
+
+export function readStudio() {
+  try {
+    const raw = localStorage.getItem(STUDIO_KEY);
+    const data = raw ? JSON.parse(raw) : null;
+    return data && Array.isArray(data.levels) ? data : { levels: [] };
+  } catch {
+    return { levels: [] };
+  }
+}
+
+/** @returns {boolean} false, wenn der Speicher voll oder gesperrt ist. */
+export function writeStudio(data) {
+  try {
+    localStorage.setItem(STUDIO_KEY, JSON.stringify(data));
+    return true;
+  } catch {
+    return false;
+  }
+}

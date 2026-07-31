@@ -50,6 +50,8 @@ export function createScene() {
     crossings: [],
     splits: [],
     reveal: 0,
+    /** Faden ohne Einweb-Animation zeigen (Editor). */
+    instant: false,
     celebrateAt: -1e9,
     winGlow: 0,
     flash: 0,
@@ -72,8 +74,17 @@ export function createScene() {
   /** Ruhewinkel eines Bauteils. Eine leere Fassung behält den letzten Winkel. */
   const angleOf = (orient) => (orient === '\\' ? Math.PI / 4 : -Math.PI / 4);
 
-  function setLevel(next) {
+  /**
+   * @param {object} next
+   * @param {{animate?: boolean}} [options]
+   *   `animate: false` überspringt das Einweben des Fadens. Gebraucht vom
+   *   Editor: Dort wechselt das Level bei **jedem** Pinselstrich, und die
+   *   Anfangsanimation gehört zum Levelstart, nicht zu jedem Strich – sonst
+   *   flackert der Faden beim Bauen unablässig neu heran.
+   */
+  function setLevel(next, { animate = true } = {}) {
     level = next;
+    state.instant = !animate;
     const devices = level ? level.devices : [];
     state.deviceAngle = devices.map((d) => angleOf(d.states[d.start]));
     state.deviceLit = devices.map(() => 0);
@@ -122,6 +133,7 @@ export function createScene() {
         changed = true;
       }
     }
+    const instant = calm || state.instant;
     if (changed) {
       state.crossings = trace.crossings;
       state.splits = trace.splits;
@@ -129,7 +141,7 @@ export function createScene() {
     }
     beamLenPx = measureBeam(trace, cell);
 
-    const rate = calm ? 60 : 16;
+    const rate = instant ? 60 : 16;
     level.devices.forEach((device, i) => {
       const orient = deviceState(level, session.config, device);
       // Eine leere Fassung fährt herunter, statt in eine Ruhelage zu springen.
@@ -151,7 +163,7 @@ export function createScene() {
     });
 
     // Weben: die Front läuft in gut einer Viertelsekunde durch den ganzen Faden.
-    if (calm) {
+    if (instant) {
       state.reveal = beamLenPx + cell * 4;
     } else if (state.reveal < beamLenPx + cell * 2) {
       state.reveal += dt * Math.max(beamLenPx / 0.22, cell * 16);

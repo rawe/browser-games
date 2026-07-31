@@ -99,6 +99,8 @@ export function createCanvas2dRenderer(canvas) {
     rebuildStars();
   }
 
+  // `options.animate` kennt der 2D-Rückfall nicht – er webt den Faden ohnehin
+  // nicht ein, sondern zeichnet ihn fertig. Die Signatur bleibt trotzdem gleich.
   function setLevel(next) {
     level = next;
     const devices = level ? level.devices : [];

@@ -563,12 +563,253 @@
 .panel-actions .cta { flex: 1 1 auto; justify-content: center; }
 .panel--win .panel-actions { justify-content: center; }
 
+/* Ohne Par keine Sterne, sondern die Zugzahl selbst – und ein neuer Bestwert
+   leuchtet in Gold, damit sich der Moment nach etwas anfühlt. */
+.win-moves {
+  font-size: 2.6rem;
+  font-weight: 300;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.win-moves.is-record { color: var(--gold); text-shadow: 0 0 24px rgba(255, 200, 90, 0.6); }
+
+/* ---------- Editor ---------- */
+/*
+ * Der Editor teilt sich Bühne und Brett mit dem Spiel: Kopf- und Fußleiste
+ * ersetzen HUD und Bedienleiste, dazwischen liegt dasselbe Canvas. Alles, was
+ * dauerhaft sichtbar ist, kostet Bretthöhe – auf dem Handy die knappste
+ * Ressource. Deshalb nur zwei Zeilen unten, und die Brettmaße in einer Klappe.
+ */
+
+.editor-bar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: calc(env(safe-area-inset-top, 0px) + 0.5rem) 0.6rem 0.5rem;
+  z-index: 2;
+}
+
+.editor-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 0.45rem 0.7rem;
+  border-radius: 0.7rem;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  backdrop-filter: blur(8px);
+}
+
+.editor-name:focus { outline: none; border-color: var(--glow); }
+
+/* Der Status ist die wichtigste Auskunft des Editors – er sagt, wie sicher wir
+   uns bei diesem Level sind. Die Tonlage macht das ohne Lesen erkennbar. */
+#editor-status { flex: none; white-space: nowrap; }
+[data-tone='bad'] { color: #ff9f9f; border-color: rgba(255, 140, 140, 0.5); }
+[data-tone='warn'] { color: var(--amber); border-color: rgba(255, 179, 67, 0.45); }
+[data-tone='good'] { color: var(--gold); border-color: rgba(255, 217, 138, 0.55); }
+[data-tone='mid'] { color: var(--cyan); border-color: rgba(77, 230, 255, 0.4); }
+[data-tone='dim'] { color: var(--ink-dim); }
+
+.editor-tools {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+  background: linear-gradient(180deg, transparent, rgba(4, 6, 14, 0.75) 35%);
+  z-index: 2;
+}
+
+/* Waagerecht scrollend statt umbrechend: Die Leiste behält ihre Höhe, egal wie
+   schmal das Gerät ist – ein Umbruch würde dem Brett eine Zeile wegnehmen. */
+.tool-row {
+  display: flex;
+  gap: 0.3rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 0.15rem;
+  scroll-snap-type: x proximity;
+}
+
+.tool-row::-webkit-scrollbar { display: none; }
+
+.tool {
+  flex: none;
+  display: grid;
+  justify-items: center;
+  gap: 0.1rem;
+  /* Breit genug für die längste Aufschrift („Spiegel fest“) – sonst schneidet
+     die Leiste sie ab, und ein abgeschnittenes Wort erklärt gar nichts. */
+  width: 4.2rem;
+  padding: 0.35rem 0.2rem;
+  border-radius: 0.7rem;
+  color: var(--ink-dim);
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  scroll-snap-align: start;
+  font: inherit;
+}
+
+.tool.is-on {
+  color: var(--ink);
+  border-color: var(--glow);
+  background: rgba(124, 196, 255, 0.18);
+}
+
+.tool-glyph { font-size: 1.15rem; line-height: 1.1; }
+.tool-glyph[data-kind='source'] { color: var(--gold); }
+.tool-glyph[data-kind='prism'], .tool-glyph[data-kind='prismFixed'] { color: var(--cyan); }
+.tool-label { font-size: 0.58rem; letter-spacing: 0.02em; white-space: nowrap; }
+
+.editor-actions { display: flex; gap: 0.4rem; justify-content: center; flex-wrap: wrap; }
+.pill--go { border-color: rgba(124, 196, 255, 0.45); color: var(--ink); }
+.pill--edit { border-color: rgba(255, 217, 138, 0.5); color: var(--gold); }
+.pill--sm { min-height: 2.2rem; padding: 0.35rem 0.65rem; font-size: 0.78rem; }
+.pill--warn { color: #ff9f9f; border-color: rgba(255, 140, 140, 0.35); }
+
+.editor-board {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.9rem;
+  background: rgba(12, 18, 36, 0.9);
+  border: 1px solid var(--glass-line);
+  backdrop-filter: blur(10px);
+}
+
+.board-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.84rem; }
+.board-label { flex: 1 1 auto; color: var(--ink-dim); }
+.board-row output { min-width: 1.8rem; text-align: center; font-variant-numeric: tabular-nums; }
+
+.step {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 0.6rem;
+  font-size: 1.05rem;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-line);
+  cursor: pointer;
+}
+
+.step:hover { border-color: var(--glow); }
+.board-note { margin: 0.2rem 0 0; font-size: 0.74rem; color: var(--ink-dim); }
+
+/* ---------- Bibliothek ---------- */
+
+.studio-bar { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
+
+.studio-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  padding: 0.55rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-line);
+}
+
+.studio-search:focus { outline: none; border-color: var(--glow); }
+.studio-bar .cta { flex: none; }
+
+.studio-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+  max-height: min(24rem, 46vh);
+  overflow-y: auto;
+}
+
+.studio-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--glass-line);
+}
+
+.studio-head { display: flex; align-items: center; gap: 0.5rem; }
+.studio-name { flex: 1 1 auto; min-width: 0; font-weight: 600; font-size: 0.94rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.studio-badge {
+  flex: none;
+  font-size: 0.72rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--glass-line);
+  white-space: nowrap;
+}
+
+.studio-meta { font-size: 0.76rem; color: var(--ink-dim); }
+.studio-actions { display: flex; gap: 0.3rem; flex-wrap: wrap; align-items: center; }
+.studio-confirm { font-size: 0.78rem; color: var(--amber); flex: 1 1 100%; }
+.studio-empty { color: var(--ink-dim); font-size: 0.88rem; text-align: center; padding: 1.2rem 0; }
+
+/* ---------- Prüfbericht, Teilen ---------- */
+
+.check-body { display: grid; gap: 0.5rem; max-height: min(22rem, 44vh); overflow-y: auto; }
+
+.check-line {
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.6rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 3px solid var(--glass-line);
+}
+
+.check-line[data-tone='bad'] { border-left-color: #ff8080; }
+.check-line[data-tone='warn'] { border-left-color: var(--amber); }
+.check-line[data-tone='good'] { border-left-color: var(--gold); }
+.check-line[data-tone='mid'] { border-left-color: var(--cyan); }
+.check-line[data-tone='info'] { color: var(--ink-dim); }
+
+.share-label { display: block; font-size: 0.76rem; color: var(--ink-dim); margin-bottom: 0.3rem; }
+
+.share-box {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: var(--ink);
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.7rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--glass-line);
+  resize: none;
+  word-break: break-all;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.share-actions { display: flex; gap: 0.5rem; margin-top: 0.6rem; flex-wrap: wrap; }
+.share-note { margin: 0.9rem 0 0; font-size: 0.8rem; line-height: 1.5; color: var(--ink-dim); }
+.import-error { margin: 0.6rem 0 0; font-size: 0.83rem; color: #ff9f9f; }
+
 /* ---------- Kleine Schirme ---------- */
 
 @media (max-width: 26rem) {
   .pill { padding: 0.5rem 0.7rem; font-size: 0.82rem; }
   .hud-name { font-size: 0.9rem; }
   .panel { padding: 1.2rem 1rem; }
+  .tool { width: 3.95rem; }
+  .tool-label { font-size: 0.55rem; }
+  .studio-list { max-height: 40vh; }
 }
 
 @media (prefers-reduced-motion: reduce) {
