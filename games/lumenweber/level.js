@@ -207,27 +207,87 @@ export function configCost(level, from, to) {
  */
 export const configAllowed = (level, config) => placedPrisms(level, config) <= level.prisms;
 
-/** Wirft, wenn ein Level strukturell nicht spielbar ist. */
-export function validateLevel(level) {
-  const err = (msg) => { throw new Error(`Level ${level.id}: ${msg}`); };
-  if (level.sources.length === 0) err('keine Lichtquelle');
-  if (level.targets.length === 0) err('kein Zielpunkt');
-  if (level.controls.length === 0) err('kein beweglicher Regler – nichts zu tun');
-  if (level.width < 3 || level.height < 3) err('Raster kleiner als 3×3');
+/**
+ * Kleinstes und größtes Raster.
+ *
+ * Die Obergrenze ist keine Rechengrenze, sondern eine **Fingergrenze**.
+ * Gemessen im Editor auf einem 360 px breiten Telefon: Nach Abzug der Leisten
+ * bleiben 344 px Breite, und die Zellgröße ist `min(Breite/Spalten,
+ * Höhe/Zeilen)` – hochkant fesselt also immer die Breite.
+ *
+ *   9×9    38,2 px      11×11  31,3 px
+ *   10×10  34,4 px      12×12  28,7 px
+ *
+ * Bei zehn Spalten liegt die Zelle mit 34,4 px gerade noch über
+ * `MIN_TOUCH_CELL` (34 px in `layout.js`), bei elf darunter. Damit ist jedes
+ * baubare Level auf einem Telefon hochkant sicher zu treffen – ohne dass sich
+ * jemand auf eine Warnung verlassen muss.
+ *
+ * Die Grenze begrenzt zugleich, was ein geteilter Link an Speicher anfordern
+ * kann: `beam.js` legt pro Level `Breite · Höhe · 4` Bytes an.
+ */
+export const MIN_SIZE = 3;
+export const MAX_SIZE = 10;
+
+/**
+ * Alles, was an einem Level nicht stimmt – als Liste statt als Ausnahme.
+ *
+ * Zwei Härtegrade, und der Unterschied ist eine Design-Entscheidung, keine
+ * technische: Ein `error` macht das Level unspielbar. Eine `warning` macht es
+ * langweilig. Die eingebauten Level müssen beides erfüllen (`validateLevel`
+ * wirft auf beides), selbstgebaute nur die Fehler – wer jede Fassung besetzen
+ * lassen will, darf das, es ist dann eben kein Rätsel mehr.
+ */
+export function levelIssues(level) {
+  const issues = [];
+  const error = (text) => issues.push({ level: 'error', text });
+  const warn = (text) => issues.push({ level: 'warning', text });
+  const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+
+  if (level.sources.length === 0) error('Keine Lichtquelle – ohne sie bleibt das Brett dunkel.');
+  if (level.targets.length === 0) error('Kein Knoten – es gibt nichts zu erhellen.');
+  if (level.controls.length === 0) error('Kein bewegliches Bauteil – es gibt nichts zu tun.');
+  if (level.width < MIN_SIZE || level.height < MIN_SIZE) {
+    error(`Raster kleiner als ${MIN_SIZE}×${MIN_SIZE}.`);
+  }
+  if (level.width > MAX_SIZE || level.height > MAX_SIZE) {
+    error(`Raster größer als ${MAX_SIZE}×${MAX_SIZE} – die Zellen wären auf dem Handy zu klein.`);
+  }
   for (const s of level.sources) {
     const { dx, dy } = DIRS[s.dir];
-    if (!cellAt(level, s.x + dx, s.y + dy)) err(`Lichtquelle bei (${s.x},${s.y}) strahlt sofort aus dem Feld`);
+    if (!cellAt(level, s.x + dx, s.y + dy)) {
+      error(`Die Lichtquelle bei (${s.x + 1},${s.y + 1}) strahlt sofort aus dem Feld.`);
+    }
   }
   if (level.sockets.length > 0 && level.prisms < 1) {
-    err(`${level.sockets.length} Fassungen, aber kein Prisma im Vorrat`);
+    error(`${n(level.sockets.length, 'Fassung', 'Fassungen')}, aber kein Prisma im Vorrat.`);
   }
   if (level.prisms > 0 && level.sockets.length === 0) {
-    err(`${level.prisms} Prismen im Vorrat, aber keine Fassung`);
+    error(`${n(level.prisms, 'Prisma', 'Prismen')} im Vorrat, aber keine Fassung, die eines aufnimmt.`);
   }
-  if (level.sockets.length > 0 && level.prisms >= level.sockets.length) {
-    err(`${level.prisms} Prismen auf ${level.sockets.length} Fassungen – ohne freie Fassung gibt es nichts zu entscheiden`);
+  // Die Rätselfrage „welche Fassung besetze ich?“ stellt sich erst ab **zwei**
+  // Fassungen. Bei genau einer bleibt die Wahl „leer, / oder \“ – da gibt es
+  // sehr wohl etwas zu entscheiden, und eine Warnung wäre nicht nur falsch,
+  // sondern unentrinnbar: Ein Prisma ist bei einer Fassung das Minimum.
+  if (level.sockets.length > 1 && level.prisms >= level.sockets.length) {
+    warn(`${n(level.prisms, 'Prisma', 'Prismen')} auf ${n(level.sockets.length, 'Fassung', 'Fassungen')} – ohne freie Fassung gibt es nichts zu entscheiden.`);
   }
   // Die Optik muss jedes vorkommende Bauteil kennen.
-  for (const cell of level.cells) interact(cell.type, '/', 'R', 3);
+  for (const cell of level.cells) {
+    try { interact(cell.type, '/', 'R', 3); }
+    catch { error(`Unbekanntes Bauteil „${cell.type}“ bei (${cell.x + 1},${cell.y + 1}).`); }
+  }
+  return issues;
+}
+
+/**
+ * Wirft, wenn ein Level strukturell nicht spielbar ist.
+ *
+ * Für die eingebauten Level ist auch eine Warnung ein Fehler: Was in die
+ * Kampagne kommt, soll nicht nur laufen, sondern ein Rätsel sein.
+ */
+export function validateLevel(level) {
+  const issues = levelIssues(level);
+  if (issues.length > 0) throw new Error(`Level ${level.id}: ${issues[0].text}`);
   return level;
 }

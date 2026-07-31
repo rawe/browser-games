@@ -16,7 +16,7 @@ export const games = [
   {
     slug: 'lumenweber',
     title: 'Lumenweber',
-    description: 'Lichträtsel: Dreh die Spiegel, spalte den Strahl im Prisma, webe ihn durch alle Knoten.',
+    description: 'Lichträtsel: Dreh die Spiegel, spalte den Strahl im Prisma, webe ihn durch alle Knoten. Mit Editor für eigene Level – teilbar per Link.',
     emoji: '✦',
     cover: new URL('./games/lumenweber/assets/title-banner.webp', import.meta.url).href,
     coverAlt: 'Ein Prisma teilt weißes Licht in einen cyanfarbenen und einen bernsteinfarbenen Pfad, die an einem zweiten Prisma wieder weiß zusammenlaufen',

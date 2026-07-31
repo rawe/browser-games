@@ -21,6 +21,7 @@ setzt der Spieler selbst.
 | Tipp | `💡 Tipp` oder <kbd>H</kbd> |
 | Legende der Knoten | `◉ 2/4` in der Kopfzeile oder <kbd>L</kbd> |
 | Levelauswahl | `☰` oder <kbd>Esc</kbd> |
+| Eigene Level bauen | `✎ Eigene Level` auf dem Titelbild |
 | Ohne Maus | Pfeiltasten bewegen den Fokus, <kbd>Enter</kbd> schaltet |
 
 Der Tipp ist kein vorgeschriebener Text, sondern gerechnet: Der Solver schaut
@@ -165,6 +166,115 @@ großen gibt es eine einmalige **Lehrkarte** mit Zeichnung (`teach`): das
 Prisma, die Knotenfarben und die Fassungen. `check:lumen` erzwingt, dass jede
 davon genau einmal und bei ihrem ersten Auftreten erklärt wird.
 
+## Eigene Level bauen
+
+Auf dem Titelbild führt **✎ Eigene Level** in die Bibliothek. Der Editor lädt
+erst dort nach; wer nur die Kampagne spielt, holt ihn nie.
+
+Gebaut wird mit einem **Pinsel**: Werkzeug in der Leiste unten wählen, Zelle
+antippen. Ein zweiter Tipp auf dieselbe Zelle schaltet die Variante weiter – die
+Quelle dreht sich, der Knoten wechselt seine Wunschfarbe, der Spiegel kippt. Das
+hält die Leiste kurz genug für einen Daumen. Ziehen und Ablegen gibt es nicht:
+Der Tipp ist die einzige Geste, die auf einem Telefon zuverlässig sitzt, und es
+ist dieselbe, mit der man das Spiel ohnehin bedient.
+
+Gemalt wird auf demselben Brett, auf dem später gespielt wird – derselbe
+Renderer, derselbe Lichtfaden, dieselben Farben. **▶ Testen** startet das Level
+sofort, **✎ Weiterbauen** führt mit einem Tipp zurück. Das ist der meistbegangene
+Weg im Editor und läuft deshalb über keinen Bildschirm dazwischen.
+
+Das Raster ist auf **10×10** begrenzt. Das ist keine Rechengrenze, sondern eine
+Fingergrenze. Gemessen im Editor auf einem 360 px breiten Telefon bleiben nach
+Abzug der Leisten 344 px Breite, und die Zellgröße ist `min(Breite/Spalten,
+Höhe/Zeilen)` – hochkant fesselt also immer die Breite:
+
+| Brett | Zelle | |
+| --- | --- | --- |
+| 9×9 | 38,2 px | ✓ |
+| 10×10 | 34,4 px | ✓ |
+| 11×11 | 31,3 px | ✗ |
+| 12×12 | 28,7 px | ✗ |
+
+Bei zehn Spalten liegt die Zelle gerade noch über `MIN_TOUCH_CELL` (34 px in
+`layout.js`), bei elf darunter. Damit ist jedes baubare Level auf einem Telefon
+hochkant sicher zu treffen, ohne dass sich jemand auf eine Warnung verlassen
+muss. Wo es trotzdem eng wird – ein sehr schmales Gerät, oder quer gehalten –,
+sagt es die Bretteinstellung.
+
+Das Querformat rettet dabei keine Grenze: Bei 800×360 bleiben nur 179 px Höhe,
+und dort ist selbst ein 9×9 mit 19,9 px zu klein. Der Editor ist auf dem Handy
+eine Hochkant-Angelegenheit; das gilt unabhängig von der Rastergröße und schon
+für die eingebauten Level.
+
+### Bestwert statt Par
+
+Die eingebauten Level haben ein `par` – die vom Solver bestimmte **Mindestzahl**
+an Zügen, gegengeprüft von `check:lumen`. Selbstgebaute Level haben das nicht.
+Sie haben einen **Bestwert**: die kürzeste Zugzahl, die bisher jemand geschafft
+hat.
+
+Den ersten Eintrag liefert der Ersteller im Probelauf – und der ist zugleich der
+Nachweis, dass das Level überhaupt lösbar ist. Wer den Wert unterbietet, schreibt
+ihn fort. Beim Teilen reist er mit und ist die Aufgabe an den Empfänger.
+
+Daraus folgen zwei Dinge, die leicht wieder verlorengehen:
+
+* **Selbstgebaute Level geben keine Sterne.** Ein Stern behauptet, jemand habe
+  den kürzesten Weg gefunden; wo niemand das Minimum kennt, ist das eine Lüge.
+  `rating()` liefert deshalb `null`, wenn kein `par` vorliegt – vorher gab es in
+  diesem Fall stillschweigend die volle Punktzahl. Der Siegbildschirm zeigt
+  stattdessen die Zugzahl selbst, in Gold, wenn sie ein neuer Bestwert ist.
+* **Jede Änderung am Brett verwirft den Bestwert.** Er gehört zu genau diesem
+  Raster. Wer eine Zelle verschiebt oder den Prismenvorrat ändert, hat ein
+  anderes Level, und die alte Zugzahl wäre eine Aussage über etwas, das es nicht
+  mehr gibt. Der Editor sagt das, statt den Wert stehen zu lassen.
+
+Ein vollständiger Löser läuft im Editor **nicht**. Er würde nichts kosten, wo er
+schnell ist, und nichts taugen, wo es darauf ankäme: Der Suchraum verdoppelt sich
+mit jedem drehbaren Bauteil und verdreifacht sich mit jeder Fassung. Zwanzig
+Spiegel sind über eine Million Stellungen – auf einem Telefon spürbare Sekunden,
+und wenige Bauteile weiter ist es aussichtslos. Der Probelauf kostet nichts,
+beweist die Lösbarkeit und liefert die Zahl, um die es geht.
+
+### Teilen ohne Server
+
+Ein Level steckt vollständig im Link, im **Fragment**:
+
+```
+…/games/lumenweber/#geteilt=<base64url>
+```
+
+Das Fragment und nicht die Abfrage, aus drei Gründen: Es wird nicht zum Server
+geschickt, es lässt sich ohne Neuladen umschreiben, und `?level=<zahl>` ist
+bereits für den Sprung in ein eingebautes Level vergeben. Der Schlüssel heißt
+bewusst `geteilt` und nicht `level` – sonst stünde derselbe Name einmal für eine
+Nummer und einmal für ein ganzes Level.
+
+Gemessen bleibt das handlich: ein typisches 7×7 ergibt rund 215 Zeichen, das
+größtmögliche Level – 10×10, jede Zelle belegt, Name ausgereizt – 494.
+Kompression wäre möglich und lohnt den asynchronen Pfad nicht. Für Wege, auf denen lange Links zerbrechen (umgebrochene
+Mails), gibt es **Nur den Code** zum Kopieren und **Level aus Code** zum
+Einfügen.
+
+Ein geteiltes Level **richtet beim Empfänger nichts an**:
+
+* Öffnen schreibt nichts – es wird angeboten, nicht ausgeführt.
+* Übernehmen legt immer einen **neuen** Eintrag mit frischer ID an und
+  überschreibt nie ein vorhandenes Level, auch nicht bei gleichem Namen (der
+  wird dann durchnummeriert).
+* Der Fortschritt der Kampagne liegt in einem anderen Speicherschlüssel, den
+  dieser Weg nicht anfasst.
+
+Der letzte Punkt hat einen zweiten Riegel: Selbstgebaute Level bekommen IDs mit
+dem Präfix `u` (`STUDIO_PREFIX` in `progress.js`). Der Kampagnenfortschritt ist
+nach `level.id` abgelegt – ein eigenes Level namens `l07` hätte sonst den Stand
+des siebten eingebauten Levels überschrieben.
+
+Weil ein Link Text ist, den jeder ändern kann, prüft `decodeLevel` Form **und
+Größe**, bevor irgendetwas angelegt wird: `beam.js` fordert pro Level
+`Breite · Höhe · 4` Bytes an, und ein Link, der 5000×5000 behauptet, dürfte das
+nicht anfordern können.
+
 ## Aufbau
 
 ```
@@ -182,11 +292,32 @@ layout.js     Geometrie – geteilt von Renderer und Eingabe
 render.js     Wahl der Darstellung: WebGL2, sonst 2D-Canvas
 gfx/          WebGL2-Renderer (Shader, Bloom), der 2D-Rückfall und die Palette
 input.js      Finger, Maus, Tastatur
-progress.js   Fortschritt im localStorage
+progress.js   Fortschritt im localStorage – und, streng getrennt davon, die
+              Ablage der selbstgebauten Level
 audio.js      synthetischer Klang über die Web Audio API
 main.js       Verdrahtung, Bildschirme
+editor/       Level-Editor, erst bei Bedarf nachgeladen
 sim/          Simulation & Solver ohne Browser (eigene README)
 ```
+
+Der Editor teilt sich Bühne, Brett und Renderer mit dem Spiel; `main.js` kennt
+dafür zwei Betriebsarten (`play`, `editor`) und vier Herkünfte eines laufenden
+Levels (`campaign`, `studio`, `test`, `shared`). Woher ein Level stammt,
+entscheidet allein, was ein Sieg bedeutet – gespielt wird überall gleich.
+
+```
+editor/model.js       Entwurf und Werkzeuge (Pinselmodell)     DOM-frei
+editor/validate.js    Prüfkette: Struktur und Startzustand     DOM-frei
+editor/library.js     Bibliothek im localStorage, Bestwerte    DOM-frei
+editor/share.js       Kodieren/Dekodieren des Links            DOM-frei
+editor/status.js      Prüfergebnis → Text und Tonlage
+editor/index.js       Editorbildschirm, Verdrahtung
+editor/library-ui.js  Bibliotheksbildschirm
+editor/share-ui.js    Teilen, Einfügen, Übernehmen
+```
+
+Die vier DOM-freien Module nimmt `check:lumen` mit ab – Pinsel, Größenänderung,
+Prüfkette, Kodierung, die Abwehr kaputter Links und die Trennung der Ablagen.
 
 `optics.js`, `level.js`, `beam.js`, `game.js` und `levels.js` sind vollständig
 DOM-frei. Genau deshalb lässt sich das Spiel ohne Browser durchspielen und

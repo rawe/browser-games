@@ -205,9 +205,9 @@ export function createWebglRenderer(canvas) {
     if (level) layout = computeLayout(cssW, cssH, level, insets);
   }
 
-  function setLevel(next) {
+  function setLevel(next, options) {
     level = next;
-    scene.setLevel(next);
+    scene.setLevel(next, options);
     if (level) layout = computeLayout(cssW, cssH, level, insets);
   }
 

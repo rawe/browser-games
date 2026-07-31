@@ -13,14 +13,21 @@ import {
   DIRS, OPPOSITE, REFLECT, AMBER, CYAN, WHITE, interact, accepts,
 } from '../optics.js';
 import {
-  parseLevel, cellAt, startConfig, configCost, placedPrisms, prismsLeft,
+  parseLevel, validateLevel, cellAt, startConfig, configCost, placedPrisms, prismsLeft,
+  MIN_SIZE, MAX_SIZE,
 } from '../level.js';
-import { traceBeam } from '../beam.js';
+import { traceBeam, isSolved } from '../beam.js';
 import { createSession, cycleAt, cycleControl, undo, resetSession, rating, stateAt } from '../game.js';
 import { levels } from '../levels.js';
 import { solveLevel, irrelevantControls, searchSpace, movesBetween, MAX_IDLE_STATES } from './solver.js';
 import { fuzzLevel, rng } from './headless.js';
-import { isUnlocked, nextOpenIndex, totalStars } from '../progress.js';
+import { isUnlocked, nextOpenIndex, totalStars, isStudioId } from '../progress.js';
+import {
+  TOOLS, createDraft, paint, resizeRows, lostOnResize, searchSpaceOf,
+} from '../editor/model.js';
+import { inspect } from '../editor/validate.js';
+import { encodeLevel, decodeLevel, shareUrl, readShareFragment, SHARE_KEY } from '../editor/share.js';
+import { newId } from '../editor/library.js';
 
 const results = [];
 const check = (name, ok, detail = '') => results.push({ name, ok, detail });
@@ -477,6 +484,227 @@ check('mindestens fünf Level vorhanden', levels.length >= 5, `${levels.length}`
   eq('alle Sterne erreichbar', stars, levels.length * 3);
   check('vor dem ersten Sieg ist nur Level 1 offen',
     !isUnlocked(levels, 1, {}) || levels.length === 1);
+}
+
+/* ---------- Editor: Entwurf, Prüfung, Bibliothek ---------- */
+//
+// Der Editor selbst ist Oberfläche und läuft hier nicht. Seine Logik ist es
+// nicht: Entwurfsmodell, Prüfkette und Kodierung sind DOM-frei und werden hier
+// genauso abgenommen wie das Spiel.
+
+{
+  const draft = createDraft();
+  const check0 = inspect(draft);
+  check('frischer Entwurf ist spielbar', check0.ok, check0.errors.map((e) => e.text).join(' / '));
+  check('frischer Entwurf startet ungelöst',
+    !isSolved(check0.level, startConfig(check0.level)));
+  eq('frischer Entwurf hat genau einen Regler', check0.level.controls.length, 1);
+
+  // Ein Entwurf ist dasselbe Textformat wie die eingebauten Level – sonst gäbe
+  // es zwei Formate, die auseinanderlaufen können.
+  eq('Entwurf ist rechteckig', new Set(draft.rows.map((r) => r.length)).size, 1);
+}
+
+{
+  // Der Pinsel: erstes Zeichen setzen, dann den Zyklus durchlaufen.
+  const tool = TOOLS.find((t) => t.id === 'source');
+  let rows = ['...', '...', '...'];
+  let out = paint(rows, 1, 1, tool);
+  eq('erster Strich setzt das erste Zeichen', out.char, '>');
+  for (const want of ['v', '<', '^', '>']) {
+    out = paint(out.rows, 1, 1, tool);
+    eq(`Quelle dreht weiter auf ${want}`, out.char, want);
+  }
+  const mirror = TOOLS.find((t) => t.id === 'mirror');
+  eq('fremdes Zeichen wird ersetzt, nicht zykliert', paint(out.rows, 1, 1, mirror).char, '/');
+  const empty = TOOLS.find((t) => t.id === 'empty');
+  check('Leer auf leer ändert nichts', !paint(['...'], 1, 0, empty).changed);
+  check('Strich außerhalb des Rasters ändert nichts', !paint(['...'], 9, 9, mirror).changed);
+}
+
+{
+  // Größe ändern: rechts und unten beschneiden, mit leeren Zellen auffüllen.
+  const rows = ['>..o', '.\\..', '....', '....'];
+  const bigger = resizeRows(rows, 6, 5);
+  eq('breiter: Zeilenlänge', bigger[0].length, 6);
+  eq('breiter: Zeilenzahl', bigger.length, 5);
+  eq('breiter: Inhalt bleibt stehen', bigger[0].slice(0, 4), '>..o');
+  eq('schmaler und wieder breiter verliert nur, was außen lag',
+    resizeRows(resizeRows(rows, 3, 4), 4, 4)[0], '>...');
+  eq('Verlust wird gezählt', lostOnResize(rows, 3, 4), 1);
+  eq('kein Verlust beim Vergrößern', lostOnResize(rows, 6, 6), 0);
+  eq('Größe wird auf das Erlaubte gestutzt', resizeRows(rows, 99, 99).length, MAX_SIZE);
+  eq('Größe wird nach unten gestutzt', resizeRows(rows, 1, 1).length, MIN_SIZE);
+}
+
+{
+  // Suchraum direkt aus dem Raster – die Zahl, die der Editor anzeigt.
+  eq('zwei Spiegel = vier Stellungen', searchSpaceOf(['>/o', './.', '...']).states, 4);
+  eq('eine Fassung verdreifacht', searchSpaceOf(['>_o', './.', '...']).states, 6);
+  eq('feste Bauteile zählen nicht', searchSpaceOf(['>1o', '.3.', '...']).states, 1);
+}
+
+{
+  // Die Prüfkette meldet, statt zu werfen – und meldet das Richtige.
+  const errs = (rows, extra) => inspect({ name: 'x', rows, prisms: 0, ...extra }).errors.length;
+  eq('unbekanntes Zeichen ist ein Fehler', errs(['...', '>?o', '...']), 1);
+  eq('krumme Zeilen sind ein Fehler', errs(['...', '>.o.', '...']), 1);
+  check('fehlende Quelle wird gemeldet', errs(['...', '../', '..o']) > 0);
+  check('fehlender Knoten wird gemeldet', errs(['...', '>./', '...']) > 0);
+  check('fehlender Regler wird gemeldet', errs(['...', '>.o', '...']) > 0);
+  check('zu großes Raster wird gemeldet',
+    errs(Array.from({ length: MAX_SIZE + 1 }, () => '.'.repeat(MAX_SIZE + 1))) > 0);
+
+  // Ein Level, das schon gelöst dasteht, ist kein Level: Der Strahl läuft hier
+  // ohne Zutun quer durch den Knoten, der Spiegel oben steht nur herum.
+  const solved = inspect({ name: 'x', rows: ['../', '>.o', '...'], prisms: 0 });
+  check('bereits gelöster Start wird gemeldet',
+    solved.errors.some((e) => e.text.includes('bereits gelöst')));
+
+  // Die Fassungsregel ist für selbstgebaute Level eine Warnung, kein Fehler:
+  // Wer jede Fassung besetzen lassen will, darf das – es ist dann eben kein
+  // Rätsel mehr. Für die Kampagne bleibt es ein harter Fehler (`validateLevel`).
+  const full = inspect({ name: 'x', rows: ['.._', '>_#', '..o'], prisms: 2 });
+  eq('Prismen = Fassungen ist im Editor nur eine Warnung', full.errors.length, 0);
+  eq('… und wird als Warnung gemeldet', full.warnings.length, 1);
+  check('… bleibt für die Kampagne ein Fehler',
+    (() => { try { validateLevel(full.level); return false; } catch { return true; } })());
+
+  // Bei genau **einer** Fassung gibt es nichts anzumahnen: Ein Prisma ist dort
+  // das Minimum, und die Wahl „leer, / oder \“ bleibt bestehen. Vorher setzte
+  // der Editor den Vorrat selbst auf 1 und warnte anschließend darüber – eine
+  // Warnung, die sich nicht abstellen ließ.
+  const single = inspect({ name: 'x', rows: ['.._', '>.#', '..o'], prisms: 1 });
+  eq('eine Fassung mit einem Prisma ist fehlerfrei', single.errors.length, 0);
+  eq('… und wird auch nicht angemahnt', single.warnings.length, 0);
+
+  // Einzahl und Mehrzahl in den Meldungen
+  const one = inspect({ name: 'x', rows: ['..o', '>._', '...'], prisms: 0 });
+  check('Meldung sagt „1 Fassung“, nicht „1 Fassungen“',
+    one.errors.some((e) => e.text.startsWith('1 Fassung,')), one.errors.map((e) => e.text).join(' / '));
+  const stock = inspect({ name: 'x', rows: ['..o', '>./', '...'], prisms: 1 });
+  check('Meldung sagt „1 Prisma“, nicht „1 Prismen“',
+    stock.errors.some((e) => e.text.startsWith('1 Prisma ')), stock.errors.map((e) => e.text).join(' / '));
+}
+
+{
+  // Mehrere Quellen sind erlaubt – der Editor lässt sie zu, also wird das hier
+  // abgenommen statt nur gehofft.
+  const level = mini(['>..o', '....', '>..o', '..\\.']);
+  eq('zwei Quellen werden erkannt', level.sources.length, 2);
+  const t = trace(level);
+  eq('beide Quellen speisen je einen Faden', t.paths.length, 2);
+  check('beide Ziele lassen sich erhellen', t.litTargets.size === 2);
+  eq('Prüfkette nimmt zwei Quellen an',
+    inspect({ name: 'x', rows: ['>..o', '....', '>./o', '....'], prisms: 0 }).errors.length, 0);
+}
+
+/* ---------- Editor: Teilen ---------- */
+
+{
+  const draft = { name: 'Übermäßig schöner Name', rows: ['>.o', './.', '...'], prisms: 0, best: 7 };
+  const round = decodeLevel(encodeLevel(draft));
+  eq('Name übersteht die Kodierung', round.name, draft.name);
+  eq('Raster übersteht die Kodierung', round.rows.join('|'), draft.rows.join('|'));
+  eq('Bestwert reist mit', round.best, 7);
+  eq('ohne Bestwert bleibt null', decodeLevel(encodeLevel({ ...draft, best: null })).best, null);
+
+  // Umlaute überleben nur, wenn wirklich über UTF-8 kodiert wird.
+  eq('Umlaute überstehen die Kodierung',
+    decodeLevel(encodeLevel({ ...draft, name: 'Grüße, Fässer & Öl' })).name, 'Grüße, Fässer & Öl');
+
+  // Der Code steckt in einer Adresse und muss sich daraus wieder lösen lassen.
+  const url = shareUrl(draft, 'https://example.org/spiel/');
+  check('Adresse trägt das Level im Fragment', url.includes(`#${SHARE_KEY}=`));
+  eq('Fragment lässt sich wieder auslesen',
+    decodeLevel(readShareFragment(new URL(url).hash)).name, draft.name);
+  check('Adresse bleibt handlich', url.length < 400, `${url.length} Zeichen`);
+
+  // Das größte erlaubte Brett, voll belegt – die obere Schranke der Linklänge.
+  const dense = shareUrl({
+    name: 'X'.repeat(60),
+    rows: Array.from({ length: MAX_SIZE }, () => '\\'.repeat(MAX_SIZE)),
+    prisms: 0,
+    best: 99,
+  }, 'https://example.org/spiel/');
+  check('auch das größte Brett bleibt weit unter jeder Grenze',
+    dense.length < 800, `${dense.length} Zeichen`);
+}
+
+{
+  // Fremder Text: Ein Link darf ein kaputtes Level enthalten, aber nichts
+  // anrichten. Vor allem darf er keine Größe anfordern, die Speicher frisst –
+  // `beam.js` legt Breite · Höhe · 4 Bytes an.
+  const bad = (what, text) => throws(`Link abgewiesen: ${what}`, () => decodeLevel(text));
+  const enc = (obj) => Buffer.from(JSON.stringify(obj), 'utf8').toString('base64url');
+
+  bad('leer', '');
+  bad('kein base64', '###');
+  bad('kein JSON', Buffer.from('kein json', 'utf8').toString('base64url'));
+  bad('fremde Fassung', enc({ v: 99, r: ['...'], p: 0 }));
+  bad('Raster fehlt', enc({ v: 1, p: 0 }));
+  bad('Raster ist kein Array', enc({ v: 1, r: 'xxx', p: 0 }));
+  bad('zu wenige Zeilen', enc({ v: 1, r: ['..'], p: 0 }));
+  bad('Zeile ist kein Text', enc({ v: 1, r: ['...', 5, '...'], p: 0 }));
+  bad('Vorrat ist Unsinn', enc({ v: 1, r: ['...', '...', '...'], p: -3 }));
+  bad('Bestwert ist Unsinn', enc({ v: 1, r: ['...', '...', '...'], p: 0, b: 1.5 }));
+
+  // Der wichtigste Fall: ein Raster, das Speicher anfordert.
+  bad('riesiges Raster',
+    enc({ v: 1, r: Array.from({ length: 5000 }, () => '.'.repeat(5000)), p: 0 }));
+  bad('einzelne Riesenzeile',
+    enc({ v: 1, r: ['.'.repeat(9000), '...', '...'], p: 0 }));
+
+  // Auch die kodierte Zeichenkette selbst ist gedeckelt, bevor irgendetwas
+  // entschlüsselt wird.
+  bad('unsinnig lange Zeichenkette', 'A'.repeat(50000));
+}
+
+{
+  // Ein Mailprogramm bricht lange Links um. Vorher entschied die Zahl der
+  // Umbrüche modulo vier darüber, ob der Code noch las – bei 76 Zeichen je
+  // Zeile ging es, bei 78 nicht.
+  const draft = { name: 'Umbruch', rows: ['>.o', './.', '...'], prisms: 0, best: 3 };
+  const code = encodeLevel(draft);
+  const chop = (n) => code.replace(new RegExp(`(.{${n}})`, 'g'), '$1\n');
+  for (const width of [40, 60, 72, 76, 78, 80]) {
+    eq(`umgebrochener Code (alle ${width} Zeichen) wird gelesen`,
+      decodeLevel(chop(width)).name, 'Umbruch');
+  }
+  eq('Code mit Leerzeichen und Rändern wird gelesen',
+    decodeLevel(`  ${code.slice(0, 10)} ${code.slice(10)}\n`).name, 'Umbruch');
+
+  // Der erzeugte Link darf keine Abfrage mitschleppen: `?level=3` startet beim
+  // Empfänger stumm das eingebaute Level 3, statt das geteilte anzubieten.
+  const url = shareUrl(draft, 'https://example.org/spiel/?level=3');
+  check('geteilter Link trägt keine Abfrage mehr', !url.includes('level=3'), url);
+  check('… und das Level steckt weiterhin im Fragment', url.includes(`#${SHARE_KEY}=`));
+}
+
+/* ---------- Editor: Bewertung ohne Par ---------- */
+
+{
+  // Ohne Par gibt es keine Sterne. Vorher lieferte `rating` in diesem Fall
+  // stillschweigend die volle Punktzahl – bei selbstgebauten Leveln wäre das
+  // eine Behauptung über einen kürzesten Weg, den niemand kennt.
+  eq('kein Par heißt keine Sterne', rating({ par: null }, 5), null);
+  eq('par 0 heißt ebenfalls keine Sterne', rating({ par: 0 }, 5), null);
+  eq('mit Par gibt es weiterhin Sterne', rating({ par: 4 }, 4), 3);
+}
+
+/* ---------- Editor: getrennte Ablage ---------- */
+
+{
+  // Die härteste Zusage des Editors: Selbstgebaute Level können den Fortschritt
+  // der Kampagne nicht anfassen. Zwei Schlösser – ein eigener Speicherschlüssel
+  // und ein eigener Namensraum für IDs.
+  check('Studio-IDs sind als solche erkennbar', isStudioId(newId()));
+  check('eingebaute IDs gehören nicht zum Studio', !isStudioId('l07'));
+  check('Studio-IDs kollidieren nicht mit eingebauten',
+    levels.every((l) => !isStudioId(l.id)));
+
+  const ids = new Set(Array.from({ length: 500 }, () => newId()));
+  eq('500 IDs sind 500 verschiedene', ids.size, 500);
 }
 
 /* ---------- Ausgabe ---------- */

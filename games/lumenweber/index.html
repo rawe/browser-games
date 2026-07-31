@@ -46,7 +46,144 @@
       <button id="btn-undo" class="pill" type="button">↩ Zurück</button>
       <button id="btn-reset" class="pill" type="button">⟳ Neu</button>
       <button id="btn-hint" class="pill" type="button">💡 Tipp</button>
+      <!-- Nur im Probelauf aus dem Editor: ein Tipp führt zurück ans Bauen. -->
+      <button id="btn-to-editor" class="pill pill--edit" type="button" hidden>✎ Weiterbauen</button>
     </footer>
+
+    <!-- ══ Editor ══════════════════════════════════════════════════════════ -->
+    <!-- Kein Overlay: Das Brett bleibt sichtbar und wird bemalt. Kopf- und
+         Fußleiste ersetzen HUD und Bedienleiste des Spiels. -->
+    <header id="editor-bar" class="editor-bar" hidden>
+      <button id="btn-editor-close" class="icon-btn" type="button" aria-label="Zurück zur Bibliothek">☰</button>
+      <input id="editor-name" class="editor-name" type="text" maxlength="60"
+        aria-label="Name des Levels" placeholder="Levelname" />
+      <button id="editor-status" class="chip chip--btn" type="button"
+        aria-controls="screen-check" title="Prüfergebnis anzeigen">○ ungetestet</button>
+      <!-- Beim Bauen schlägt man nach, was ein Prisma tut – der „?“ der
+           Spiel-Kopfzeile ist hier ausgeblendet, also braucht es einen eigenen. -->
+      <button id="btn-editor-help" class="icon-btn" type="button" aria-label="Spielregeln">?</button>
+    </header>
+
+    <footer id="editor-tools" class="editor-tools" hidden>
+      <div id="tool-row" class="tool-row" role="radiogroup" aria-label="Werkzeug"></div>
+      <div class="editor-actions">
+        <button id="btn-board" class="pill" type="button" aria-expanded="false"
+          aria-controls="editor-board">⤢ <span id="board-size">7×7</span></button>
+        <!-- Der Prismenvorrat gehört sichtbar in die Bedienleiste, nicht in die
+             Größenklappe: Wer eine Fassung setzt, muss den Vorrat sofort sehen
+             und ändern können. Ein Tipp schaltet ihn weiter. -->
+        <button id="btn-prisms" class="pill pill--prism" type="button" hidden
+          title="Prismen im Vorrat – tippen schaltet weiter">◆ <span id="prism-count">1</span>/<span id="socket-count">2</span></button>
+        <button id="btn-editor-test" class="pill pill--go" type="button">▶ Testen</button>
+        <button id="btn-editor-save" class="pill pill--go" type="button">✓ Sichern</button>
+      </div>
+      <!-- Brettmaße und Vorrat: selten gebraucht, deshalb ausklappbar statt
+           dauerhaft sichtbar – auf dem Handy zählt jede Zeile Bretthöhe. -->
+      <div id="editor-board" class="editor-board" hidden>
+        <div class="board-row">
+          <span class="board-label">Breite</span>
+          <button class="step" type="button" data-size="w-" aria-label="schmaler">−</button>
+          <output id="board-w">7</output>
+          <button class="step" type="button" data-size="w+" aria-label="breiter">+</button>
+        </div>
+        <div class="board-row">
+          <span class="board-label">Höhe</span>
+          <button class="step" type="button" data-size="h-" aria-label="niedriger">−</button>
+          <output id="board-h">7</output>
+          <button class="step" type="button" data-size="h+" aria-label="höher">+</button>
+        </div>
+        <p id="board-note" class="board-note"></p>
+      </div>
+    </footer>
+
+    <!-- Bibliothek: alle selbstgebauten Level -->
+    <section id="screen-studio" class="overlay" hidden>
+      <div class="panel">
+        <h2>Meine Level</h2>
+        <p class="panel-sub" id="studio-sub">Selbstgebaut, nur auf diesem Gerät.</p>
+        <div class="studio-bar">
+          <input id="studio-search" class="studio-search" type="search"
+            placeholder="Suchen …" aria-label="Level suchen" />
+          <button id="btn-studio-new" class="cta" type="button">+ Neu</button>
+        </div>
+        <ul id="studio-list" class="studio-list"></ul>
+        <p id="studio-empty" class="studio-empty" hidden>
+          Noch nichts gebaut. <b>+ Neu</b> legt ein leeres Brett an.
+        </p>
+        <div class="panel-actions">
+          <button id="btn-studio-close" class="ghost" type="button">Zurück</button>
+          <button id="btn-studio-import" class="ghost" type="button">Level aus Code</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Prüfbericht: Fehler, Warnungen, Par -->
+    <section id="screen-check" class="overlay" hidden>
+      <div class="panel">
+        <h2>Prüfung</h2>
+        <div id="check-body" class="check-body"></div>
+        <div class="panel-actions">
+          <button id="btn-check-test" class="cta" type="button">▶ Jetzt durchspielen</button>
+          <button id="btn-check-close" class="ghost" type="button">Zurück</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Teilen: das Level steckt vollständig im Link -->
+    <section id="screen-share" class="overlay" hidden>
+      <div class="panel">
+        <h2>Level teilen</h2>
+        <p class="panel-sub" id="share-sub">Die Leveldaten stecken im Link selbst – ohne Server.</p>
+        <label class="share-label" for="share-url">Link</label>
+        <textarea id="share-url" class="share-box" rows="3" readonly spellcheck="false"></textarea>
+        <div class="share-actions">
+          <button id="btn-share-copy" class="cta" type="button">Link kopieren</button>
+          <button id="btn-share-copy-code" class="ghost" type="button">Nur den Code</button>
+        </div>
+        <p class="share-note">
+          Wer den Link öffnet, kann dieses eine Level spielen und es danach in seine
+          eigene Bibliothek übernehmen. An seinen Leveln und seinem Fortschritt
+          ändert sich dabei nichts.
+        </p>
+        <div class="panel-actions">
+          <button id="btn-share-close" class="ghost" type="button">Zurück</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Level aus einem eingefügten Code holen – für Wege, auf denen ein langer
+         Link unterwegs zerbricht (umgebrochene Mails etwa). -->
+    <section id="screen-import" class="overlay" hidden>
+      <div class="panel">
+        <h2>Level aus Code</h2>
+        <p class="panel-sub">Füge hier einen geteilten Link oder nur seinen Code ein.</p>
+        <textarea id="import-box" class="share-box" rows="4" spellcheck="false"
+          aria-label="Geteilter Link oder Code"></textarea>
+        <p id="import-error" class="import-error" hidden></p>
+        <div class="panel-actions">
+          <button id="btn-import-open" class="cta" type="button">Öffnen</button>
+          <button id="btn-import-close" class="ghost" type="button">Zurück</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Ein Level aus fremder Hand -->
+    <section id="screen-shared" class="overlay" hidden>
+      <div class="panel">
+        <p class="win-kicker">Geteiltes Level</p>
+        <h2 id="shared-name">–</h2>
+        <p id="shared-detail" class="panel-sub"></p>
+        <p class="share-note">
+          Deine eigenen Level und dein Fortschritt bleiben unberührt, solange du
+          es nicht übernimmst.
+        </p>
+        <div class="panel-actions">
+          <button id="btn-shared-play" class="cta" type="button">Spielen</button>
+          <button id="btn-shared-keep" class="ghost" type="button">Übernehmen</button>
+          <button id="btn-shared-skip" class="ghost" type="button">Verwerfen</button>
+        </div>
+      </div>
+    </section>
 
     <!-- Kurzer Hinweis zum Level -->
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
@@ -58,6 +195,7 @@
         <p class="tagline">Dreh die Spiegel. Webe das Licht durch alle Knoten.</p>
         <button id="btn-play" class="cta" type="button">Spielen</button>
         <button id="btn-rules" class="ghost" type="button">So geht's</button>
+        <button id="btn-studio" class="ghost" type="button">✎ Eigene Level</button>
       </div>
       <a class="back-link" href="../../index.html">← Übersicht</a>
     </section>
@@ -70,6 +208,9 @@
         <ol id="level-grid" class="level-grid"></ol>
         <div class="panel-actions">
           <button id="btn-levels-close" class="ghost" type="button">Zurück</button>
+          <!-- Ohne diesen Knopf war das Titelbild – und damit der Editor –
+               unerreichbar, sobald einmal ein Level lief. -->
+          <button id="btn-levels-title" class="ghost" type="button">Titelbild</button>
           <a class="ghost" href="../../index.html">Alle Spiele</a>
         </div>
       </div>

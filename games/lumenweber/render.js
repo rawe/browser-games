@@ -2,7 +2,10 @@
 //
 // ── Schnittstelle (Vertrag mit main.js) ──────────────────────────────────────
 //   createRenderer(canvas) → {
-//     setLevel(level)              neues Level, Animationszustand zurücksetzen
+//     setLevel(level, opts?)       neues Level, Animationszustand zurücksetzen;
+//                                  `{ animate: false }` zeigt den Faden sofort
+//                                  fertig (Editor – dort wechselt das Level bei
+//                                  jedem Pinselstrich)
 //     setSession(session)          Sitzung, aus der gezeichnet wird
 //     resize(cssW, cssH, insets)   Größe + Platz für HUD/Bedienleiste
 //     layout                       aktuelle Geometrie (siehe layout.js)
