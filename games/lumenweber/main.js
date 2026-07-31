@@ -10,6 +10,8 @@ import { createRenderer } from './render.js';
 import { createInput } from './input.js';
 import { solveFrom } from './sim/solver.js';
 import { teachArt } from './teach.js';
+import { WANTS, nodeCss } from './nodes.js';
+import { legendList } from './legend.js';
 import {
   loadProgress, recordSolve, isUnlocked, nextOpenIndex, totalStars,
   hasSeenRules, markRulesSeen, hasSeenTeach, markTeachSeen,
@@ -27,6 +29,9 @@ const el = {
   hudTargets: $('hud-targets'),
   hudPrisms: $('hud-prisms'),
   hudMoves: $('hud-moves'),
+  legend: $('legend'),
+  legendBody: $('legend-body'),
+  rulesLegend: $('rules-legend'),
   controls: $('controls'),
   toast: $('toast'),
   screenTitle: $('screen-title'),
@@ -73,6 +78,7 @@ function showOverlay(node) {
   const playing = node === null || node === el.screenWin || node === el.screenTeach;
   el.hud.hidden = !playing || !session;
   el.controls.hidden = !playing || !session;
+  syncLegend();
 }
 
 const closeOverlays = () => showOverlay(null);
@@ -141,6 +147,51 @@ function updateHud() {
     el.hudPrisms.title = `${left} von ${level.prisms} Prismen im Vorrat`;
     el.hudPrisms.classList.toggle('chip--empty', left === 0);
   }
+
+  updateLegend();
+}
+
+/* ---------- Legende ---------- */
+//
+// Die Frage „welche Farbe braucht dieser Knoten?“ ist beim Lösen keine
+// Regelfrage, sondern eine Nachschlagefrage – sie darf nicht kosten, dass man
+// das Brett verlässt. Deshalb liegt die Legende neben dem Brett und nimmt ihm
+// Platz weg, statt ihn zu verdecken: Man sieht Legende und Knoten gleichzeitig.
+//
+// Gezeigt wird nur, was in diesem Level wirklich vorkommt. Eine Legende, die
+// vier Zeilen zeigt, wo zwei Knotenarten liegen, ist wieder Suchen.
+
+let legendOpen = false;
+
+/** Knotenarten dieses Levels mit Zählerstand: wie viele leuchten schon? */
+function legendCounts() {
+  const counts = {};
+  for (const t of session.level.targets) {
+    const c = counts[t.want] ?? (counts[t.want] = { lit: 0, total: 0 });
+    c.total += 1;
+    if (session.trace.litTargets.has(`${t.x},${t.y}`)) c.lit += 1;
+  }
+  return counts;
+}
+
+function updateLegend() {
+  if (!session || el.legend.hidden) return;
+  const counts = legendCounts();
+  el.legendBody.innerHTML = legendList(WANTS.filter((w) => counts[w]), counts);
+}
+
+/** Sichtbar ist die Legende nur, wenn sie offen *und* das Brett bedienbar ist. */
+function syncLegend() {
+  const show = legendOpen && !!session && !el.hud.hidden;
+  el.legend.hidden = !show;
+  el.hudTargets.setAttribute('aria-expanded', String(show));
+}
+
+function setLegend(open) {
+  legendOpen = open;
+  syncLegend();
+  updateLegend();
+  layout();
 }
 
 function onTap(x, y) {
@@ -250,11 +301,18 @@ function layout() {
   const rect = el.stage.getBoundingClientRect();
   const hudH = el.hud.hidden ? 0 : el.hud.offsetHeight;
   const ctrlH = el.controls.hidden ? 0 : el.controls.offsetHeight;
+  // Die offene Legende verdeckt das Brett nicht, sie nimmt ihm Platz weg – auf
+  // breiten Schirmen rechts, auf schmalen unten. Sonst läge sie über genau den
+  // Knoten, die sie erklärt.
+  const wide = window.matchMedia('(min-width: 48rem)').matches;
+  const onBoard = !el.legend.hidden;
+  const legendW = onBoard && wide ? el.legend.offsetWidth + 8 : 0;
+  const legendH = onBoard && !wide ? el.legend.offsetHeight + 8 : 0;
   renderer.resize(rect.width, rect.height, {
     top: hudH + 8,
-    bottom: ctrlH + 8,
+    bottom: ctrlH + legendH + 8,
     left: 8,
-    right: 8,
+    right: legendW + 8,
   });
 }
 
@@ -271,6 +329,7 @@ createInput(el.canvas, {
     if (name === 'reset') doReset();
     if (name === 'undo') doUndo();
     if (name === 'hint') giveHint();
+    if (name === 'legend') setLegend(!legendOpen);
     if (name === 'menu') openLevels();
   },
 });
@@ -317,6 +376,8 @@ $('btn-help').addEventListener('click', () => showOverlay(el.screenRules));
 $('btn-levels-close').addEventListener('click', () => {
   if (session) closeOverlays(); else showOverlay(el.screenTitle);
 });
+el.hudTargets.addEventListener('click', () => setLegend(!legendOpen));
+$('btn-legend-close').addEventListener('click', () => setLegend(false));
 $('btn-undo').addEventListener('click', doUndo);
 $('btn-reset').addEventListener('click', doReset);
 $('btn-hint').addEventListener('click', giveHint);
@@ -327,6 +388,12 @@ $('btn-next').addEventListener('click', () => {
 });
 
 /* ---------- Start ---------- */
+
+// Die Regelseite kennt alle vier Knotenarten – sie steht auch vor dem ersten
+// Level offen. Das Stylesheet bekommt die Knotenfarben von hier, damit
+// palette.js die einzige Quelle bleibt und die Regelzeichen nicht abdriften.
+el.rulesLegend.innerHTML = legendList(WANTS);
+for (const want of WANTS) document.body.style.setProperty(`--node-${want}`, nodeCss(want));
 
 window.addEventListener('resize', layout);
 window.visualViewport?.addEventListener('resize', layout);

@@ -12,7 +12,10 @@
 
 import { computeLayout, cellCenter, gridToPixel } from '../layout.js';
 import { deviceState } from '../level.js';
-import { beamCss, TARGET_CSS } from './palette.js';
+import { beamCss, TARGET_CSS, TARGET_DIM_CSS } from './palette.js';
+// Die Eckenzahl ist Auskunft, keine Zierde – sie kommt aus derselben Quelle wie
+// die Legende, damit Brett und Erklärung nie verschiedene Formen zeigen.
+import { NODE_CORNERS } from '../nodes.js';
 
 const PALETTE = {
   bgTop: '#070912',
@@ -27,7 +30,6 @@ const PALETTE = {
   prismCyan: '#4de6ff',
   socket: 'rgba(150,200,255,0.55)',
   source: '#ffd9a0',
-  targetOff: 'rgba(150,170,210,0.45)',
 };
 
 /** Deterministischer Zufall für das Sternenfeld – gleicher Hintergrund je Level. */
@@ -273,9 +275,6 @@ export function createCanvas2dRenderer(canvas) {
     }
   }
 
-  /** Wie viele Ecken bekommt ein Knoten? Auch ohne Farbe bleibt er lesbar. */
-  const TARGET_CORNERS = { any: 0, amber: 3, cyan: 4, white: 8 };
-
   function drawTargets(now) {
     const { cell } = layout;
     level.targets.forEach((t, i) => {
@@ -283,7 +282,10 @@ export function createCanvas2dRenderer(canvas) {
       const lit = targetGlow[i];
       const r = cell * 0.26;
       const tint = TARGET_CSS[t.want];
-      const corners = TARGET_CORNERS[t.want];
+      // Wartend trägt der Knoten denselben Farbton, nur leise – erst dadurch
+      // sieht man beim Lösen, welches Licht er verlangt.
+      const dim = TARGET_DIM_CSS[t.want];
+      const corners = NODE_CORNERS[t.want];
 
       if (lit > 0.01) {
         ctx.save();
@@ -303,7 +305,7 @@ export function createCanvas2dRenderer(canvas) {
       ctx.save();
       ctx.translate(px, py);
       ctx.lineWidth = Math.max(2, cell * 0.055);
-      ctx.strokeStyle = lit > 0.5 ? tint : PALETTE.targetOff;
+      ctx.strokeStyle = lit > 0.5 ? tint : dim;
 
       // Kreis für „jedes Licht“, sonst ein Vieleck – die Form nennt die Farbe
       // auch dann, wenn man Farben schlecht unterscheidet.
@@ -332,7 +334,7 @@ export function createCanvas2dRenderer(canvas) {
       }
 
       const inner = r * (0.35 + 0.25 * lit * (0.9 + 0.1 * Math.sin(now / 260)));
-      ctx.fillStyle = lit > 0.5 ? '#fff8e6' : 'rgba(150,170,210,0.35)';
+      ctx.fillStyle = lit > 0.5 ? '#fff8e6' : dim;
       ctx.beginPath();
       ctx.arc(0, 0, inner, 0, Math.PI * 2);
       ctx.fill();
