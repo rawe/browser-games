@@ -22,7 +22,16 @@ export function createInput() {
   window.addEventListener('keyup', (e) => {
     if (keyMap[e.code]) held.delete(keyMap[e.code]);
   });
-  window.addEventListener('blur', () => held.clear());
+  const resetInputs = () => {
+    held.clear();
+    Object.keys(touch).forEach((key) => { touch[key] = false; });
+    firePressed = false;
+    togglePressed = false;
+    document.querySelectorAll('.tc-btn.active').forEach((el) => el.classList.remove('active'));
+  };
+  window.addEventListener('blur', resetInputs);
+  window.addEventListener('pagehide', resetInputs);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) resetInputs(); });
 
   // Touch-Buttons: pointerdown/-up pro Element, Multi-Touch-fähig
   function bindHold(id, prop) {

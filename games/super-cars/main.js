@@ -18,12 +18,27 @@ const renderer = createRenderer(canvas);
 const hud = createHud();
 const input = createInput();
 const audio = createAudio();
+const query = new URLSearchParams(location.search);
+const debugMode = query.has('debug');
 
 let career = createCareer();
 let race = null;
 let sceneCtx = null;
 let mode = 'menu'; // menu | race | overlay-*
 let lastCountdownBeep = -1;
+
+if (debugMode) {
+  Object.defineProperty(window, '__superCarsDebug', {
+    configurable: true,
+    value: {
+      stats: () => ({
+        render: { ...renderer.info.render },
+        memory: { ...renderer.info.memory },
+        canvas: { width: canvas.width, height: canvas.height },
+      }),
+    },
+  });
+}
 
 const euro = (n) => `${n.toLocaleString('de-DE')} €`;
 
@@ -34,9 +49,11 @@ function resize() {
   if (sceneCtx) sceneCtx.resize(w, h);
 }
 window.addEventListener('resize', resize);
+window.visualViewport?.addEventListener('resize', resize);
 
 function showPanel(html) {
   panel.innerHTML = html;
+  panel.classList.toggle('menu-panel', mode === 'menu');
   overlay.classList.add('visible');
 }
 
@@ -49,14 +66,24 @@ function showMenu() {
   mode = 'menu';
   audio.engineOff();
   showPanel(`
-    <h1>Super Cars</h1>
-    <p class="sub">Arcade-Rennen von schräg hinten – ${tracks.length} Strecken, 7 Rivalen,
-    Raketen und ein Shop zwischen den Läufen. Nur die ersten drei kommen weiter.</p>
-    <button class="primary-btn" id="start-btn">Meisterschaft starten</button>
-    <p class="sub">🖮 Pfeile/WASD fahren, Leertaste feuert, Q wechselt die Waffe.<br>
-    📱 Am Smartphone: Buttons unten – links lenken, rechts Gas, Bremse und Rakete.</p>
-    <button class="ghost-btn" id="mute-btn">${audio.isMuted() ? '🔇 Ton an' : '🔊 Ton aus'}</button>
-    ${document.body.dataset.standalone ? '' : '<a class="ghost-btn" style="text-align:center;text-decoration:none" href="../../index.html">← Zur Spiele-Übersicht</a>'}
+    <div class="menu-hero" aria-hidden="true">
+      <img src="./assets/title-banner.webp" alt="" width="1536" height="640">
+      <div class="menu-logo"><span>Super</span> Cars</div>
+      <div class="menu-badge">LOW-POLY COMBAT RACING</div>
+    </div>
+    <div class="menu-content">
+      <p class="menu-kicker">Die Meisterschaft wartet</p>
+      <p class="sub menu-intro">${tracks.length} Strecken. 7 Rivalen. Raketen, Werkstatt und nur ein Platz an der Spitze.</p>
+      <button class="primary-btn" id="start-btn">Meisterschaft starten <span aria-hidden="true">→</span></button>
+      <div class="menu-meta">
+        <p class="sub"><b>Desktop</b><br>Pfeile/WASD · Leertaste feuert · Q wechselt</p>
+        <p class="sub"><b>Smartphone</b><br>Direkte Touch-Steuerung · Querformat empfohlen</p>
+      </div>
+      <div class="menu-actions">
+        <button class="ghost-btn" id="mute-btn">${audio.isMuted() ? '🔇 Ton an' : '🔊 Ton aus'}</button>
+        ${document.body.dataset.standalone ? '' : '<a class="ghost-btn" href="../../index.html">← Spiele-Übersicht</a>'}
+      </div>
+    </div>
   `);
   document.getElementById('start-btn').addEventListener('click', () => {
     audio.unlock();
@@ -75,7 +102,7 @@ function startRace() {
   if (sceneCtx) sceneCtx.dispose();
   race = createRace(trackDef, career, career.stage);
   // Demo-Modus (?demo=1): Spielerwagen fährt selbst – zum Zuschauen und Testen
-  race.autopilot = new URLSearchParams(location.search).has('demo');
+  race.autopilot = query.has('demo');
   sceneCtx = createRaceScene(race);
   hud.prepareTrack(race.track);
   lastCountdownBeep = -1;
@@ -209,11 +236,16 @@ function showShop() {
 
 /* ---------- Loop ---------- */
 let lastTime = performance.now();
+let frameBudget = 0;
+const targetFrameMs = matchMedia('(pointer: coarse)').matches ? 1000 / 60 : 1000 / 120;
 
 function frame(now) {
   requestAnimationFrame(frame);
-  let dt = Math.min(0.05, (now - lastTime) / 1000);
+  frameBudget += Math.min(50, now - lastTime);
   lastTime = now;
+  if (frameBudget + 0.1 < targetFrameMs) return;
+  const dt = Math.min(0.05, frameBudget / 1000);
+  frameBudget %= targetFrameMs;
 
   if (mode === 'race' && race) {
     const ctrl = input.read(dt);
@@ -259,11 +291,18 @@ function frame(now) {
     hud.update(race);
     sceneCtx.update(dt);
     renderer.render(sceneCtx.scene, sceneCtx.camera);
+    if (debugMode) {
+      canvas.dataset.renderStats = JSON.stringify({
+        calls: renderer.info.render.calls,
+        triangles: renderer.info.render.triangles,
+        geometries: renderer.info.memory.geometries,
+        textures: renderer.info.memory.textures,
+        width: canvas.width,
+        height: canvas.height,
+      });
+    }
 
     if (race.state === 'finished') endRace();
-  } else if (sceneCtx) {
-    // Hintergrund hinter Overlays weiterrendern (steht still)
-    renderer.render(sceneCtx.scene, sceneCtx.camera);
   }
 }
 
