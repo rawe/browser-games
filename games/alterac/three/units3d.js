@@ -31,13 +31,18 @@ import { toWorldX, toWorldZ, FACTION_COLOR, FACTION_DARK, PALETTE, seededRand } 
 import { edgePoint } from '../map.js';
 import { toRoman } from '../config.js';
 
-// PROTOTYP: Hinter dem URL-Flag `?models` ersetzen fertige GLB-Modelle
-// (models3d.js, dynamischer Import) testweise die handgebauten Figuren –
-// je Fraktion+Trupptyp ein Modell, dazu der Yeti als Boss Lokholar.
-// Ivus (blauer Boss) bleibt immer handgebaut. Ohne Flag bleibt ALLES exakt
-// wie bisher, das Modul models3d.js wird dann nie geladen.
-const USE_MODELS =
-  typeof location !== 'undefined' && new URLSearchParams(location.search).has('models');
+// Standardfall: Die kuratierten GLB-Charaktermodelle (models3d.js, dynamischer
+// Import) stellen die Trupps – je Fraktion+Trupptyp ein Modell, dazu der Yeti
+// als Boss Lokholar. Ivus (blauer Boss) hat bewusst kein Modell und bleibt
+// handgebaut; ebenso springt die handgebaute Figur überall dort ein, wo ein
+// Modell fehlt oder nicht lädt (s. attachModel/fallbackToTemplate).
+// Mit `?models=0` (oder `?models=off`) in der Adresszeile bleiben ALLE Trupps
+// handgebaut – models3d.js wird dann gar nicht erst geladen.
+const USE_MODELS = (() => {
+  if (typeof location === 'undefined') return true;
+  const flag = new URLSearchParams(location.search).get('models');
+  return flag !== '0' && flag !== 'off';
+})();
 
 // Gemeinsame Materialfarben der Figuren (neutral – die Fraktion kommt wie bei
 // den 2D-Porträts nur über Stoff-/Akzentflächen in FACTION_COLOR/FACTION_DARK).
@@ -126,8 +131,8 @@ export function createUnits3D({ map, heightAt }) {
   const group = new THREE.Group();
   group.name = 'units3d';
 
-  // ------------------------------------------- PROTOTYP: GLB-Modelle laden
-  // Nur bei aktivem `?models`-Flag: models3d.js dynamisch nachladen. Bis die
+  // -------------------------------------------------------- GLB-Modelle laden
+  // models3d.js wird dynamisch nachgeladen (entfällt bei `?models=0`). Bis die
   // Modelle da sind, bleiben betroffene Trupps ein leerer Wrapper (nur
   // UI-Sprite sichtbar); bei Ladefehlern fällt alles auf die handgebauten
   // Figuren zurück (rec.useModel wird zurückgesetzt, s. attachModel/Fallback).
@@ -151,7 +156,7 @@ export function createUnits3D({ map, heightAt }) {
         for (const rec of records.values()) if (rec.useModel && !rec.mixer) attachModel(rec);
       })
       .catch((err) => {
-        console.warn('[units3d] GLB-Prototyp konnte nicht laden – Fallback auf handgebaute Figuren.', err);
+        console.warn('[units3d] GLB-Modelle konnten nicht laden – Fallback auf handgebaute Figuren.', err);
         modelsFailed = true;
         for (const rec of records.values()) if (rec.useModel && !rec.mixer) fallbackToTemplate(rec);
       });
@@ -161,15 +166,6 @@ export function createUnits3D({ map, heightAt }) {
   // Trupp-Records (erst möglich, sobald die GLBs geladen sind).
   function attachModel(rec) {
     const entry = unitModels?.[rec.modelFaction]?.[rec.modelSlot];
-    // PROTOTYP-Diagnose: belegt je Trupp die Zuordnung Fraktion+Typ→Modell
-    // (Sichtprüfung: Position auf der Karte verrät NICHT die Fraktion –
-    // blaue Angreifer stehen auch an der roten Nord-Festung).
-    console.log(
-      '[units3d] attach faction=%s slot=%s → %s',
-      rec.modelFaction,
-      rec.modelSlot,
-      entry ? entry.label : 'FEHLT → handgebauter Fallback'
-    );
     if (!entry) {
       // Nur dieses eine Modell fehlt (Ladefehler): der betroffene Trupp fällt
       // auf die handgebaute Figur zurück, alle anderen behalten ihr Modell.
@@ -847,11 +843,11 @@ export function createUnits3D({ map, heightAt }) {
     if (rec) return rec;
     const key = g.def?.key ?? (g.ally ? 'ally' : 'medium');
     const rig = RIGS[key] ?? RIGS.medium;
-    // PROTOTYP: Bei aktivem Flag bekommen Trupps mit passendem GLB-Slot statt
-    // der handgebauten Figur einen leeren Wrapper, in den (sobald geladen) der
-    // Modell-Klon gehängt wird. Je Fraktion+Trupptyp ein Modell; der rote
-    // Boss Lokholar nutzt den Yeti-Slot, Ivus (blau) bleibt immer handgebaut.
-    // Ohne Flag ist useModel konstant false → alter Pfad.
+    // Trupps mit passendem GLB-Slot bekommen statt der handgebauten Figur einen
+    // leeren Wrapper, in den (sobald geladen) der Modell-Klon gehängt wird. Je
+    // Fraktion+Trupptyp ein Modell; der rote Boss Lokholar nutzt den Yeti-Slot,
+    // Ivus (blau) bleibt immer handgebaut. Mit `?models=0` ist useModel
+    // konstant false → durchgehend handgebaute Figuren.
     const modelSlot = key === 'ally' ? (g.faction === 'red' ? 'lokholar' : null) : key;
     const useModel = USE_MODELS && !modelsFailed && modelSlot !== null;
     let fig;
@@ -893,7 +889,7 @@ export function createUnits3D({ map, heightAt }) {
       speed: 0, travel: 0,
       groundY: 0, lastBob: 0,
       seen: 0,
-      // PROTOTYP: Felder des GLB-Pfads (ohne Flag dauerhaft false/null).
+      // Felder des GLB-Pfads (mit `?models=0` dauerhaft false/null).
       useModel,
       modelKey: key, // Rig-/Template-Schlüssel (für den handgebauten Fallback)
       modelSlot, // GLB-Slot in unitModels ('light'|'medium'|'heavy'|'lokholar')
@@ -911,13 +907,13 @@ export function createUnits3D({ map, heightAt }) {
 
   function resetAll() {
     for (const rec of records.values()) {
-      if (rec.mixer) rec.mixer.stopAllAction(); // PROTOTYP
+      if (rec.mixer) rec.mixer.stopAllAction();
       group.remove(rec.fig);
     }
     records.clear();
   }
 
-  // ---------------------------------------------- PROTOTYP: Modell-Animation
+  // ------------------------------------------------------- Modell-Animation
   // Ersetzt für GLB-Trupps die prozeduralen Teilrotationen durch Clip-Auswahl
   // nach Sim-Zustand, mit weichen Überblendungen (~0.2 s). Läuft der Mixer
   // noch nicht (Modelle laden gerade), passiert nichts – der Wrapper ist leer.
@@ -962,7 +958,7 @@ export function createUnits3D({ map, heightAt }) {
   // Liefert den vertikalen Wipp-Anteil; alle Teilrotationen werden komplett
   // neu gesetzt (kein Aufaddieren, damit nichts wegdriftet).
   function applyPose(rec, g, time, simT, dt) {
-    // PROTOTYP: GLB-Trupps haben keine benannten Teile → Clip-Pfad.
+    // GLB-Trupps haben keine benannten Teile → Clip-Pfad.
     if (rec.useModel) return applyModelPose(rec, g, dt);
     const R = rec.rig;
     const P = rec.parts;
@@ -1049,7 +1045,7 @@ export function createUnits3D({ map, heightAt }) {
       rec.ui.visible = true;
       rec.hasPrev = false;
       rec.speed = 0;
-      // PROTOTYP: liegengebliebenen Death-Clip verwerfen, Animation neu starten.
+      // Liegengebliebenen Death-Clip verwerfen, Animation neu starten.
       if (rec.mixer) {
         rec.mixer.stopAllAction();
         rec.currentAction = null;
@@ -1119,7 +1115,7 @@ export function createUnits3D({ map, heightAt }) {
       rec.dieAt = time;
       rec.ui.visible = false;
       rec.pulse.visible = false;
-      // PROTOTYP: Gibt es einen Death-Clip, spielt der statt des Umkippens
+      // Gibt es einen Death-Clip, spielt der statt des Umkippens
       // (LoopOnce/clampWhenFinished ist in attachModel gesetzt).
       rec.deathClipPlaying = false;
       if (rec.mixer && rec.actions?.death) {
@@ -1281,10 +1277,10 @@ export function createUnits3D({ map, heightAt }) {
   }
 
   function dispose() {
-    disposed = true; // PROTOTYP: noch laufende GLB-Ladevorgänge ins Leere laufen lassen
+    disposed = true; // noch laufende GLB-Ladevorgänge ins Leere laufen lassen
     resetAll();
     if (unitModels && modelsApi) {
-      modelsApi.disposeUnitModels(unitModels); // PROTOTYP: Template-Ressourcen der GLBs
+      modelsApi.disposeUnitModels(unitModels); // Template-Ressourcen der GLBs
       unitModels = null;
     }
     for (const tpl of templates.values()) tpl.clear();
