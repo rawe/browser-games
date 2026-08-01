@@ -1,9 +1,7 @@
-// PROTOTYP – EXPERIMENTELL, nicht Teil des Normalpfads.
-//
-// Fertige GLB-Charaktermodelle als Testersatz für die handgebauten
-// Low-Poly-Truppenfiguren in units3d.js. Wird ausschließlich hinter dem
-// URL-Flag `?models` dynamisch nachgeladen (siehe USE_MODELS in units3d.js);
-// ohne Flag wird dieses Modul nie importiert und die GLBs nie angefragt.
+// Kuratierte GLB-Charaktermodelle – die Standardbesetzung der Trupps im
+// 3D-Modus (units3d.js). Das Modul wird von units3d.js dynamisch nachgeladen;
+// mit `?models=0` (siehe USE_MODELS dort) unterbleibt der Import, dann werden
+// die GLBs nie angefragt und alle Trupps bleiben handgebaut.
 //
 // Quellen (alle CC0), je Fraktion+Trupptyp ein Modell:
 //   Rogue.glb     – KayKit „Adventurers",
@@ -113,7 +111,7 @@ export async function loadUnitModels() {
         loader
           .loadAsync(src.url)
           .then((gltf) => {
-            models[faction][slot] = prepare(faction, slot, src, gltf);
+            models[faction][slot] = prepare(faction, src, gltf);
           })
           .catch((err) => {
             console.warn(
@@ -128,7 +126,7 @@ export async function loadUnitModels() {
   return models;
 }
 
-function prepare(faction, slot, src, gltf) {
+function prepare(faction, src, gltf) {
   const scene = gltf.scene;
   scene.traverse((o) => {
     if (o.isMesh) {
@@ -156,11 +154,6 @@ function prepare(faction, slot, src, gltf) {
     attack: src.attack ?? [],
     yaw: src.yaw ?? 0,
   };
-  // Einmalige Diagnose für den Koordinator: verfügbare Clip-Namen + Maße.
-  console.log(
-    `[models3d] ${src.label} (${faction}/${slot}) geladen – Höhe ${entry.height.toFixed(2)}, minY ${entry.minY.toFixed(2)}, Clips:`,
-    entry.clips.map((c) => c.name)
-  );
   return entry;
 }
 

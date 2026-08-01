@@ -55,10 +55,17 @@ Grundsätze, die alle `three/`-Module einhalten:
   fehlende fallen lautlos auf prozedurale Fassungen zurück (dasselbe Prinzip
   wie bei Porträt- und Gebäude-Atlanten). Die Promptdaten zum Erzeugen stehen
   in `prompt-3d-texturen.md` (unversioniert).
+- **Die Trupps sind GLB-Modelle.** `three/models3d.js` lädt je Fraktion und
+  Trupptyp ein kuratiertes CC0-Charaktermodell aus `assets/3d/units/` (dazu den
+  Yeti als roten Boss Lokholar) und animiert sie über ihre mitgelieferten
+  Clips. Der blaue Boss Ivus hat bewusst kein Modell und bleibt handgebaut;
+  ebenso springen die handgebauten Low-Poly-Figuren aus `units3d.js` überall
+  dort ein, wo ein Modell nicht lädt. `?models=0` schaltet komplett auf sie
+  zurück – dann wird `models3d.js` gar nicht erst importiert.
 
 Für Entwicklung: `?test=sim&3d=1` startet direkt eine CPU-Schlacht in 3D;
-`&models=1` aktiviert dabei die kuratierten GLB-Einheitenmodelle (CC0,
-Quellen in `three/models3d.js`). Zur Einzelsichtung gibt es zwei
+`&models=0` zeigt dabei die handgebauten Figuren statt der GLB-Modelle
+(Quellen in `three/models3d.js`). Zur Einzelsichtung gibt es zwei
 Dev-Viewer (nur Dev-Server, kein Build-Einstieg): `dev-units.html` zeigt
 alle Einheitenfiguren mit schaltbaren Animationszuständen, `dev-buildings.html`
 alle Bauwerke – beide in der Nachtlichtstimmung des Spiels, mit Fokusfahrt
