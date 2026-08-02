@@ -6,6 +6,12 @@
 // auf den gehashten Dateinamen um (nackte Strings kopiert der Build nicht mit).
 export const games = [
   {
+    slug: 'artillerie-commander',
+    title: 'Artillerie Commander',
+    description: 'Rundenbasierte Panzerschlachten: Winkel, Ladung und Wind meistern, Gelände sprengen und das Arsenal aufrüsten.',
+    emoji: '💥',
+  },
+  {
     slug: 'alterac',
     title: 'Alterac Combat Simulator',
     description: 'Taktik-Autobattler: Routen planen, Truppen fusionieren, Punkte halten – dann läuft die Schlacht von allein.',
