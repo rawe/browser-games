@@ -10,6 +10,8 @@ export const games = [
     title: 'Artillerie Commander',
     description: 'Rundenbasierte Panzerschlachten: Winkel, Ladung und Wind meistern, Gelände sprengen und das Arsenal aufrüsten.',
     emoji: '💥',
+    cover: new URL('./games/artillerie-commander/assets/title-banner.webp', import.meta.url).href,
+    coverAlt: 'Zwei farbige Pixelpanzer beschießen sich über eine Kraterlandschaft, während eine Granate im hohen Bogen fliegt',
   },
   {
     slug: 'alterac',

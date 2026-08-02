@@ -1,4 +1,4 @@
-export const WORLD = { width: 960, height: 540, hud: 66 };
+export const WORLD = { width: 960, height: 660, hud: 42 };
 export const TANK = { halfWidth: 17, top: 20, bottom: 7 };
 export const WALL_MODES = [
   { id: 'open', name: 'Keine Wände' },
@@ -7,12 +7,16 @@ export const WALL_MODES = [
 ];
 
 export const WEAPONS = [
-  { id: 'granate', name: 'Granate', icon: '●', radius: 28, damage: 48, cost: 0, stock: Infinity },
-  { id: 'brecher', name: 'Brecher', icon: '◉', radius: 48, damage: 76, cost: 180, stock: 2 },
-  { id: 'nuke', name: '20-kT-Nova', icon: '☢', radius: 82, damage: 105, cost: 420, stock: 1 },
-  { id: 'mirv', name: 'MIRV', icon: '✣', radius: 24, damage: 38, cost: 360, stock: 1, mirv: true },
-  { id: 'bohrer', name: 'Kettenbohrer', icon: '⌁', radius: 20, damage: 30, cost: 260, stock: 2, burrow: true },
-  { id: 'erde', name: 'Erdformer', icon: '▲', radius: 45, damage: 0, cost: 160, stock: 2, dirt: true },
+  { id: 'granate', name: 'Feldgranate', icon: '●', radius: 28, damage: 48, cost: 0, stock: Infinity, kind: 'blast', description: 'Zuverlässige Standardexplosion.' },
+  { id: 'brecher', name: 'Brecher', icon: '◉', radius: 48, damage: 76, cost: 180, stock: 2, kind: 'blast', description: 'Größerer Krater und kräftige Druckwelle.' },
+  { id: 'nuke', name: '20-kT-Nova', icon: '☢', radius: 82, damage: 105, cost: 440, stock: 1, kind: 'nuke', description: 'Gewaltige Explosion für ganze Hügelkuppen.' },
+  { id: 'mirv', name: 'MIRV-Fächer', icon: '✣', radius: 24, damage: 38, cost: 380, stock: 1, mirv: true, kind: 'mirv', description: 'Fünf Einschläge nebeneinander.' },
+  { id: 'bohrer', name: 'Kettenbohrer', icon: '⌁', radius: 20, damage: 34, cost: 270, stock: 2, burrow: true, kind: 'drill', description: 'Frisst einen tiefen Schacht in den Boden.' },
+  { id: 'erde-klein', name: 'Erdkapsel', icon: '▴', radius: 25, damage: 0, cost: 110, stock: 3, dirt: true, kind: 'dirt', description: 'Baut einen kleinen schützenden Hügel.' },
+  { id: 'erde', name: 'Erdformer', icon: '▲', radius: 46, damage: 0, cost: 190, stock: 2, dirt: true, kind: 'dirt', description: 'Erzeugt eine massive Erdkugel.' },
+  { id: 'erde-gross', name: 'Bergbauer', icon: '⛰', radius: 72, damage: 0, cost: 360, stock: 1, dirt: true, kind: 'dirt', description: 'Hebt einen ganzen Berg aus dem Nichts.' },
+  { id: 'saeure', name: 'Säureregen', icon: '☂', radius: 60, damage: 24, cost: 340, stock: 1, acid: true, kind: 'acid', description: 'Löst eine breite Säule Erdreich nach unten auf.' },
+  { id: 'laser', name: 'Prismenlaser', icon: '━', radius: 20, damage: 82, cost: 620, stock: 1000, laser: true, kind: 'laser', description: '1000 Energie; Leistung bestimmt Reichweite und Verbrauch.' },
 ];
 
 const COLORS = ['#58c8ff', '#ff646f', '#ffd34e', '#8bf084', '#c58cff', '#ff9f43'];
@@ -60,7 +64,7 @@ export function crater(terrain, cx, cy, radius, fill = false, height = WORLD.hei
 export function makePlayers(count, humans = 1) {
   return Array.from({ length: count }, (_, i) => ({
     id: i, name: i < humans ? `Commander ${i + 1}` : `CPU ${i - humans + 1}`,
-    human: i < humans, color: COLORS[i], x: 0, y: 0, hp: 100, score: 0, wins: 0,
+    human: i < humans, color: COLORS[i], x: 0, y: 0, hp: 100, score: 700, wins: 0, deathTriggered: false,
     angle: 45, power: 480, facing: i < count / 2 ? 1 : -1, weapon: 'granate',
     inventory: Object.fromEntries(WEAPONS.map((w) => [w.id, w.id === 'granate' ? Infinity : 0])),
   }));
@@ -72,6 +76,7 @@ export function placePlayers(players, terrain) {
     p.x = Math.round(section * (i + 0.5));
     p.y = surfaceAt(terrain, p.x) - 9;
     p.hp = 100;
+    p.deathTriggered = false;
     p.facing = i < players.length / 2 ? 1 : -1;
   });
 }
@@ -144,7 +149,8 @@ export function damageAt(players, x, y, weapon, shooter) {
     const damage = Math.round(weapon.damage * (1 - distance / weapon.radius));
     player.hp = Math.max(0, player.hp - damage);
     if (damage) hits.push({ player, damage });
-    if (player.hp === 0 && player !== shooter) shooter.score += 250;
+    if (player !== shooter && damage) shooter.score += damage * 2;
+    if (player.hp === 0 && player !== shooter) shooter.score += 100;
   }
   return hits;
 }
@@ -163,7 +169,7 @@ export function chooseAiShot(player, targets, terrain, wind) {
       if (miss < best.miss) best = { miss, angle, power };
     }
   }
-  player.angle = clamp(best.angle + Math.round((Math.random() - 0.5) * 5), 5, 85);
+  player.angle = clamp(best.angle + Math.round((Math.random() - 0.5) * 5), 0, 180);
   player.power = clamp(best.power + Math.round((Math.random() - 0.5) * 28), 100, 900);
   return player;
 }

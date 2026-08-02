@@ -5,7 +5,7 @@ Ein eigenständiges, rundenbasiertes 2D-Artilleriespiel, inspiriert vom Spielpri
 ## Spielen
 
 - Pfeiltasten oder Bildschirmtasten: Winkel und Ladung
-- Schieberegler: Winkel und Ladung auf Touch-Geräten
+- Virtuelle Stellräder: erst Ziehen verändert den Wert; langsames Ziehen arbeitet fein, schnelles beschleunigt
 - `Tab` oder Waffenknopf: verfügbare Waffe wechseln
 - Leertaste oder **FEUER**: schießen
 - Ein-Finger-Wischen beziehungsweise Mausziehen: Kamera verschieben
@@ -15,7 +15,7 @@ Ein eigenständiges, rundenbasiertes 2D-Artilleriespiel, inspiriert vom Spielpri
 
 Wind, Schwerkraft und das pro Runde erzeugte Gelände beeinflussen die Flugbahn. Explosionen schlagen Krater, der Erdformer baut Gelände auf. Geschosse zünden bei Kontakt mit der Trefferfläche eines Panzers. Abschüsse und Rundensiege bringen Credits für Spezialmunition.
 
-Vor der Partie stehen drei Randregeln zur Wahl: Ohne Wände verlassen Geschosse das Feld und Panzer können aus der Welt fallen. Feste Wände lassen Geschosse am Rand explodieren und tragen Panzer am Boden. Spiegelwände reflektieren Geschosse. Die optionale Zielhilfe zeigt nur den ersten Flugabschnitt; die ebenfalls optionale letzte Flugbahn wird für jeden Spieler getrennt gespeichert.
+Vor der Partie stehen drei Randregeln zur Wahl: Ohne Wände verlassen Geschosse das Feld und Panzer können aus der Welt fallen. Feste Wände lassen Geschosse am Rand explodieren und tragen Panzer am Boden. Spiegelwände reflektieren Geschosse. Die optionale Zielhilfe zeigt nur den ersten Flugabschnitt; die ebenfalls optionale letzte Flugbahn wird für jeden Spieler getrennt gespeichert. Eine weitere Option löst beim Tod eines Panzers eine zufällige Todes-Salve aus, ohne dessen Vorrat zu verbrauchen.
 
 ## Aufbau
 
@@ -27,4 +27,4 @@ npm run check:artillerie
 
 ## Umfang dieser ersten Version
 
-Enthalten sind sechs deutlich verschiedene Waffen, lokale Mehrspielerpartien, Computergegner, zufälliger Wind, zerstörbares Höhenfeld-Terrain, Fallschaden, drei Randmodi, eine schwenk- und zoombare Kamera, optionale Schusshilfen, Rundenwertung und Einkauf. Weitere Waffen, Teamspiel, Leitsysteme, Verteidigung und gespeicherte Matchserien sind sinnvolle spätere Ausbaustufen.
+Enthalten sind zehn Waffen beziehungsweise Größenstufen: drei Sprengladungen, MIRV, Kettenbohrer, drei Erdformer, Säureregen und ein energiebasierter Laser. Hinzu kommen lokale Mehrspielerpartien, kaufende und Spezialwaffen nutzende Computergegner, zufälliger Wind, zerstörbares Höhenfeld-Terrain, Fallschaden, drei Randmodi, eine schwenk- und zoombare Kamera, optionale Schusshilfen, Todes-Salven, Rundenwertung und eine Kaufrunde vor dem ersten Gefecht. Teamspiel, Leitsysteme, Verteidigung und gespeicherte Matchserien sind sinnvolle spätere Ausbaustufen.

@@ -19,9 +19,9 @@
       <button id="pause" class="icon" aria-label="Pause">☰</button>
     </section>
     <section id="controls" class="controls" hidden>
-      <div class="sliders">
-        <label><span>Winkel <b id="angle-value">45°</b></span><input id="angle-slider" type="range" min="5" max="85" value="45" /></label>
-        <label><span>Ladung <b id="power-value">480</b></span><input id="power-slider" type="range" min="100" max="900" step="5" value="480" /></label>
+      <div class="dials">
+        <div class="dial-wrap"><span>Winkel</span><div id="angle-dial" class="dial" role="slider" tabindex="0" aria-label="Winkel" aria-valuemin="0" aria-valuemax="180" aria-valuenow="45"><i></i><b id="angle-value">45°</b><small>ziehen</small></div></div>
+        <div class="dial-wrap"><span>Ladung</span><div id="power-dial" class="dial" role="slider" tabindex="0" aria-label="Ladung" aria-valuemin="20" aria-valuemax="180" aria-valuenow="96"><i></i><b id="power-value">96</b><small>ziehen</small></div></div>
       </div>
       <button id="weapon" class="weapon"><span id="weapon-icon">●</span><span id="weapon-name">Granate</span><small id="weapon-stock">∞</small></button>
       <button id="fire" class="fire">FEUER</button>
@@ -38,13 +38,14 @@
         <label>Rand <select id="wall-mode"><option value="open">Keine Wände</option><option value="solid" selected>Feste Wände</option><option value="mirror">Spiegelwände</option></select></label>
         <label class="toggle"><span>Zielhilfe</span><input id="aim-assist" type="checkbox" /></label>
         <label class="toggle"><span>Letzte eigene Flugbahn</span><input id="last-trail" type="checkbox" checked /></label>
+        <label class="toggle"><span>Todes-Salve</span><input id="death-salvo" type="checkbox" /></label>
         <button id="start" class="primary">Schlacht beginnen</button>
         <button id="rules" class="text-button">So wird gespielt</button>
       </div>
     </section>
     <section id="rules-panel" class="overlay" hidden><div class="panel"><h2>Felddienstordnung</h2><ol><li>Stelle Winkel und Ladung ein. Wind wirkt seitlich auf jedes Geschoss.</li><li>Wähle eine Waffe und feuere. Explosionen formen das Gelände dauerhaft um; ein direkter Panzertreffer zündet sofort.</li><li>Wische über das Feld, um die Kamera zu bewegen. Zwei Finger oder das Mausrad zoomen.</li><li>Wer zuletzt steht, gewinnt die Runde und erhält 300 Credits. Abschüsse bringen 250.</li><li>Zwischen den Runden kaufst du Spezialmunition. Die Standardgranate ist unbegrenzt.</li></ol><p><b>Tastatur:</b> Pfeile zielen, Tab wechselt die Waffe, Leertaste feuert.</p><button id="rules-close" class="primary">Verstanden</button></div></section>
     <section id="menu" class="overlay" hidden><div class="panel"><h2>Gefechtsunterbrechung</h2><button id="resume" class="primary">Weiter</button><button id="restart" class="secondary">Neue Schlacht</button></div></section>
-    <section id="shop" class="overlay" hidden><div class="panel shop-panel"><p class="eyebrow">Versorgung nach Runde <span id="shop-round">1</span></p><h2 id="shop-title">Arsenal</h2><p>Budget: <b id="credits">0</b> Credits</p><div id="shop-list" class="shop-list"></div><button id="next-round" class="primary">Nächste Runde</button></div></section>
+    <section id="shop" class="overlay" hidden><div class="panel shop-panel"><p class="eyebrow" id="shop-kicker">Versorgung nach Runde <span id="shop-round">1</span></p><h2 id="shop-title">Arsenal</h2><p><span id="shop-buyer"></span> · Budget: <b id="credits">0</b> Credits</p><div id="shop-list" class="shop-list"></div><button id="next-round" class="primary">Nächste Runde</button></div></section>
   </main>
 </body>
 </html>

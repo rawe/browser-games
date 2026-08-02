@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   WORLD, WEAPONS, terrainFor, surfaceAt, crater, makePlayers, placePlayers,
-  predictImpact, damageAt, chooseAiShot, tankAt, boundaryHit, previewPath,
+  predictImpact, damageAt, chooseAiShot, tankAt, boundaryHit, previewPath, shotVelocity,
 } from '../game.js';
 
 const a = terrainFor(42), b = terrainFor(42);
@@ -13,9 +13,13 @@ crater(a, 400, surfaceAt(a, 400), 30, true); assert.ok(surfaceAt(a, 400) < WORLD
 const players = makePlayers(4, 2); placePlayers(players, b); assert.equal(players.filter((p) => p.human).length, 2);
 assert.ok(players.every((p) => p.y === surfaceAt(b, p.x) - 9));
 const shot = predictImpact(players[0], b, 0); assert.ok(Number.isFinite(shot.x) && Number.isFinite(shot.y));
-const victim = players[1]; const oldHp = victim.hp; damageAt(players, victim.x, victim.y, WEAPONS[1], players[0]); assert.ok(victim.hp < oldHp);
+const victim = players[1]; const oldHp = victim.hp, oldScore = players[0].score; damageAt(players, victim.x, victim.y, WEAPONS[1], players[0]); assert.ok(victim.hp < oldHp); assert.ok(players[0].score > oldScore, 'Auch verursachter Schaden bringt Credits');
 chooseAiShot(players[2], players, b, 12); assert.ok(players[2].angle >= 5 && players[2].angle <= 85); assert.ok(players[2].power >= 100 && players[2].power <= 900);
 assert.equal(new Set(WEAPONS.map((w) => w.id)).size, WEAPONS.length, 'Waffen-IDs sind eindeutig');
+assert.equal(WEAPONS.length, 10, 'Das erweiterte Arsenal enthält zehn Waffen und Größenstufen');
+assert.equal(WEAPONS.filter((w) => w.dirt).length, 3, 'Erdwaffen sind in drei Größen vorhanden');
+assert.ok(WEAPONS.some((w) => w.acid) && WEAPONS.some((w) => w.laser), 'Säure und energiebasierter Laser sind verfügbar');
+players[0].angle = 120; assert.ok(shotVelocity(players[0]).vx < 0, 'Winkel über 90 Grad feuern rückwärts zur Blickrichtung');
 assert.equal(tankAt(players, players[1].x, players[1].y, players[0]), players[1], 'Panzer besitzt eine Trefferfläche oberhalb des Bodens');
 assert.equal(tankAt(players, players[0].x, players[0].y, players[0], 0.05), null, 'Schütze wird beim Verlassen des Laufs kurz ignoriert');
 assert.equal(boundaryHit({ x: -1, y: 200, vx: -20, vy: 10 }, 'open').action, 'leave');
