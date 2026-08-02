@@ -5,11 +5,17 @@ Ein eigenständiges, rundenbasiertes 2D-Artilleriespiel, inspiriert vom Spielpri
 ## Spielen
 
 - Pfeiltasten oder Bildschirmtasten: Winkel und Ladung
+- Schieberegler: Winkel und Ladung auf Touch-Geräten
 - `Tab` oder Waffenknopf: verfügbare Waffe wechseln
 - Leertaste oder **FEUER**: schießen
+- Ein-Finger-Wischen beziehungsweise Mausziehen: Kamera verschieben
+- Zwei-Finger-Geste beziehungsweise Mausrad: zoomen
+- `◎`: Kamera auf den aktiven Panzer setzen
 - Lokal spielen 1–4 Menschen im Hot-Seat gegen 1–4 Computergegner (maximal sechs Panzer)
 
-Wind, Schwerkraft und das pro Runde erzeugte Gelände beeinflussen die Flugbahn. Explosionen schlagen Krater, der Erdformer baut Gelände auf. Abschüsse und Rundensiege bringen Credits für Spezialmunition.
+Wind, Schwerkraft und das pro Runde erzeugte Gelände beeinflussen die Flugbahn. Explosionen schlagen Krater, der Erdformer baut Gelände auf. Geschosse zünden bei Kontakt mit der Trefferfläche eines Panzers. Abschüsse und Rundensiege bringen Credits für Spezialmunition.
+
+Vor der Partie stehen drei Randregeln zur Wahl: Ohne Wände verlassen Geschosse das Feld und Panzer können aus der Welt fallen. Feste Wände lassen Geschosse am Rand explodieren und tragen Panzer am Boden. Spiegelwände reflektieren Geschosse. Die optionale Zielhilfe zeigt nur den ersten Flugabschnitt; die ebenfalls optionale letzte Flugbahn wird für jeden Spieler getrennt gespeichert.
 
 ## Aufbau
 
@@ -21,4 +27,4 @@ npm run check:artillerie
 
 ## Umfang dieser ersten Version
 
-Enthalten sind sechs deutlich verschiedene Waffen, lokale Mehrspielerpartien, Computergegner, zufälliger Wind, zerstörbares Höhenfeld-Terrain, Fallschaden, Rundenwertung und Einkauf. Weitere Waffen, Teamspiel, Leitsysteme, Verteidigung und gespeicherte Matchserien sind sinnvolle spätere Ausbaustufen.
+Enthalten sind sechs deutlich verschiedene Waffen, lokale Mehrspielerpartien, Computergegner, zufälliger Wind, zerstörbares Höhenfeld-Terrain, Fallschaden, drei Randmodi, eine schwenk- und zoombare Kamera, optionale Schusshilfen, Rundenwertung und Einkauf. Weitere Waffen, Teamspiel, Leitsysteme, Verteidigung und gespeicherte Matchserien sind sinnvolle spätere Ausbaustufen.

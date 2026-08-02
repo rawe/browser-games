@@ -1,4 +1,10 @@
 export const WORLD = { width: 960, height: 540, hud: 66 };
+export const TANK = { halfWidth: 17, top: 20, bottom: 7 };
+export const WALL_MODES = [
+  { id: 'open', name: 'Keine Wände' },
+  { id: 'solid', name: 'Feste Wände' },
+  { id: 'mirror', name: 'Spiegelwände' },
+];
 
 export const WEAPONS = [
   { id: 'granate', name: 'Granate', icon: '●', radius: 28, damage: 48, cost: 0, stock: Infinity },
@@ -82,6 +88,40 @@ export function stepProjectile(projectile, dt, wind) {
   projectile.y += projectile.vy * dt;
   projectile.age += dt;
   return projectile;
+}
+
+export function tankAt(players, x, y, shooter = null, shotAge = Infinity, grace = 0.12) {
+  return players.find((player) => player.hp > 0
+    && !(player === shooter && shotAge < grace)
+    && x >= player.x - TANK.halfWidth && x <= player.x + TANK.halfWidth
+    && y >= player.y - TANK.top && y <= player.y + TANK.bottom) ?? null;
+}
+
+export function boundaryHit(projectile, mode, world = WORLD) {
+  const left = projectile.x <= 0, right = projectile.x >= world.width;
+  const top = projectile.y <= world.hud, bottom = projectile.y >= world.height;
+  if (!left && !right && !top && !bottom) return null;
+  if (mode === 'open') return { action: 'leave', bottom };
+  if (mode === 'solid') return { action: 'explode', bottom };
+  if (left || right) projectile.vx *= -1;
+  if (top || bottom) projectile.vy *= -1;
+  projectile.x = clamp(projectile.x, 1, world.width - 1);
+  projectile.y = clamp(projectile.y, world.hud + 1, world.height - 1);
+  return { action: 'bounce', bottom };
+}
+
+export function previewPath(player, terrain, wind, wallMode = 'open', seconds = 0.72) {
+  const v = shotVelocity(player);
+  const p = { x: player.x + player.facing * 19, y: player.y - 12, ...v, age: 0 };
+  const points = [];
+  for (let i = 0; i < seconds * 120; i += 1) {
+    stepProjectile(p, 1 / 120, wind);
+    const edge = boundaryHit(p, wallMode);
+    points.push({ x: p.x, y: p.y });
+    if ((edge && edge.action !== 'bounce') || p.y >= surfaceAt(terrain, p.x)) break;
+    if (edge?.action === 'bounce') break;
+  }
+  return points;
 }
 
 export function predictImpact(player, terrain, wind, weapon = WEAPONS[0]) {
