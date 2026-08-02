@@ -74,14 +74,21 @@ export function makePlayers(count, humans = 1) {
   }));
 }
 
-export function placePlayers(players, terrain) {
-  players.forEach((p, i) => {
+export function placePlayers(players, terrain, random = Math.random) {
+  const positions = players.map((_, i) => {
     const section = terrain.length / players.length;
-    p.x = Math.round(section * (i + 0.5));
+    return Math.round(section * (i + 0.18 + random() * 0.64));
+  });
+  for (let i = positions.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [positions[i], positions[j]] = [positions[j], positions[i]];
+  }
+  players.forEach((p, i) => {
+    p.x = positions[i];
     p.y = surfaceAt(terrain, p.x) - 9;
     p.hp = 100;
     p.deathTriggered = false;
-    p.facing = i < players.length / 2 ? 1 : -1;
+    p.facing = p.x < terrain.length / 2 ? 1 : -1;
   });
 }
 
