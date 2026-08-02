@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   WORLD, WEAPONS, terrainFor, surfaceAt, crater, makePlayers, placePlayers,
-  predictImpact, damageAt, chooseAiShot, tankAt, boundaryHit, previewPath, shotVelocity,
+  predictImpact, damageAt, chooseAiShot, tankAt, boundaryHit, previewPath, shotVelocity, muzzlePoint,
 } from '../game.js';
 
 const a = terrainFor(42), b = terrainFor(42);
@@ -16,10 +16,13 @@ const shot = predictImpact(players[0], b, 0); assert.ok(Number.isFinite(shot.x) 
 const victim = players[1]; const oldHp = victim.hp, oldScore = players[0].score; damageAt(players, victim.x, victim.y, WEAPONS[1], players[0]); assert.ok(victim.hp < oldHp); assert.ok(players[0].score > oldScore, 'Auch verursachter Schaden bringt Credits');
 chooseAiShot(players[2], players, b, 12); assert.ok(players[2].angle >= 5 && players[2].angle <= 85); assert.ok(players[2].power >= 100 && players[2].power <= 900);
 assert.equal(new Set(WEAPONS.map((w) => w.id)).size, WEAPONS.length, 'Waffen-IDs sind eindeutig');
-assert.equal(WEAPONS.length, 10, 'Das erweiterte Arsenal enthält zehn Waffen und Größenstufen');
+assert.equal(WEAPONS.length, 14, 'Das erweiterte Arsenal enthält vierzehn Waffen und Größenstufen');
 assert.equal(WEAPONS.filter((w) => w.dirt).length, 3, 'Erdwaffen sind in drei Größen vorhanden');
 assert.ok(WEAPONS.some((w) => w.acid) && WEAPONS.some((w) => w.laser), 'Säure und energiebasierter Laser sind verfügbar');
+assert.deepEqual(WEAPONS.filter((w) => w.cluster).map((w) => w.cluster), [3, 5, 7], 'MIRV ist als Cluster 3, 5 und 7 verfügbar');
+assert.ok(WEAPONS.find((w) => w.id === 'nuke').cost > players[0].score, 'Nuklearwaffen sind nicht vom Startkapital kaufbar');
 players[0].angle = 120; assert.ok(shotVelocity(players[0]).vx < 0, 'Winkel über 90 Grad feuern rückwärts zur Blickrichtung');
+players[0].angle = 45; const muzzle = muzzlePoint(players[0]); assert.ok(muzzle.x > players[0].x && muzzle.y < players[0].y, 'Geschoss und Vorschau beginnen an der Laufmündung');
 assert.equal(tankAt(players, players[1].x, players[1].y, players[0]), players[1], 'Panzer besitzt eine Trefferfläche oberhalb des Bodens');
 assert.equal(tankAt(players, players[0].x, players[0].y, players[0], 0.05), null, 'Schütze wird beim Verlassen des Laufs kurz ignoriert');
 assert.equal(boundaryHit({ x: -1, y: 200, vx: -20, vy: 10 }, 'open').action, 'leave');

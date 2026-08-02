@@ -7,16 +7,20 @@ export const WALL_MODES = [
 ];
 
 export const WEAPONS = [
-  { id: 'granate', name: 'Feldgranate', icon: '●', radius: 28, damage: 48, cost: 0, stock: Infinity, kind: 'blast', description: 'Zuverlässige Standardexplosion.' },
-  { id: 'brecher', name: 'Brecher', icon: '◉', radius: 48, damage: 76, cost: 180, stock: 2, kind: 'blast', description: 'Größerer Krater und kräftige Druckwelle.' },
-  { id: 'nuke', name: '20-kT-Nova', icon: '☢', radius: 82, damage: 105, cost: 440, stock: 1, kind: 'nuke', description: 'Gewaltige Explosion für ganze Hügelkuppen.' },
-  { id: 'mirv', name: 'MIRV-Fächer', icon: '✣', radius: 24, damage: 38, cost: 380, stock: 1, mirv: true, kind: 'mirv', description: 'Fünf Einschläge nebeneinander.' },
-  { id: 'bohrer', name: 'Kettenbohrer', icon: '⌁', radius: 20, damage: 34, cost: 270, stock: 2, burrow: true, kind: 'drill', description: 'Frisst einen tiefen Schacht in den Boden.' },
-  { id: 'erde-klein', name: 'Erdkapsel', icon: '▴', radius: 25, damage: 0, cost: 110, stock: 3, dirt: true, kind: 'dirt', description: 'Baut einen kleinen schützenden Hügel.' },
-  { id: 'erde', name: 'Erdformer', icon: '▲', radius: 46, damage: 0, cost: 190, stock: 2, dirt: true, kind: 'dirt', description: 'Erzeugt eine massive Erdkugel.' },
-  { id: 'erde-gross', name: 'Bergbauer', icon: '⛰', radius: 72, damage: 0, cost: 360, stock: 1, dirt: true, kind: 'dirt', description: 'Hebt einen ganzen Berg aus dem Nichts.' },
-  { id: 'saeure', name: 'Säureregen', icon: '☂', radius: 60, damage: 24, cost: 340, stock: 1, acid: true, kind: 'acid', description: 'Löst eine breite Säule Erdreich nach unten auf.' },
-  { id: 'laser', name: 'Prismenlaser', icon: '━', radius: 20, damage: 82, cost: 620, stock: 1000, laser: true, kind: 'laser', description: '1000 Energie; Leistung bestimmt Reichweite und Verbrauch.' },
+  { id: 'granate', name: 'Granate MK I', icon: '●', radius: 28, damage: 48, cost: 0, stock: Infinity, category: 'Sprengsätze', kind: 'blast', effect: 'blast', description: 'Zuverlässige Standardexplosion.' },
+  { id: 'brecher', name: 'Brecher MK III', icon: '◉', radius: 48, damage: 76, cost: 260, stock: 2, category: 'Sprengsätze', kind: 'blast', effect: 'heavy', description: 'Doppelte Druckwelle und tiefer Krater.' },
+  { id: 'titan', name: 'Titan MK VII', icon: '⬤', radius: 66, damage: 94, cost: 680, stock: 1, category: 'Sprengsätze', kind: 'nuke', effect: 'heavy', description: 'Schwere Flächenladung kurz unterhalb der Nuklearklasse.' },
+  { id: 'nuke', name: 'Nova MK IX', icon: '☢', radius: 92, damage: 120, cost: 1300, stock: 1, category: 'Sprengsätze', kind: 'nuke', effect: 'nuke', description: 'Nuklearer Blitz und gewaltiger Krater.' },
+  { id: 'mirv-3', name: 'MIRV Cluster 3', icon: '✣', radius: 25, damage: 40, cost: 360, stock: 2, category: 'Cluster', kind: 'mirv', effect: 'mirv', cluster: 3, description: 'Drei versetzte Einschläge.' },
+  { id: 'mirv-5', name: 'MIRV Cluster 5', icon: '✣', radius: 25, damage: 38, cost: 650, stock: 1, category: 'Cluster', kind: 'mirv', effect: 'mirv', cluster: 5, description: 'Fünf Einschläge decken einen Hang ab.' },
+  { id: 'mirv-7', name: 'MIRV Cluster 7', icon: '✺', radius: 24, damage: 35, cost: 1100, stock: 1, category: 'Cluster', kind: 'mirv', effect: 'mirv', cluster: 7, description: 'Sieben Sprengköpfe für ein ganzes Tal.' },
+  { id: 'bohrer', name: 'Kettenbohrer', icon: '⌁', radius: 20, damage: 34, cost: 300, stock: 2, category: 'Geländebrecher', burrow: true, kind: 'drill', effect: 'drill', description: 'Frisst einen tiefen Schacht in den Boden.' },
+  { id: 'saeure', name: 'Säure MK III', icon: '☂', radius: 55, damage: 22, cost: 390, stock: 2, category: 'Geländebrecher', acid: true, kind: 'acid', effect: 'acid', description: 'Zersetzt Erdreich; danach sackt der Hang ab.' },
+  { id: 'saeure-9', name: 'Säure MK IX', icon: '☣', radius: 86, damage: 32, cost: 1050, stock: 1, category: 'Geländebrecher', acid: true, kind: 'acid', effect: 'acid', description: 'Löst einen breiten Bergabschnitt vollständig auf.' },
+  { id: 'erde-klein', name: 'Erdformer MK I', icon: '▴', radius: 25, damage: 0, cost: 130, stock: 3, category: 'Erdformer', dirt: true, kind: 'dirt', effect: 'dirt', description: 'Kleine Erdkugel; Panzer können eingebettet werden.' },
+  { id: 'erde', name: 'Erdformer MK III', icon: '▲', radius: 46, damage: 0, cost: 260, stock: 2, category: 'Erdformer', dirt: true, kind: 'dirt', effect: 'dirt', description: 'Erzeugt eine massive Erdkugel.' },
+  { id: 'erde-gross', name: 'Erdformer MK IX', icon: '⛰', radius: 76, damage: 0, cost: 900, stock: 1, category: 'Erdformer', dirt: true, kind: 'dirt', effect: 'dirt', description: 'Hebt einen Berg und begräbt alles darin.' },
+  { id: 'laser', name: 'Prismenlaser', icon: '━', radius: 16, damage: 0, cost: 760, stock: 1000, category: 'Energiewaffen', laser: true, kind: 'laser', effect: 'laser', description: '1000 Energie reichen für mehr als zwei Kartenbreiten.' },
 ];
 
 const COLORS = ['#58c8ff', '#ff646f', '#ffd34e', '#8bf084', '#c58cff', '#ff9f43'];
@@ -86,6 +90,14 @@ export function shotVelocity(player) {
   return { vx: Math.cos(a) * player.power * player.facing, vy: -Math.sin(a) * player.power };
 }
 
+export function muzzlePoint(player, length = 25) {
+  const a = player.angle * Math.PI / 180;
+  return {
+    x: player.x + Math.cos(a) * length * player.facing,
+    y: player.y - 10 - Math.sin(a) * length,
+  };
+}
+
 export function stepProjectile(projectile, dt, wind) {
   projectile.vx += wind * dt;
   projectile.vy += 230 * dt;
@@ -117,7 +129,8 @@ export function boundaryHit(projectile, mode, world = WORLD) {
 
 export function previewPath(player, terrain, wind, wallMode = 'open', seconds = 0.72) {
   const v = shotVelocity(player);
-  const p = { x: player.x + player.facing * 19, y: player.y - 12, ...v, age: 0 };
+  const muzzle = muzzlePoint(player);
+  const p = { ...muzzle, ...v, age: 0 };
   const points = [];
   for (let i = 0; i < seconds * 120; i += 1) {
     stepProjectile(p, 1 / 120, wind);
@@ -131,7 +144,8 @@ export function previewPath(player, terrain, wind, wallMode = 'open', seconds = 
 
 export function predictImpact(player, terrain, wind, weapon = WEAPONS[0]) {
   const v = shotVelocity(player);
-  const p = { x: player.x + player.facing * 15, y: player.y - 10, ...v, age: 0 };
+  const muzzle = muzzlePoint(player);
+  const p = { ...muzzle, ...v, age: 0 };
   for (let i = 0; i < 1200; i += 1) {
     stepProjectile(p, 1 / 120, wind);
     if (p.x < 0 || p.x >= terrain.length || p.y > WORLD.height) return { x: p.x, y: p.y, out: true };
