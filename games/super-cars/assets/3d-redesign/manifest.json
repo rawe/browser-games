@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "coordinateSystem": {
+    "forward": "+X",
+    "up": "+Y",
+    "left": "+Z",
+    "origin": "center of ground footprint"
+  },
+  "bounds": {
+    "length": 4.6,
+    "height": 1.45,
+    "width": 2.2,
+    "wheelbase": 2.68,
+    "wheelRadius": 0.47,
+    "tireWidth": 0.42
+  },
+  "references": {
+    "style": "references/titelscreenshot.webp",
+    "currentState": "references/ist-zustand-3d.jpg",
+    "family": "concepts/00-fahrzeugfamilie.webp"
+  },
+  "vehicles": [
+    {
+      "id": "roter-keil",
+      "role": "player",
+      "modelSheet": "concepts/01-roter-keil-modellblatt.webp",
+      "output": "models/roter-keil.glb",
+      "paint": "#ff4b3a",
+      "features": ["wingless", "engine-louvers", "square-tail-lights", "deep-diffuser"]
+    },
+    {
+      "id": "magenta-fluegel",
+      "role": "aggressive-rival",
+      "modelSheet": "concepts/02-magenta-fluegel-modellblatt.webp",
+      "output": "models/magenta-fluegel.glb",
+      "paint": "#ff5ca8",
+      "features": ["high-rear-wing", "thin-tail-lights", "central-twin-exhaust", "diffuser-fins"]
+    },
+    {
+      "id": "cyan-puls",
+      "role": "light-rival",
+      "modelSheet": "concepts/03-cyan-puls-modellblatt.webp",
+      "output": "models/cyan-puls.glb",
+      "paint": "#2ad4c8",
+      "features": ["integrated-ducktail", "flying-buttresses", "rectangular-light-signature", "clean-facets"]
+    }
+  ],
+  "limits": {
+    "trianglesPerVehicleMin": 4000,
+    "trianglesPerVehicleMax": 8000,
+    "materialsMax": 6,
+    "fileSizeBytesMax": 1000000,
+    "textureSizeMax": 512
+  }
+}
+
