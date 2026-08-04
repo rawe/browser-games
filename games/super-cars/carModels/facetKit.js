@@ -4,9 +4,23 @@
 // Vertex-Colors; alternativ kann eine feste RGB-Farbe gesetzt werden (Lichter).
 import * as THREE from 'three';
 
-export const SHADES = [0.72, 0.82, 0.9, 1.0, 1.08];
+export const SHADES = [0.66, 0.80, 0.92, 1.02, 1.12];
 
-export function facetBuilder() {
+/** Deterministisches Pseudo-Rauschen aus einer Position (kein Math.random). */
+function hash(x, y, z) {
+  const s = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+/**
+ * @param facets  true aktiviert die Facetten-Unterteilung: Quads werden über
+ *                einen leicht versetzten Mittelpunkt in vier Dreiecke geteilt,
+ *                Dreiecke über den Schwerpunkt in drei. Kanten bleiben exakt
+ *                erhalten (keine Risse), die Schattierung streut pro Facette —
+ *                das ergibt den fein triangulierten Look der Modellblätter.
+ * @param jitter  Auslenkung des Mittelpunkts entlang der Flächennormale.
+ */
+export function facetBuilder({ facets = false, jitter = 0.02 } = {}) {
   const positions = [];
   const colors = [];
   let colorOverride = null;
@@ -14,7 +28,7 @@ export function facetBuilder() {
   const setColor = (rgb) => { colorOverride = rgb; };
   const clearColor = () => { colorOverride = null; };
 
-  const triangle = (a, b, c, shade = 2) => {
+  const pushTriangle = (a, b, c, shade) => {
     positions.push(...a, ...b, ...c);
     if (colorOverride) {
       for (let i = 0; i < 3; i++) colors.push(...colorOverride);
@@ -24,15 +38,56 @@ export function facetBuilder() {
     }
   };
 
+  const jitteredShade = (shade, seed) => {
+    const h = hash(seed[0] * 3.1, seed[1] * 5.7, seed[2] * 7.3);
+    return shade + (h < 0.33 ? -1 : h > 0.66 ? 1 : 0);
+  };
+
+  const faceNormal = (a, b, c) => {
+    const ux = b[0] - a[0]; const uy = b[1] - a[1]; const uz = b[2] - a[2];
+    const vx = c[0] - a[0]; const vy = c[1] - a[1]; const vz = c[2] - a[2];
+    let nx = uy * vz - uz * vy; let ny = uz * vx - ux * vz; let nz = ux * vy - uy * vx;
+    const len = Math.hypot(nx, ny, nz) || 1;
+    return [nx / len, ny / len, nz / len];
+  };
+
+  const triangle = (a, b, c, shade = 2) => {
+    if (!facets || colorOverride) { pushTriangle(a, b, c, shade); return; }
+    const m = [(a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3, (a[2] + b[2] + c[2]) / 3];
+    const n = faceNormal(a, b, c);
+    const off = (hash(m[0], m[1], m[2]) - 0.5) * 2 * jitter;
+    const mj = [m[0] + n[0] * off, m[1] + n[1] * off, m[2] + n[2] * off];
+    pushTriangle(a, b, mj, jitteredShade(shade, a));
+    pushTriangle(b, c, mj, jitteredShade(shade, b));
+    pushTriangle(c, a, mj, jitteredShade(shade, c));
+  };
+
   const quad = (a, b, c, d, shade = 2, flipDiagonal = false) => {
+    if (facets && !colorOverride) {
+      const m = [
+        (a[0] + b[0] + c[0] + d[0]) / 4,
+        (a[1] + b[1] + c[1] + d[1]) / 4,
+        (a[2] + b[2] + c[2] + d[2]) / 4,
+      ];
+      const n = faceNormal(a, b, c);
+      const off = (hash(m[0], m[1], m[2]) - 0.5) * 2 * jitter;
+      const mj = [m[0] + n[0] * off, m[1] + n[1] * off, m[2] + n[2] * off];
+      pushTriangle(a, b, mj, jitteredShade(shade, a));
+      pushTriangle(b, c, mj, jitteredShade(shade, b));
+      pushTriangle(c, d, mj, jitteredShade(shade, c));
+      pushTriangle(d, a, mj, jitteredShade(shade, d));
+      return;
+    }
     if (flipDiagonal) {
-      triangle(a, b, d, shade);
-      triangle(b, c, d, Math.min(4, shade + 1));
+      pushTriangle(a, b, d, clampShade(shade));
+      pushTriangle(b, c, d, clampShade(shade + 1));
     } else {
-      triangle(a, b, c, shade);
-      triangle(a, c, d, Math.max(0, shade - 1));
+      pushTriangle(a, b, c, clampShade(shade));
+      pushTriangle(a, c, d, clampShade(shade - 1));
     }
   };
+
+  const clampShade = (s) => Math.max(0, Math.min(4, s));
 
   const box = (x, y, z, sx, sy, sz, shade = 2) => {
     const x0 = x - sx / 2; const x1 = x + sx / 2;
