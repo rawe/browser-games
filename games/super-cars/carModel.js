@@ -4,6 +4,7 @@
 // variiert nur das Lackmaterial. Maße, Ursprung und +X-Vorwärtsachse bleiben
 // identisch zur Fahrphysik.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildRoterKeil } from './carModels/roterKeil.js';
 import { buildMagentaFluegel } from './carModels/magentaFluegel.js';
 import { buildCyanPuls } from './carModels/cyanPuls.js';
@@ -26,12 +27,32 @@ function getModelGeometries(type) {
 }
 
 // Sichtbare Räder bewusst kleiner als der Physik-Radius (0,47): Die
-// Modellblätter zeigen die Reifenoberkante unterhalb der Schulterlinie.
+// Modellblätter zeigen die Reifenoberkante unterhalb der Kotflügelkrone.
 // Bodenkontakt bleibt bei Y = 0, die Fahrphysik nutzt diese Meshes nicht.
-const TIRE_GEOMETRY = new THREE.CylinderGeometry(0.36, 0.36, 0.30, 10, 1);
+const TIRE_GEOMETRY = new THREE.CylinderGeometry(0.40, 0.40, 0.32, 10, 1);
 TIRE_GEOMETRY.rotateX(Math.PI / 2);
-const RIM_GEOMETRY = new THREE.CylinderGeometry(0.26, 0.26, 0.28, 8, 1);
-RIM_GEOMETRY.rotateX(Math.PI / 2);
+
+// Fünfspeichen-Felge wie auf den Modellblättern: offener Felgenring,
+// Speichenstern und Nabe als eine gemeinsame Geometrie (ein Draw Call).
+function buildRimGeometry() {
+  const parts = [];
+  const ring = new THREE.CylinderGeometry(0.30, 0.30, 0.28, 10, 1, true);
+  parts.push(ring);
+  for (let i = 0; i < 5; i++) {
+    // radial 0,26 lang, 0,18 tief (Radachse), 0,06 breit; bündig zur Felgenkante
+    const spoke = new THREE.BoxGeometry(0.30, 0.18, 0.07);
+    spoke.translate(0.16, 0.045, 0);
+    spoke.rotateY((i / 5) * Math.PI * 2);
+    parts.push(spoke);
+  }
+  const hub = new THREE.CylinderGeometry(0.08, 0.08, 0.26, 6, 1);
+  hub.translate(0, 0.01, 0);
+  parts.push(hub);
+  const merged = mergeGeometries(parts.map((p) => p.toNonIndexed()));
+  merged.rotateX(Math.PI / 2);
+  return merged;
+}
+const RIM_GEOMETRY = buildRimGeometry();
 const SHADOW_GEOMETRY = new THREE.CircleGeometry(2.22, 14);
 
 let sharedMaterials;
@@ -59,9 +80,9 @@ function getSharedMaterials() {
   if (sharedMaterials) return sharedMaterials;
   sharedMaterials = {
     carbon: new THREE.MeshLambertMaterial({ color: 0x565e68, map: makeCarbonTexture(), vertexColors: true }),
-    tire: new THREE.MeshLambertMaterial({ color: 0x0b0d11 }),
-    rim: new THREE.MeshLambertMaterial({ color: 0x343a44 }),
-    glass: new THREE.MeshLambertMaterial({ color: 0x2c6e96, vertexColors: true }),
+    tire: new THREE.MeshLambertMaterial({ color: 0x14171c }),
+    rim: new THREE.MeshLambertMaterial({ color: 0x828b99 }),
+    glass: new THREE.MeshLambertMaterial({ color: 0x2f6ea6, vertexColors: true }),
     lights: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
     shadow: new THREE.MeshBasicMaterial({
       color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false,
@@ -74,7 +95,7 @@ function makeWheelInstances(geometry, material, outerShift = 0) {
   const mesh = new THREE.InstancedMesh(geometry, material, 4);
   const matrix = new THREE.Matrix4();
   const z = 0.84 + outerShift;
-  const positions = [[1.33, 0.36, z], [1.33, 0.36, -z], [-1.35, 0.36, z], [-1.35, 0.36, -z]];
+  const positions = [[1.33, 0.40, z], [1.33, 0.40, -z], [-1.35, 0.40, z], [-1.35, 0.40, -z]];
   positions.forEach(([x, y, pz], index) => {
     matrix.makeTranslation(x, y, pz);
     mesh.setMatrixAt(index, matrix);
