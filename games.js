@@ -6,6 +6,12 @@
 // auf den gehashten Dateinamen um (nackte Strings kopiert der Build nicht mit).
 export const games = [
   {
+    slug: 'fantasy-pinball',
+    title: 'Fantasy Pinball',
+    description: 'Smartphone-Flipper-Prototyp mit stabiler Physik, Runenrampe und einem Tisch, der sich im Spiel umbaut.',
+    emoji: '🔮',
+  },
+  {
     slug: 'artillerie-commander',
     title: 'Artillerie Commander',
     description: 'Rundenbasierte Panzerschlachten: Winkel, Ladung und Wind meistern, Gelände sprengen und das Arsenal aufrüsten.',
