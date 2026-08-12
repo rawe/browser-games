@@ -6,6 +6,14 @@
 // auf den gehashten Dateinamen um (nackte Strings kopiert der Build nicht mit).
 export const games = [
   {
+    slug: 'artillerie-commander',
+    title: 'Artillerie Commander',
+    description: 'Rundenbasierte Panzerschlachten: Winkel, Ladung und Wind meistern, Gelände sprengen und das Arsenal aufrüsten.',
+    emoji: '💥',
+    cover: new URL('./games/artillerie-commander/assets/title-banner.webp', import.meta.url).href,
+    coverAlt: 'Zwei farbige Pixelpanzer beschießen sich über eine Kraterlandschaft, während eine Granate im hohen Bogen fliegt',
+  },
+  {
     slug: 'alterac',
     title: 'Alterac Combat Simulator',
     description: 'Taktik-Autobattler: Routen planen, Truppen fusionieren, Punkte halten – dann läuft die Schlacht von allein.',
