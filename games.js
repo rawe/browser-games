@@ -30,6 +30,14 @@ export const games = [
     coverAlt: 'Ein Prisma teilt weißes Licht in einen cyanfarbenen und einen bernsteinfarbenen Pfad, die an einem zweiten Prisma wieder weiß zusammenlaufen',
   },
   {
+    slug: 'schach',
+    title: 'Schach',
+    description: 'Zu zweit am selben Gerät oder gegen den Rechner: gedrehtes Brett, Uhr, Zugliste – und eine Engine mit drei Spielstärken.',
+    emoji: '♛',
+    cover: new URL('./games/schach/assets/title-banner.webp', import.meta.url).href,
+    coverAlt: 'Eine weiße Dame steht auf einem perspektivisch fluchtenden Brett vor dem umgekippten schwarzen König',
+  },
+  {
     slug: 'super-cars',
     title: 'Super Cars',
     description: 'Arcade-Rennen mit Raketen, Tuning-Shop und Meisterschaft – 3D von schräg hinten.',
