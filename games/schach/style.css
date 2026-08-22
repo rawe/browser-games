@@ -1,0 +1,524 @@
+/* Schach – dunkle Bühne, damit Holz und Figuren die Farbe tragen. */
+
+.schach {
+  color-scheme: dark;
+  --ink: #eef2f8;
+  --ink-dim: #98a4b8;
+  --stage: #0e1117;
+  --glass: rgba(22, 27, 38, 0.82);
+  --glass-line: rgba(150, 180, 230, 0.16);
+  --gold: #f0c26a;
+  --gold-soft: rgba(240, 194, 106, 0.16);
+  --warn: #e8695f;
+  --good: #7ddba0;
+
+  margin: 0;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--stage);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* `display: grid/flex` weiter unten würde das HTML-Attribut `hidden`
+   überstimmen – ausgeblendete Bildschirme fingen dann Fingertipps ab. */
+.schach [hidden] { display: none !important; }
+
+.schach button { font-family: inherit; }
+
+/* ---------- Bühne ---------- */
+
+/* Hochformat: Gegner oben, Brett, eigene Leiste, dann Zugliste und Knöpfe.
+   Das Brett ist quadratisch und nimmt sich, was Breite und Resthöhe hergeben –
+   der Rest der Höhe fällt an die Zugliste statt an leeren Hintergrund. */
+.stage {
+  position: relative;
+  height: 100dvh;
+  display: grid;
+  grid-template-areas: 'top' 'board' 'bottom' 'dock';
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+           env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+
+.board-area {
+  grid-area: board;
+  position: relative;
+  /* Zwei Deckel: die Breite des Geräts und die Höhe, die nach Leisten und
+     Knopfreihe übrig bleibt. Ohne den zweiten schöbe ein kurzer Schirm die
+     Bedienung aus dem Bild. */
+  width: min(100%, calc(100dvh - 12.5rem));
+  aspect-ratio: 1;
+  margin-inline: auto;
+  min-width: 0;
+}
+
+#board {
+  position: absolute;
+  inset: 0;
+  display: block;
+  /* Ohne das rutscht auf dem Handy bei jedem Ziehen die Seite mit. */
+  touch-action: none;
+}
+
+/* ---------- Spielerleisten ---------- */
+
+.player-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.7rem;
+  min-height: 3rem;
+}
+
+.player-bar--top { grid-area: top; }
+.player-bar--bottom { grid-area: bottom; }
+
+.player {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.player-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Die Seite am Zug bekommt einen goldenen Punkt vor den Namen – im
+   Zweispielermodus am selben Gerät ist das die wichtigste Information auf
+   dem Schirm. */
+.player-bar--active .player-name::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.4rem;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0.5rem var(--gold);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-bar--active .player-name::before { animation: none; }
+}
+
+.player-taken {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1.1rem;
+}
+
+.captured { display: block; }
+
+.lead {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--good);
+}
+
+.player-state {
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--warn);
+  white-space: nowrap;
+}
+
+.player-state--think { color: var(--ink-dim); }
+
+.clock {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.15rem;
+  font-weight: 600;
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.6rem;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  color: var(--ink-dim);
+}
+
+.player-bar--active .clock { color: var(--ink); border-color: rgba(240, 194, 106, 0.5); }
+.clock--low { color: var(--warn) !important; border-color: rgba(232, 105, 95, 0.6) !important; }
+
+.icon-btn {
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  font-size: 1.1rem;
+  color: var(--ink);
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  cursor: pointer;
+}
+
+.icon-btn:hover { border-color: var(--gold); }
+
+/* ---------- Knopfreihe und Zugliste ---------- */
+
+.dock {
+  grid-area: dock;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 0.5rem;
+  padding: 0.15rem 0.7rem 0.7rem;
+}
+
+.dock-actions {
+  display: flex;
+  gap: 0.45rem;
+  justify-content: center;
+}
+
+.pill {
+  flex: 1 1 auto;
+  max-width: 11rem;
+  padding: 0.6rem 0.5rem;
+  border-radius: 0.75rem;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  cursor: pointer;
+}
+
+.pill:hover:not(:disabled) { border-color: var(--gold); }
+.pill:disabled { opacity: 0.4; cursor: default; }
+
+/* Auf niedrigen Schirmen bleibt unter dem Brett kein Platz für die Liste –
+   dort öffnet sie der Knopf „Züge“ in einem eigenen Bildschirm. */
+.dock .move-list { display: none; }
+
+@media (min-height: 44rem) {
+  .dock .move-list {
+    display: block;
+    flex: 1;
+    padding: 0.25rem;
+    border-radius: 0.8rem;
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .pill--moves { display: none; }
+}
+
+.move-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.88rem;
+}
+
+.move-list li {
+  display: grid;
+  grid-template-columns: 2.4rem 1fr 1fr;
+  gap: 0.3rem;
+  padding: 0.22rem 0.4rem;
+  border-radius: 0.4rem;
+}
+
+.move-list li:nth-child(odd) { background: rgba(255, 255, 255, 0.03); }
+.move-list .move-no { color: var(--ink-dim); }
+.move-list .move--last { background: var(--gold-soft); color: var(--gold); }
+.move-list--full { max-height: 46vh; margin-bottom: 0.5rem; }
+
+.move-list li.move-empty {
+  display: block;
+  color: var(--ink-dim);
+  font-size: 0.88rem;
+  padding: 0.5rem 0.5rem;
+  background: none;
+}
+
+/* ---------- Querformat und Tablet: Liste dauerhaft neben das Brett ---------- */
+
+@media (min-width: 46rem) and (min-aspect-ratio: 1 / 1) {
+  .stage {
+    grid-template-areas: 'board top' 'board dock' 'board bottom';
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, 21rem);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 0 0.5rem;
+    padding: max(env(safe-area-inset-top, 0px), 0.5rem)
+             max(env(safe-area-inset-right, 0px), 0.6rem)
+             max(env(safe-area-inset-bottom, 0px), 0.5rem)
+             max(env(safe-area-inset-left, 0px), 0.6rem);
+  }
+
+  /* Neben dem Brett stehen die Leisten nicht mehr darüber und darunter –
+     hier begrenzt die Höhe der Spalte, nicht die Resthöhe des Geräts. */
+  .board-area {
+    width: auto;
+    height: 100%;
+    max-width: 100%;
+    margin: auto;
+  }
+
+  .dock {
+    padding: 0.2rem 0.4rem;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 0.9rem;
+  }
+
+  .dock .move-list { display: block; flex: 1; }
+  .pill--moves { display: none; }
+  .player-bar { padding: 0.5rem 0.4rem; }
+}
+
+/* ---------- Bildschirme ---------- */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(8, 10, 15, 0.82);
+  backdrop-filter: blur(10px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.panel, .title-card, .promo-card {
+  width: min(30rem, 100%);
+  padding: 1.5rem;
+  border-radius: 1.1rem;
+  background: linear-gradient(160deg, rgba(34, 41, 56, 0.95), rgba(18, 22, 32, 0.95));
+  border: 1px solid var(--glass-line);
+  box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.5);
+}
+
+.panel h2, .panel-sub { margin: 0 0 0.4rem; }
+.panel h2 { font-size: 1.35rem; }
+.panel-sub { color: var(--ink-dim); font-size: 0.9rem; margin-bottom: 1rem; }
+
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.1rem;
+}
+
+.cta, .ghost {
+  flex: 1 1 8rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.8rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+
+.cta {
+  color: #201703;
+  background: linear-gradient(160deg, #f7d68d, #d9a53f);
+  box-shadow: 0 0.5rem 1.2rem rgba(217, 165, 63, 0.25);
+}
+
+.cta:hover { filter: brightness(1.07); }
+
+.cta--ghost, .ghost {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--glass-line);
+  box-shadow: none;
+}
+
+.ghost:hover, .cta--ghost:hover { border-color: var(--gold); }
+.ghost--warn { color: var(--warn); }
+
+/* ---------- Titelbild ---------- */
+
+.overlay--title { background: radial-gradient(circle at 50% 30%, #1c2233, #080a0f 70%); }
+
+.title-card { text-align: center; }
+
+.title-art { margin: -0.5rem 0 0.5rem; }
+.title-art canvas { width: 100%; height: auto; display: block; }
+
+.game-logo {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+  font-size: clamp(2.2rem, 11vw, 3.2rem);
+  letter-spacing: 0.14em;
+  color: #f7e3ad;
+  text-shadow: 0 0.15rem 1.5rem rgba(0, 0, 0, 0.8);
+}
+
+.tagline { color: var(--ink-dim); margin: 0.3rem 0 1.4rem; font-size: 0.95rem; }
+
+.title-actions { display: grid; gap: 0.55rem; }
+.title-actions > * { flex: none; }
+
+/* ---------- Auswahlfelder ---------- */
+
+.field { margin-bottom: 1.1rem; }
+
+.field-label {
+  display: block;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.45rem;
+}
+
+.field-note { color: var(--ink-dim); font-size: 0.82rem; margin: 0.5rem 0 0; min-height: 1.1rem; }
+
+.choice-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+.choice {
+  flex: 1 1 6rem;
+  padding: 0.6rem 0.5rem;
+  border-radius: 0.7rem;
+  font-size: 0.88rem;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-line);
+  cursor: pointer;
+}
+
+.choice:hover { border-color: rgba(240, 194, 106, 0.6); }
+
+.choice[aria-checked='true'] {
+  background: var(--gold-soft);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.field--switch { display: grid; gap: 0.6rem; }
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.switch input {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: #d9a53f;
+}
+
+.menu-list { display: grid; gap: 0.5rem; margin-bottom: 1.2rem; }
+.menu-list > * { flex: none; }
+
+/* ---------- Regeln ---------- */
+
+.rules { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem; }
+
+.rules li {
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: 0.6rem;
+  align-items: start;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.rule-mark {
+  font-size: 1.15rem;
+  text-align: center;
+  color: var(--gold);
+}
+
+kbd {
+  font-family: inherit;
+  font-size: 0.82em;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.3rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--glass-line);
+}
+
+/* ---------- Umwandlung ---------- */
+
+.overlay--promo { background: rgba(8, 10, 15, 0.72); }
+
+.promo-card { width: auto; text-align: center; padding: 1rem 1.1rem 1.1rem; }
+.promo-title { margin: 0 0 0.7rem; font-size: 0.95rem; color: var(--ink-dim); }
+.promo-row { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
+
+.promo-choice {
+  width: 4.2rem;
+  height: 4.2rem;
+  padding: 0;
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-line);
+  cursor: pointer;
+}
+
+.promo-choice:hover { border-color: var(--gold); background: var(--gold-soft); }
+.promo-choice canvas { display: block; width: 100%; height: 100%; }
+
+/* ---------- Schluss ---------- */
+
+.panel--over { text-align: center; }
+
+.over-kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.panel--over h2 { font-size: 1.7rem; margin: 0.3rem 0 0.5rem; }
+.over-detail { color: var(--ink-dim); font-size: 0.92rem; margin: 0 0 0.8rem; }
+
+.over-score {
+  font-family: Georgia, serif;
+  font-size: 2rem;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+  margin-bottom: 0.3rem;
+}
+
+/* ---------- Kurzmeldung ---------- */
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 5.5rem);
+  translate: -50% 0;
+  z-index: 20;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  animation: toast-in 0.2s ease-out;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; translate: -50% 0.5rem; }
+}
+
+.back-link { z-index: 11; }

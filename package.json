@@ -10,7 +10,8 @@
     "check:turbo": "node games/turbo-trophy/sim/checks.js",
     "sim:lumen": "node games/lumenweber/sim/run.js",
     "check:lumen": "node games/lumenweber/sim/checks.js",
-    "check:artillerie": "node games/artillerie-commander/sim/checks.js"
+    "check:artillerie": "node games/artillerie-commander/sim/checks.js",
+    "check:schach": "node games/schach/sim/checks.js"
   },
   "devDependencies": {
     "esbuild": "^0.28.1",
