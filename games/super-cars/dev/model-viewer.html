@@ -7,10 +7,19 @@
   <style>
     body { margin: 0; background: #b9b6b2; }
     canvas { display: block; width: 100vw; height: 100vh; }
-    #info { position: fixed; top: 8px; left: 12px; font: 13px system-ui; color: #222; }
+    #info { position: fixed; bottom: 12px; left: 16px; font: 12px system-ui; color: #34383d; }
+    nav { position: fixed; z-index: 1; top: 12px; left: 12px; display: flex; gap: 8px; align-items: center; padding: 8px; background: #f3f1eced; border-radius: 10px; font: 12px system-ui; }
+    select, a { font: inherit; color: #20262d; padding: 7px; border: 1px solid #d2d0ca; border-radius: 5px; background: #fff; }
+    a { text-decoration: none; }
+    @media(max-width: 540px) { nav { right: 12px; flex-wrap: wrap; } }
   </style>
 </head>
 <body>
+  <nav aria-label="Modellansicht">
+    <select id="model" aria-label="Fahrzeug"><option value="roter-keil">Roter Keil</option><option value="magenta-fluegel">Magenta Flügel</option><option value="cyan-puls">Cyan Puls</option></select>
+    <select id="view" aria-label="Ansicht"><option value="all">Alle sechs Ansichten</option><option value="0">Vorne schräg</option><option value="1">Seite</option><option value="2">Teaser-Perspektive</option><option value="3">Front</option><option value="4">Heck</option><option value="5">Oben</option></select>
+    <a href="../assets/3d-redesign/references/titelscreenshot.webp" target="_blank" rel="noopener">Teaser-Referenz ↗</a>
+  </nav>
   <div id="info"></div>
   <canvas id="stage"></canvas>
   <script type="module" src="./model-viewer.js"></script>

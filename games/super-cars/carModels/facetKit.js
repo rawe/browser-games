@@ -4,7 +4,7 @@
 // Vertex-Colors; alternativ kann eine feste RGB-Farbe gesetzt werden (Lichter).
 import * as THREE from 'three';
 
-export const SHADES = [0.66, 0.80, 0.92, 1.02, 1.12];
+export const SHADES = [0.60, 0.76, 0.88, 0.98, 1.06];
 
 /** Deterministisches Pseudo-Rauschen aus einer Position (kein Math.random). */
 function hash(x, y, z) {
@@ -20,7 +20,7 @@ function hash(x, y, z) {
  *                das ergibt den fein triangulierten Look der Modellblätter.
  * @param jitter  Auslenkung des Mittelpunkts entlang der Flächennormale.
  */
-export function facetBuilder({ facets = false, jitter = 0.02 } = {}) {
+export function facetBuilder({ facets = false, jitter = 0.02, contrast = 1 } = {}) {
   const positions = [];
   const colors = [];
   let colorOverride = null;
@@ -80,10 +80,10 @@ export function facetBuilder({ facets = false, jitter = 0.02 } = {}) {
     }
     if (flipDiagonal) {
       pushTriangle(a, b, d, clampShade(shade));
-      pushTriangle(b, c, d, clampShade(shade + 1));
+      pushTriangle(b, c, d, clampShade(shade + contrast));
     } else {
       pushTriangle(a, b, c, clampShade(shade));
-      pushTriangle(a, c, d, clampShade(shade - 1));
+      pushTriangle(a, c, d, clampShade(shade - contrast));
     }
   };
 

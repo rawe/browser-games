@@ -1,5 +1,10 @@
 # Technische Modellvorgaben
 
+> Die GLB-/Knotenvorgaben unten sind die externe Modellierungs-Zielspezifikation.
+> Der aktuelle prozedurale Spielstand ist in `README.md` dokumentiert. Sichtbare
+> Räder: Radius 0,47, Breite 0,34, Mittelpunkte bei X = +1,33 / −1,35,
+> Y = 0,47 und Z = ±0,855. Sie werden instanziert und derzeit nicht animiert.
+
 ## Koordinatensystem und Maße
 
 Die bestehende Spiellogik erwartet dieselbe Ausrichtung wie das aktuelle prozedurale Modell:
