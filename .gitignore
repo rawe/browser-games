@@ -8,3 +8,6 @@ _lokal/
 games/*/prompt-*.md
 games/*/_referenz-export.html
 .claude/
+
+# Heruntergeladene Modell-Kandidaten (CC-BY/Markenrisiko) nicht versionieren
+games/super-cars/dev/candidates/

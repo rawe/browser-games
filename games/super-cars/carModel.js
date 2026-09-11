@@ -26,30 +26,30 @@ function getModelGeometries(type) {
   return modelCache.get(type);
 }
 
-// Sichtbare Räder bewusst kleiner als der Physik-Radius (0,47): Die
-// Modellblätter zeigen die Reifenoberkante unterhalb der Kotflügelkrone.
-// Bodenkontakt bleibt bei Y = 0, die Fahrphysik nutzt diese Meshes nicht.
-const TIRE_GEOMETRY = new THREE.CylinderGeometry(0.40, 0.40, 0.32, 10, 1);
+// Annular tire section: the rim opening is real, with a beveled shoulder.
+const tireProfile = [[.335,-.15],[.40,-.17],[.455,-.135],[.47,-.095],
+  [.47,.095],[.455,.135],[.40,.17],[.335,.15],[.335,-.15]];
+const tireShell = new THREE.LatheGeometry(tireProfile.map(([r,y]) => new THREE.Vector2(r,y)),20);
+const brakeDisc = new THREE.CylinderGeometry(.292,.292,.025,20);
+const TIRE_GEOMETRY = mergeGeometries([tireShell, brakeDisc]);
+tireShell.dispose(); brakeDisc.dispose();
 TIRE_GEOMETRY.rotateX(Math.PI / 2);
 
-// Fünfspeichen-Felge wie auf den Modellblättern: offener Felgenring,
-// Speichenstern und Nabe als eine gemeinsame Geometrie (ein Draw Call).
 function buildRimGeometry() {
-  const parts = [];
-  const ring = new THREE.CylinderGeometry(0.30, 0.30, 0.28, 10, 1, true);
-  parts.push(ring);
-  for (let i = 0; i < 5; i++) {
-    // radial 0,26 lang, 0,18 tief (Radachse), 0,06 breit; bündig zur Felgenkante
-    const spoke = new THREE.BoxGeometry(0.30, 0.18, 0.07);
-    spoke.translate(0.16, 0.045, 0);
-    spoke.rotateY((i / 5) * Math.PI * 2);
-    parts.push(spoke);
+  const parts=[];
+  const lip = new THREE.TorusGeometry(.331,.018,4,20);
+  lip.rotateX(Math.PI/2); lip.translate(0,.153,0); parts.push(lip);
+  const innerLip = new THREE.TorusGeometry(.295,.012,4,20);
+  innerLip.rotateX(Math.PI/2); innerLip.translate(0,.14,0); parts.push(innerLip);
+  for(let i=0;i<5;i++) {
+    const spoke=new THREE.BoxGeometry(.235,.055,.065);
+    spoke.translate(.178,.15,0); spoke.rotateY(i*Math.PI*2/5); parts.push(spoke);
   }
-  const hub = new THREE.CylinderGeometry(0.08, 0.08, 0.26, 6, 1);
-  hub.translate(0, 0.01, 0);
-  parts.push(hub);
-  const merged = mergeGeometries(parts.map((p) => p.toNonIndexed()));
-  merged.rotateX(Math.PI / 2);
+  const hub=new THREE.CylinderGeometry(.092,.092,.08,10);
+  hub.translate(0,.15,0); parts.push(hub);
+  const merged=mergeGeometries(parts.map(p=>p.index?p.toNonIndexed():p));
+  parts.forEach(p=>p.dispose());
+  merged.rotateX(Math.PI/2);
   return merged;
 }
 const RIM_GEOMETRY = buildRimGeometry();
@@ -57,32 +57,13 @@ const SHADOW_GEOMETRY = new THREE.CircleGeometry(2.22, 14);
 
 let sharedMaterials;
 
-function makeCarbonTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 16; canvas.height = 16;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#11151b'; ctx.fillRect(0, 0, 16, 16);
-  ctx.fillStyle = '#202731';
-  ctx.fillRect(0, 0, 8, 4); ctx.fillRect(8, 8, 8, 4);
-  ctx.fillStyle = '#0a0d11';
-  ctx.fillRect(8, 4, 8, 4); ctx.fillRect(0, 12, 8, 4);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(3, 2);
-  texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.LinearMipmapLinearFilter;
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
 function getSharedMaterials() {
   if (sharedMaterials) return sharedMaterials;
   sharedMaterials = {
-    carbon: new THREE.MeshLambertMaterial({ color: 0x565e68, map: makeCarbonTexture(), vertexColors: true }),
+    carbon: new THREE.MeshLambertMaterial({ color: 0x303640, vertexColors: true }),
     tire: new THREE.MeshLambertMaterial({ color: 0x14171c }),
-    rim: new THREE.MeshLambertMaterial({ color: 0x828b99 }),
-    glass: new THREE.MeshLambertMaterial({ color: 0x2f6ea6, vertexColors: true }),
+    rim: new THREE.MeshPhongMaterial({ color: 0x737d8b, specular: 0x9ba6b6, shininess: 70 }),
+    glass: new THREE.MeshPhongMaterial({ color: 0xffffff, vertexColors: true, specular: 0x749db5, shininess: 95 }),
     lights: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
     shadow: new THREE.MeshBasicMaterial({
       color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false,
@@ -94,10 +75,11 @@ function getSharedMaterials() {
 function makeWheelInstances(geometry, material, outerShift = 0) {
   const mesh = new THREE.InstancedMesh(geometry, material, 4);
   const matrix = new THREE.Matrix4();
-  const z = 0.84 + outerShift;
-  const positions = [[1.33, 0.40, z], [1.33, 0.40, -z], [-1.35, 0.40, z], [-1.35, 0.40, -z]];
+  const z = 0.855 + outerShift;
+  const positions = [[1.33, 0.47, z], [1.33, 0.47, -z], [-1.35, 0.47, z], [-1.35, 0.47, -z]];
   positions.forEach(([x, y, pz], index) => {
-    matrix.makeTranslation(x, y, pz);
+    matrix.makeRotationY(pz < 0 ? Math.PI : 0);
+    matrix.setPosition(x, y, pz);
     mesh.setMatrixAt(index, matrix);
   });
   mesh.instanceMatrix.needsUpdate = true;
@@ -122,7 +104,7 @@ export function createSupercarMesh({ color, isPlayer = false, variant = 0, type 
   const modelType = MODEL_BUILDERS[type] ? type : resolveType({ isPlayer, color, variant });
   const geometries = getModelGeometries(modelType);
   const car = new THREE.Group();
-  const paint = new THREE.MeshLambertMaterial({ color: new THREE.Color(color), vertexColors: true });
+  const paint = new THREE.MeshPhongMaterial({ color: new THREE.Color(color), vertexColors: true, specular: 0x554b46, shininess: 45 });
 
   const body = new THREE.Mesh(geometries.paint, paint);
   const carbonParts = new THREE.Mesh(geometries.carbon, materials.carbon);
@@ -130,7 +112,7 @@ export function createSupercarMesh({ color, isPlayer = false, variant = 0, type 
   const lights = new THREE.Mesh(geometries.lights, materials.lights);
 
   const tires = makeWheelInstances(TIRE_GEOMETRY, materials.tire);
-  const rims = makeWheelInstances(RIM_GEOMETRY, materials.rim, 0.02);
+  const rims = makeWheelInstances(RIM_GEOMETRY, materials.rim);
 
   const shadow = new THREE.Mesh(SHADOW_GEOMETRY, materials.shadow);
   shadow.rotation.x = -Math.PI / 2;

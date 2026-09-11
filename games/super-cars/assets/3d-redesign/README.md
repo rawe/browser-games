@@ -2,17 +2,33 @@
 
 Dieser Ordner ist die eigenständige Übergabegrundlage für neue Fahrzeugmodelle. Er übersetzt den Detailgrad und die Formensprache des Titelscreenshots in drei klar unterscheidbare, browser-taugliche 3D-Fahrzeugtypen.
 
-## Warum die Umstellung nötig ist
+## Aktueller Spielstand
 
-Der Titelscreenshot zeigt eine starke, wiedererkennbare Formensprache:
+Die drei Autos werden direkt in JavaScript modelliert (`carModels/coachwork.js`),
+über `carModel.js` zusammengesetzt und in `scene.js` eingesetzt. Es werden keine
+GLBs oder Konzeptbilder als Fahrzeugtexturen geladen. Die lokalen Kandidaten in
+`dev/candidates/` sind ausschließlich Vergleichsmaterial und bleiben unversioniert.
 
-- breite Mittelmotor-Keilform statt rechteckiger Grundkörper
-- große, bewusst gesetzte Polygonflächen
-- kräftige hintere Radhäuser und eine schmale Kabine
-- dunkle Motorabdeckung, tiefer Diffusor und klare Lichtsignaturen
-- eigenständige Hecklösungen für die einzelnen Fahrzeuge
+Der Aufbau folgt dem Teaser: lackiertes Dach und Fensterrahmen, schmale dunkle
+Scheiben, breite hintere Schultern, offene Radläufe, eingelassene Lichtflächen und
+ein geneigter Motorraum. Der rote Keil hat fünf Lamellen, der Flügeltyp drei
+Motorraumstreben, große Seiteneinlässe und einen freistehenden Flügel; Cyan Puls
+hat einen längeren Dachabschluss und einen integrierten Ducktail.
 
-Der aktuelle 3D-Stand trifft Farbe, Low-Poly-Idee und Verfolgerkamera bereits, wirkt aber deutlich gröber: Die Karosserie besteht aus wenigen Quadern/Querschnitten, die Räder stehen sehr frei, und alle acht Autos teilen praktisch dieselbe Silhouette. Das Ziel ist nicht mehr geometrische Kleinteiligkeit, sondern bessere Proportionen, größere zusammenhängende Flächen und drei erkennbare Karosseriecharaktere.
+Alle Modelle teilen Reifen und sichtbare Fünfspeichenfelgen. Reifen sind echte
+Ringkörper; die Felgen sind auf beiden Fahrzeugseiten nach außen ausgerichtet.
+Lack, Glas und Felgen verwenden Phong-Materialien, Carbon und Reifen Lambert,
+Lichter unbeleuchtete Materialien. Sechs Fahrzeugmaterialien plus Bodenschatten,
+keine Fahrzeugtexturen und sieben Draw Calls je Auto. Die Räder sind instanziert;
+eine Radanimation ist derzeit nicht implementiert.
+
+Geprüfte Größen inklusive Rädern, ohne Bodenschatten:
+
+| Modell | Dreiecke | Länge × Höhe × Breite |
+| --- | ---: | --- |
+| Roter Keil | 4.114 | 4,595 × 1,360 × 2,197 |
+| Magenta Flügel | 4.202 | 4,531 × 1,400 × 2,197 |
+| Cyan Puls | 4.194 | 4,590 × 1,340 × 2,197 |
 
 ## Verbindliche Bildreihenfolge
 
@@ -42,24 +58,16 @@ Die Farbzuordnung ist eine Empfehlung. Wichtiger ist, dass Silhouette und Hecksi
 - `manifest.json` – maschinenlesbare Maße, Farben und Dateizuordnung
 - `models/` – Zielordner für spätere `.glb`-Exporte
 
-## Empfohlener Ablauf
+## Modellieren und prüfen
 
-1. Erst den gemeinsamen Block in `prompts/3d-generator.md` verwenden.
-2. Danach genau einen Fahrzeugtyp mit seinem Modellblatt erzeugen.
-3. Das Ergebnis anhand `MODELLVORGABEN.md` skalieren und ausrichten.
-4. Alle geforderten Materialslots und benannten Knoten prüfen.
-5. Als `.glb` in `models/` exportieren.
-6. In der bestehenden Verfolgerkamera testen, nicht nur im Studio-Viewer.
+1. `carModels/coachwork.js` anhand der Referenzansichten bearbeiten. Gemeinsame
+   Bauteile sind parametrisiert, die Typen besitzen eigene Proportionen und Aero.
+2. `npm run dev` starten und `/games/super-cars/dev/model-viewer.html` öffnen.
+   Fahrzeug und Perspektive sind im Viewer auswählbar; die Teaser-Referenz ist verlinkt.
+3. `npm run check:super-cars` prüft Maße, Bodenkontakt, Material-/Dreieckbudget,
+   Felgenausrichtung und Typzuordnung ohne WebGL.
+4. `npm run build` sowie eine Sichtprüfung im echten Rennen ausführen.
+5. Mobilgeräte separat prüfen; die Geometrieprüfung ist kein GPU-Benchmark.
 
-## Definition of Done
-
-Ein Modell ist erst fertig, wenn:
-
-- die sechs Ansichten seines Modellblatts erkennbar getroffen werden,
-- es im festgelegten Fahrzeug-Bounding-Box-Raum liegt,
-- Ursprung und Achsen stimmen,
-- Räder getrennt drehbar sind,
-- Lichtflächen und Glas getrennte Materialien besitzen,
-- bei acht sichtbaren Autos auf einem Mobilgerät keine unnötige Material- oder Polygonlast entsteht,
-- keine reale Automarke oder ein erkennbar kopiertes Serienmodell enthalten ist.
-
+Die GLB-Prompts und Exportvorgaben bleiben als optionale Übergabe für spätere
+externe Modellierung erhalten. Sie beschreiben keinen aktuell verwendeten Loader.
