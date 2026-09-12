@@ -17,7 +17,8 @@
   "references": {
     "style": "references/titelscreenshot.webp",
     "currentState": "references/ist-zustand-3d.jpg",
-    "family": "concepts/00-fahrzeugfamilie.webp"
+    "family": "concepts/00-fahrzeugfamilie.webp",
+    "heroTurnaround": "concepts/04-red-title-turnaround.webp"
   },
   "vehicles": [
     {
@@ -29,7 +30,7 @@
       "features": [
         "wingless",
         "engine-louvers",
-        "square-tail-lights",
+        "trapezoidal-tail-lights",
         "deep-diffuser"
       ]
     },
@@ -76,6 +77,25 @@
     "wheelRadius": 0.47,
     "tireWidth": 0.34,
     "wheelCenterZ": 0.855,
-    "wheelAnimation": false
+    "wheelAnimation": false,
+    "wheelOverrides": {
+      "roter-keil": {
+        "scale": 0.83,
+        "radius": 0.3901,
+        "tireWidth": 0.2822,
+        "wheelCenterZ": 0.915,
+        "rimSpokes": 10,
+        "rimRadialScale": 1.14,
+        "circumferenceSegments": 24
+      }
+    },
+    "heroGeometry": "../../carModels/redRacer.js",
+    "heroMaterials": "../../carModels/redFinish.js",
+    "postprocessing": "../../carPresentation.js",
+    "heroOcclusion": {
+      "data": "../../carModels/redOcclusionData.js",
+      "bakeTool": "../../dev/bake-red-occlusion.mjs",
+      "extraRenderPasses": 0
+    }
   }
 }

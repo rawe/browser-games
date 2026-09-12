@@ -6,8 +6,15 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createSupercarMesh } from '../carModel.js';
+import { createCarPresentation } from '../carPresentation.js';
 
 const params = new URLSearchParams(location.search);
+const embedded = params.has('embed');
+if (embedded) {
+  document.querySelector('nav').hidden = true;
+  document.querySelector('nav').style.display = 'none';
+  document.getElementById('info').hidden = true;
+}
 const type = params.get('type') || 'roter-keil';
 const color = parseInt(params.get('color') || 'ff4b3a', 16);
 const isPlayer = params.get('player') !== '0';
@@ -30,6 +37,19 @@ scene.add(dir);
 const fill = new THREE.DirectionalLight(0xbfd4ff, 0.35);
 fill.position.set(-5, 3, -4);
 scene.add(fill);
+if (type === 'roter-keil') {
+  scene.background = new THREE.Color(0x242633);
+  scene.fog = new THREE.Fog(0x242633,12,50);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  dir.color.set(0xffc38b); dir.intensity = 3.4; dir.position.set(5,8,-1);
+  dir.castShadow = true; dir.shadow.mapSize.set(2048,2048);
+  Object.assign(dir.shadow.camera,{left:-4,right:4,top:4,bottom:-4,near:.1,far:20});
+  dir.shadow.bias=-.0004; dir.shadow.normalBias=.035;
+  fill.color.set(0xffd4bd); fill.intensity=.85; fill.position.set(-5,3,4);
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshStandardMaterial({color:0x242c39,roughness:.84,metalness:.05}));
+  ground.rotation.x=-Math.PI/2;ground.position.y=-.007;ground.receiveShadow=true;scene.add(ground);
+}
 
 // Each model already includes a contact shadow; a uniform studio background
 // avoids unrelated horizons in the six inspection cameras.
@@ -65,6 +85,10 @@ if (glbUrl) {
   });
 } else {
   const car = createSupercarMesh({ color, isPlayer, type });
+  if(type === 'roter-keil') {
+    car.children[0].visible=false;
+    car.traverse(obj=>{if(obj.isMesh){obj.castShadow=true;obj.receiveShadow=false;}});
+  }
   scene.add(car);
   document.getElementById('info').textContent =
     `${type} – #${color.toString(16).padStart(6, '0')}`;
@@ -72,15 +96,16 @@ if (glbUrl) {
 
 // Sechs Ansichten: 3/4 vorn, Seite, 3/4 hinten, Front, Heck, oben.
 const VIEWS = [
-  { pos: [6.2, 2.6, 4.6], look: [0, 0.55, 0], fov: 26 },
+  { pos: [6.2,2.6,4.6], look: [0,.55,0], fov: type === 'roter-keil' ? 24 : 26 },
   { pos: [0, 1.1, 8.2], look: [0, 0.62, 0], fov: 26 },
-  { pos: [-6.2, 2.6, 4.6], look: [0, 0.55, 0], fov: 26 },
+  { pos: type === 'roter-keil' ? [-4.4804, 1.9004, 2.6501] : [-6.2, 2.6, 4.6], look: [0, 0.55, 0], fov: type === 'roter-keil' ? 32.7 : 26 },
   { pos: [8.6, 1.4, 0], look: [0, 0.6, 0], fov: 24 },
   { pos: [-8.6, 1.4, 0], look: [0, 0.6, 0], fov: 24 },
   { pos: [0.01, 10.5, 0], look: [0, 0, 0], fov: 26 },
 ];
 
 const only = params.has('view') ? parseInt(params.get('view'), 10) : null;
+const presentation = type === 'roter-keil' && only !== null ? createCarPresentation(renderer) : null;
 
 function render() {
   const w = canvas.clientWidth; const h = canvas.clientHeight;
@@ -91,10 +116,21 @@ function render() {
     renderer.setScissor(0, 0, w, h);
     const camera = new THREE.PerspectiveCamera(view.fov, w / h, 0.1, 100);
     // Bei schmalen Viewports die Kamera zurückziehen, damit das Auto passt.
-    const back = Math.max(1, 1.6 / (w / h));
-    camera.position.set(view.pos[0] * back, view.pos[1] * back, view.pos[2] * back);
+    const back = Math.max(1, (embedded ? 1.45 : 1.6) / (w / h));
+    const fittedRear=type==='roter-keil' && only===2;
+    const distanceScale=fittedRear?1:back;
+    if(fittedRear){camera.fov=2*Math.atan(Math.tan(view.fov*Math.PI/360)*back)*180/Math.PI;camera.updateProjectionMatrix();}
+    camera.position.set(view.pos[0] * distanceScale, view.pos[1] * distanceScale, view.pos[2] * distanceScale * (embedded && (only === 0 || only === 1) ? -1 : 1));
     camera.lookAt(...view.look);
-    renderer.render(scene, camera);
+    if(fittedRear && embedded){
+      // Match the title crop's original 1536 × 640 pixel coordinates.
+      const scale=2.05*w/1536;
+      camera.fov=2*Math.atan(320/790.027)*180/Math.PI;
+      camera.setViewOffset(1536,640,768-496.549,320-365.069+.23*h/scale,w/scale,h/scale);
+      camera.lookAt(0,.6,0);
+    }
+    if(presentation) { renderer.setScissorTest(false); presentation.render(scene,camera); }
+    else renderer.render(scene, camera);
     return;
   }
   const cols = w < h ? 2 : 3; const rows = 6 / cols;
