@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0e1117" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="description" content="Schach im Browser – zu zweit am selben Gerät oder gegen den Computer." />
+  <title>Schach</title>
+  <link rel="stylesheet" href="/shared/base.css" />
+  <link rel="stylesheet" href="./style.css" />
+  <script type="module" src="./main.js"></script>
+</head>
+<body class="schach">
+  <div id="stage" class="stage">
+
+    <!-- Leiste der oben sitzenden Seite -->
+    <header id="bar-top" class="player-bar player-bar--top">
+      <button id="btn-menu" class="icon-btn" type="button" aria-label="Menü">☰</button>
+      <div class="player">
+        <span id="top-name" class="player-name">Schwarz</span>
+        <span class="player-taken">
+          <canvas id="top-captured" class="captured" width="0" height="0" aria-hidden="true"></canvas>
+          <span id="top-lead" class="lead"></span>
+        </span>
+      </div>
+      <span id="top-state" class="player-state" hidden></span>
+      <span id="top-clock" class="clock" hidden>0:00</span>
+    </header>
+
+    <!-- Das Brett füllt seine Rasterzelle vollständig aus; die Geometrie
+         rechnet gfx/layout.js aus genau dieser Fläche. -->
+    <div id="board-area" class="board-area">
+      <canvas id="board" aria-label="Schachbrett"></canvas>
+    </div>
+
+    <!-- Leiste der unten sitzenden Seite -->
+    <footer id="bar-bottom" class="player-bar player-bar--bottom">
+      <div class="player">
+        <span id="bottom-name" class="player-name">Weiß</span>
+        <span class="player-taken">
+          <canvas id="bottom-captured" class="captured" width="0" height="0" aria-hidden="true"></canvas>
+          <span id="bottom-lead" class="lead"></span>
+        </span>
+      </div>
+      <span id="bottom-state" class="player-state" hidden></span>
+      <span id="bottom-clock" class="clock" hidden>0:00</span>
+    </footer>
+
+    <!-- Zugliste und Bedienknöpfe. Im Querformat steht das dauerhaft neben dem
+         Brett, im Hochformat nur die Knopfreihe – die Liste öffnet dort ein
+         eigener Bildschirm. -->
+    <div id="dock" class="dock">
+      <ol id="move-list" class="move-list" aria-label="Zugliste"></ol>
+      <div class="dock-actions">
+        <button id="btn-undo" class="pill" type="button" title="Zug zurücknehmen (U)">↩ Zurück</button>
+        <button id="btn-flip" class="pill" type="button" title="Brett drehen (F)">⇅ Drehen</button>
+        <button id="btn-moves" class="pill pill--moves" type="button">≡ Züge</button>
+      </div>
+    </div>
+
+    <!-- ══ Bildschirme ═══════════════════════════════════════════════════ -->
+
+    <section id="screen-title" class="overlay overlay--title">
+      <div class="title-card">
+        <div class="title-art" aria-hidden="true">
+          <canvas id="title-canvas" width="720" height="220"></canvas>
+        </div>
+        <h1 class="game-logo">Schach</h1>
+        <p class="tagline">Zu zweit am selben Gerät – oder gegen den Rechner.</p>
+        <div class="title-actions">
+          <button id="btn-start-hotseat" class="cta" type="button">👥 Zwei Spieler</button>
+          <button id="btn-start-computer" class="cta cta--ghost" type="button">🖥 Gegen Computer</button>
+          <button id="btn-resume" class="ghost" type="button" hidden>▶ Partie fortsetzen</button>
+          <button id="btn-rules" class="ghost" type="button">So geht's</button>
+        </div>
+      </div>
+      <a class="back-link" href="../../index.html">← Übersicht</a>
+    </section>
+
+    <section id="screen-setup" class="overlay" hidden>
+      <div class="panel">
+        <h2 id="setup-title">Neue Partie</h2>
+        <p id="setup-sub" class="panel-sub">Am selben Gerät, abwechselnd.</p>
+
+        <div id="setup-level" class="field" hidden>
+          <span class="field-label">Spielstärke</span>
+          <div id="level-row" class="choice-row" role="radiogroup" aria-label="Spielstärke"></div>
+          <p id="level-note" class="field-note"></p>
+        </div>
+
+        <div id="setup-side" class="field" hidden>
+          <span class="field-label">Deine Farbe</span>
+          <div id="side-row" class="choice-row" role="radiogroup" aria-label="Deine Farbe"></div>
+        </div>
+
+        <div class="field">
+          <span class="field-label">Bedenkzeit</span>
+          <div id="time-row" class="choice-row" role="radiogroup" aria-label="Bedenkzeit"></div>
+        </div>
+
+        <div id="setup-flip" class="field field--switch" hidden>
+          <label class="switch">
+            <input id="opt-autoflip" type="checkbox" />
+            <span>Brett zur Seite drehen, die am Zug ist</span>
+          </label>
+        </div>
+
+        <div class="panel-actions">
+          <button id="btn-setup-start" class="cta" type="button">Partie starten</button>
+          <button id="btn-setup-back" class="ghost" type="button">Zurück</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-menu" class="overlay" hidden>
+      <div class="panel">
+        <h2>Menü</h2>
+        <p id="menu-sub" class="panel-sub"></p>
+        <div class="menu-list">
+          <button id="btn-menu-resume" class="cta" type="button">Weiterspielen</button>
+          <button id="btn-menu-new" class="ghost" type="button">Neue Partie</button>
+          <button id="btn-menu-draw" class="ghost" type="button">Remis vereinbaren</button>
+          <button id="btn-menu-resign" class="ghost ghost--warn" type="button">Aufgeben</button>
+          <button id="btn-menu-rules" class="ghost" type="button">So geht's</button>
+        </div>
+
+        <div class="field field--switch">
+          <label class="switch">
+            <input id="opt-sound" type="checkbox" />
+            <span>Klang</span>
+          </label>
+          <label class="switch">
+            <input id="opt-hints" type="checkbox" />
+            <span>Mögliche Züge anzeigen</span>
+          </label>
+          <label class="switch" id="opt-autoflip-row">
+            <input id="opt-autoflip-game" type="checkbox" />
+            <span>Brett automatisch drehen</span>
+          </label>
+        </div>
+
+        <div class="panel-actions">
+          <a class="ghost" href="../../index.html">Alle Spiele</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-moves" class="overlay" hidden>
+      <div class="panel">
+        <h2>Zugliste</h2>
+        <ol id="move-list-full" class="move-list move-list--full"></ol>
+        <div class="panel-actions">
+          <button id="btn-moves-close" class="cta" type="button">Zurück</button>
+          <button id="btn-copy-pgn" class="ghost" type="button">Notation kopieren</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-rules" class="overlay" hidden>
+      <div class="panel">
+        <h2>So geht's</h2>
+        <ul class="rules">
+          <li><b class="rule-mark">👆</b><span><b>Ziehen oder tippen.</b> Figur antippen, dann das Zielfeld – oder die Figur gleich mit dem Finger an ihren Platz schieben. Die Punkte zeigen, wohin sie darf.</span></li>
+          <li><b class="rule-mark">👥</b><span><b>Zu zweit am selben Gerät.</b> Wer am Zug ist, dessen Leiste leuchtet. Auf Wunsch dreht sich das Brett nach jedem Zug zur Seite, die dran ist.</span></li>
+          <li><b class="rule-mark">♜</b><span><b>Rochade:</b> den König zwei Felder zum Turm ziehen – der Turm springt von selbst hinüber.</span></li>
+          <li><b class="rule-mark">♟</b><span><b>En passant:</b> Zieht ein Bauer zwei Felder an deinem vorbei, darfst du ihn im nächsten Zug schräg schlagen, als wäre er nur eines gezogen.</span></li>
+          <li><b class="rule-mark">♛</b><span><b>Umwandlung:</b> Ein Bauer auf der letzten Reihe wird zu einer Figur deiner Wahl – meist zur Dame.</span></li>
+          <li><b class="rule-mark">⚠</b><span><b>Schach</b> färbt das Feld des Königs rot. Wer im Schach steht, muss es abwenden; geht das nicht, ist es <b>Schachmatt</b>.</span></li>
+          <li><b class="rule-mark">½</b><span><b>Remis</b> gibt es bei Patt, dreifacher Stellungswiederholung, 50 Zügen ohne Schlag oder Bauernzug, zu wenig Material – oder auf Vereinbarung im Menü.</span></li>
+          <li><b class="rule-mark">⌨</b><span><b>Ohne Zeigegerät:</b> Pfeiltasten bewegen den Fokus, <kbd>Enter</kbd> wählt. <kbd>U</kbd> nimmt zurück, <kbd>F</kbd> dreht das Brett, <kbd>Esc</kbd> öffnet das Menü.</span></li>
+        </ul>
+        <div class="panel-actions">
+          <button id="btn-rules-close" class="cta" type="button">Verstanden</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Umwandlung: erscheint dicht am Brett, damit der Blick nicht springt -->
+    <section id="screen-promo" class="overlay overlay--promo" hidden>
+      <div class="promo-card">
+        <p class="promo-title">Bauer wird zu …</p>
+        <div id="promo-row" class="promo-row"></div>
+        <button id="btn-promo-cancel" class="ghost" type="button">Abbrechen</button>
+      </div>
+    </section>
+
+    <section id="screen-over" class="overlay overlay--over" hidden>
+      <div class="panel panel--over">
+        <p id="over-kicker" class="over-kicker">Partie beendet</p>
+        <h2 id="over-title">Schachmatt</h2>
+        <p id="over-detail" class="over-detail"></p>
+        <div id="over-score" class="over-score"></div>
+        <div class="panel-actions">
+          <button id="btn-over-again" class="cta" type="button">Nochmal</button>
+          <button id="btn-over-review" class="ghost" type="button">Brett ansehen</button>
+          <button id="btn-over-menu" class="ghost" type="button">Neue Partie</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  </div>
+
+  <noscript><p style="padding:2rem">Für dieses Schachspiel wird JavaScript gebraucht.</p></noscript>
+</body>
+</html>

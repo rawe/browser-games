@@ -35,6 +35,14 @@ npm run check:lumen                # Abnahme aller Level und der Spiellogik
 npm run sim:lumen -- --show=l05    # Start- und Lösungsbild im Terminal
 ```
 
+Schach prüft seine Engine gegen veröffentlichte Perft-Zahlen – dieselben, an
+denen sich jeder Zuggenerator messen lassen muss – und spielt zur Abnahme eine
+Partie Suche gegen Suche durch; siehe [`games/schach/sim/`](games/schach/sim/):
+
+```bash
+npm run check:schach               # Zuggenerierung, Notation, Regeln, Suche
+```
+
 ## Struktur
 
 ```

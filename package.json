@@ -11,6 +11,7 @@
     "sim:lumen": "node games/lumenweber/sim/run.js",
     "check:lumen": "node games/lumenweber/sim/checks.js",
     "check:artillerie": "node games/artillerie-commander/sim/checks.js",
+    "check:schach": "node games/schach/sim/checks.js",
     "check:super-cars": "node games/super-cars/sim/model-checks.js"
   },
   "devDependencies": {
