@@ -6,6 +6,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildRoterKeil } from './carModels/roterKeil.js';
+import { HERO_WHEEL_SCALE as RED_WHEEL_SCALE, HERO_WHEEL_RADIUS as RED_WHEEL_RADIUS } from './carModels/redRacer.js';
+import { getRedFinish, createRedPaint } from './carModels/redFinish.js';
 import { buildMagentaFluegel } from './carModels/magentaFluegel.js';
 import { buildCyanPuls } from './carModels/cyanPuls.js';
 
@@ -35,24 +37,45 @@ const TIRE_GEOMETRY = mergeGeometries([tireShell, brakeDisc]);
 tireShell.dispose(); brakeDisc.dispose();
 TIRE_GEOMETRY.rotateX(Math.PI / 2);
 
-function buildRimGeometry() {
+const redTireProfile = [[.385,-.15],[.422,-.17],[.457,-.135],[.47,-.095],
+  [.47,.095],[.457,.135],[.422,.17],[.385,.15],[.385,-.15]];
+const redTireShell=new THREE.LatheGeometry(redTireProfile.map(([r,y])=>new THREE.Vector2(r,y)),24);
+const redBrakeDisc=new THREE.CylinderGeometry(.335,.335,.025,24);
+const RED_TIRE_GEOMETRY=mergeGeometries([redTireShell,redBrakeDisc]);
+redTireShell.dispose();redBrakeDisc.dispose();RED_TIRE_GEOMETRY.rotateX(Math.PI/2);
+
+function buildRimGeometry(spokes = 5) {
+  const red=spokes===10,segments=red?24:20;
   const parts=[];
-  const lip = new THREE.TorusGeometry(.331,.018,4,20);
+  const lip = new THREE.TorusGeometry(.331,.018,4,segments);
   lip.rotateX(Math.PI/2); lip.translate(0,.153,0); parts.push(lip);
-  const innerLip = new THREE.TorusGeometry(.295,.012,4,20);
+  const innerLip = new THREE.TorusGeometry(.295,.012,4,segments);
   innerLip.rotateX(Math.PI/2); innerLip.translate(0,.14,0); parts.push(innerLip);
-  for(let i=0;i<5;i++) {
-    const spoke=new THREE.BoxGeometry(.235,.055,.065);
-    spoke.translate(.178,.15,0); spoke.rotateY(i*Math.PI*2/5); parts.push(spoke);
+  for(let i=0;i<spokes;i++) {
+    let spoke;
+    if(red){
+      const profile=new THREE.Shape();profile.moveTo(.075,-.022);profile.lineTo(.115,.035);profile.lineTo(.300,.025);profile.lineTo(.305,-.014);profile.closePath();
+      spoke=new THREE.ExtrudeGeometry(profile,{depth:.035,bevelEnabled:true,bevelSegments:1,steps:1,bevelSize:.004,bevelThickness:.004});
+      spoke.rotateX(Math.PI/2);spoke.translate(0,.17,0);
+    }else{spoke=new THREE.BoxGeometry(.235,.055,.065);spoke.translate(.178,.15,0);}
+    spoke.rotateY(i*Math.PI*2/spokes);parts.push(spoke);
   }
   const hub=new THREE.CylinderGeometry(.092,.092,.08,10);
   hub.translate(0,.15,0); parts.push(hub);
+  if(red)parts.forEach((part,i)=>{
+    const shade=i===0?[1.35,1.40,1.45]:i===1?[.52,.56,.61]:[.25,.28,.32];
+    const colors=new Float32Array(part.attributes.position.count*3);
+    for(let j=0;j<colors.length;j+=3)colors.set(shade,j);
+    part.setAttribute('color',new THREE.BufferAttribute(colors,3));
+  });
   const merged=mergeGeometries(parts.map(p=>p.index?p.toNonIndexed():p));
   parts.forEach(p=>p.dispose());
   merged.rotateX(Math.PI/2);
   return merged;
 }
 const RIM_GEOMETRY = buildRimGeometry();
+const RED_RIM_GEOMETRY = buildRimGeometry(10);
+RED_RIM_GEOMETRY.scale(1.14,1.14,1);
 const SHADOW_GEOMETRY = new THREE.CircleGeometry(2.22, 14);
 
 let sharedMaterials;
@@ -72,13 +95,15 @@ function getSharedMaterials() {
   return sharedMaterials;
 }
 
-function makeWheelInstances(geometry, material, outerShift = 0) {
+function makeWheelInstances(geometry, material, red = false) {
   const mesh = new THREE.InstancedMesh(geometry, material, 4);
   const matrix = new THREE.Matrix4();
-  const z = 0.855 + outerShift;
-  const positions = [[1.33, 0.47, z], [1.33, 0.47, -z], [-1.35, 0.47, z], [-1.35, 0.47, -z]];
+  const z = red ? .915 : .855;
+  const y = red ? RED_WHEEL_RADIUS : .47;
+  const positions = [[1.33, y, z], [1.33, y, -z], [-1.35, y, z], [-1.35, y, -z]];
   positions.forEach(([x, y, pz], index) => {
     matrix.makeRotationY(pz < 0 ? Math.PI : 0);
+    if (red) matrix.scale(new THREE.Vector3(RED_WHEEL_SCALE, RED_WHEEL_SCALE, RED_WHEEL_SCALE));
     matrix.setPosition(x, y, pz);
     mesh.setMatrixAt(index, matrix);
   });
@@ -104,17 +129,19 @@ export function createSupercarMesh({ color, isPlayer = false, variant = 0, type 
   const modelType = MODEL_BUILDERS[type] ? type : resolveType({ isPlayer, color, variant });
   const geometries = getModelGeometries(modelType);
   const car = new THREE.Group();
-  const paint = new THREE.MeshPhongMaterial({ color: new THREE.Color(color), vertexColors: true, specular: 0x554b46, shininess: 45 });
+  const red = modelType === 'roter-keil';
+  const finish = red ? getRedFinish() : materials;
+  const paint = red ? createRedPaint(color) : new THREE.MeshPhongMaterial({ color: new THREE.Color(color), vertexColors: true, specular: 0x554b46, shininess: 45 });
 
   const body = new THREE.Mesh(geometries.paint, paint);
-  const carbonParts = new THREE.Mesh(geometries.carbon, materials.carbon);
-  const canopy = new THREE.Mesh(geometries.glass, materials.glass);
-  const lights = new THREE.Mesh(geometries.lights, materials.lights);
+  const carbonParts = new THREE.Mesh(geometries.carbon, finish.carbon);
+  const canopy = new THREE.Mesh(geometries.glass, finish.glass);
+  const lights = new THREE.Mesh(geometries.lights, finish.lights);
 
-  const tires = makeWheelInstances(TIRE_GEOMETRY, materials.tire);
-  const rims = makeWheelInstances(RIM_GEOMETRY, materials.rim);
+  const tires = makeWheelInstances(red ? RED_TIRE_GEOMETRY : TIRE_GEOMETRY, materials.tire, red);
+  const rims = makeWheelInstances(red ? RED_RIM_GEOMETRY : RIM_GEOMETRY, finish.rim, red);
 
-  const shadow = new THREE.Mesh(SHADOW_GEOMETRY, materials.shadow);
+  const shadow = new THREE.Mesh(SHADOW_GEOMETRY, red ? finish.shadow : materials.shadow);
   shadow.rotation.x = -Math.PI / 2;
   shadow.position.y = 0.025;
   shadow.scale.set(1.08, 0.78, 1);

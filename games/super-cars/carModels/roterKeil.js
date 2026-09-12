@@ -1,5 +1,2 @@
-import { buildCoachwork } from './coachwork.js';
-
-export function buildRoterKeil() {
-  return buildCoachwork('wedge');
-}
+import { buildRedRacer } from './redRacer.js';
+export function buildRoterKeil() { return buildRedRacer(); }

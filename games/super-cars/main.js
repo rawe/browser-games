@@ -9,6 +9,7 @@ import { createRenderer, createRaceScene } from './scene.js';
 import { createHud } from './hud.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
+import { createCarPresentation } from './carPresentation.js';
 
 const TITLE_BANNER_URL = new URL('./assets/title-banner.webp', import.meta.url).href;
 
@@ -17,6 +18,7 @@ const overlay = document.getElementById('overlay');
 const panel = document.getElementById('panel');
 
 const renderer = createRenderer(canvas);
+const presentation = createCarPresentation(renderer);
 const hud = createHud();
 const input = createInput();
 const audio = createAudio();
@@ -292,7 +294,7 @@ function frame(now) {
     audio.engine(me.state.v / me.spec.vmax, !me.destroyed);
     hud.update(race);
     sceneCtx.update(dt);
-    renderer.render(sceneCtx.scene, sceneCtx.camera);
+    presentation.render(sceneCtx.scene, sceneCtx.camera);
     if (debugMode) {
       canvas.dataset.renderStats = JSON.stringify({
         calls: renderer.info.render.calls,
