@@ -1,0 +1,873 @@
+/* Schiffe versenken – Nachtmeer, Messing und Leuchtspur. */
+
+.schiffe {
+  color-scheme: dark;
+  --ink: #eef4fb;
+  --ink-dim: #93a6bd;
+  --stage: #06101c;
+  --glass: rgba(14, 28, 46, 0.84);
+  --glass-line: rgba(130, 190, 240, 0.18);
+  --gold: #ffd36b;
+  --gold-soft: rgba(255, 211, 107, 0.16);
+  --fire: #ff7a4d;
+  --sea: #6fd3ff;
+  --warn: #ff6a52;
+  --player: var(--gold);
+
+  margin: 0;
+  height: 100dvh;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 70% at 50% 0%, #0f2a44 0%, transparent 70%),
+    radial-gradient(90% 60% at 50% 110%, #0a2236 0%, transparent 70%),
+    var(--stage);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* `display: grid/flex` weiter unten würde `hidden` überstimmen –
+   ausgeblendete Bildschirme fingen dann Fingertipps ab. */
+.schiffe [hidden] { display: none !important; }
+
+.schiffe button { font-family: inherit; }
+
+.stage[data-player='1'] { --player: var(--sea); }
+
+/* ---------- Bühne ---------- */
+
+/* Hochformat: Kopfzeile, großes Meer, darunter das kleine Meer neben der
+   Flottenübersicht. Das große Meer nimmt sich, was Breite und Resthöhe
+   hergeben; Container-Einheiten halten es quadratisch. */
+.stage {
+  position: relative;
+  height: 100dvh;
+  display: grid;
+  grid-template-areas: 'top' 'major' 'side';
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+           env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+
+.topbar {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem 0.35rem;
+}
+
+.status {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0.1rem;
+  text-align: center;
+}
+
+.status-title {
+  font-weight: 700;
+  font-size: 1.02rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stage[data-phase='battle'][data-focus='enemy'] .status-title::before {
+  content: '';
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.45rem;
+  border-radius: 50%;
+  background: var(--player);
+  box-shadow: 0 0 0.6rem var(--player);
+  vertical-align: 0.05rem;
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse { 50% { opacity: 0.35; } }
+
+.status-sub {
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 1em;
+}
+
+.icon-btn {
+  flex: none;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 0.8rem;
+  font-size: 1.1rem;
+  color: var(--ink);
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  cursor: pointer;
+}
+
+.icon-btn:hover { border-color: var(--gold); }
+
+.slot {
+  position: relative;
+  container-type: size;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+}
+
+.slot--major {
+  grid-area: major;
+  padding: 0.2rem 0.5rem;
+}
+
+.board-frame {
+  position: relative;
+  width: min(100cqw, 100cqh);
+  aspect-ratio: 1;
+}
+
+.board-frame canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* Ohne das rutscht auf dem Handy beim Ziehen die Seite mit. */
+  touch-action: none;
+  border-radius: 0.9rem;
+  outline: none;
+}
+
+.board-frame canvas:focus-visible { box-shadow: 0 0 0 2px var(--gold); }
+
+.slot--major .board-frame canvas {
+  box-shadow: 0 0.6rem 2rem rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+/* Die Beschriftung zeigt nur das kleine Meer – das große erklärt die
+   Kopfzeile. */
+.board-caption {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  padding-bottom: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slot--minor .board-caption { display: block; }
+
+/* ---------- Seitenleiste ---------- */
+
+.side {
+  grid-area: side;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.6rem 0.7rem;
+  align-items: end;
+  padding: 0.4rem 0.7rem 0.75rem;
+}
+
+.slot--minor {
+  width: min(46vw, 28dvh, 17rem);
+  aspect-ratio: 1;
+  margin-top: 1rem;
+}
+
+.slot--minor:empty { display: none; }
+
+.panel-battle,
+.panel-place,
+.panel-review {
+  display: none;
+  min-width: 0;
+}
+
+.stage[data-phase='battle'] .panel-battle,
+.stage[data-phase='review'] .panel-battle {
+  display: contents;
+}
+
+.fleet-rows {
+  display: grid;
+  gap: 0.5rem;
+  align-content: end;
+  min-width: 0;
+}
+
+#btn-fire { grid-column: 1 / -1; }
+
+.stage[data-phase='review'] .panel-review {
+  display: grid;
+  gap: 0.45rem;
+  grid-column: 1 / -1;
+}
+
+.stage[data-phase='review'] #btn-fire { display: none; }
+
+.stage[data-phase='place'] .panel-place {
+  display: grid;
+  gap: 0.55rem;
+  grid-column: 1 / -1;
+}
+
+.stage[data-phase='title'] .side,
+.stage[data-phase='title'] .slot--major { visibility: hidden; }
+
+/* Flottenübersicht */
+.fleet-row {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.75rem;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+}
+
+.fleet-label {
+  font-size: 0.74rem;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fleet-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.35rem;
+}
+
+.fleet-ship {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.fleet-ship i {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 2px;
+  background: #8fa2b6;
+}
+
+#fleet-enemy .fleet-ship i { background: #e7a08c; }
+
+.fleet-ship.is-sunk i {
+  background: #3a4350 !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 106, 82, 0.6);
+}
+
+/* ---------- Knöpfe ---------- */
+
+.cta,
+.ghost,
+.pill,
+.choice {
+  font: inherit;
+  cursor: pointer;
+  color: var(--ink);
+  text-decoration: none;
+  text-align: center;
+}
+
+.cta {
+  padding: 0.85rem 1.2rem;
+  border-radius: 0.9rem;
+  border: 0;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #2a1a00;
+  background: linear-gradient(180deg, #ffe08f, #f2b544);
+  box-shadow: 0 0.35rem 1.2rem rgba(255, 190, 70, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: transform 0.12s, filter 0.12s, opacity 0.12s;
+}
+
+.cta:active { transform: translateY(1px) scale(0.99); }
+.cta:hover { filter: brightness(1.06); }
+
+.cta:disabled {
+  cursor: default;
+  opacity: 0.5;
+  filter: grayscale(0.6);
+  box-shadow: none;
+}
+
+.cta--ghost {
+  color: var(--ink);
+  background: linear-gradient(180deg, rgba(111, 211, 255, 0.24), rgba(111, 211, 255, 0.1));
+  box-shadow: inset 0 0 0 1px rgba(111, 211, 255, 0.45);
+}
+
+.cta--fire {
+  font-size: 1.08rem;
+  min-height: 3.3rem;
+  color: #fff;
+  background: linear-gradient(180deg, #ff8a5a, #e0482c);
+  box-shadow: 0 0.35rem 1.4rem rgba(255, 90, 50, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.cta--fire:disabled {
+  color: var(--ink-dim);
+  background: var(--glass);
+  box-shadow: inset 0 0 0 1px var(--glass-line);
+  opacity: 1;
+  filter: none;
+}
+
+.cta--big { font-size: 1.15rem; padding: 1rem 1.4rem; }
+
+.ghost {
+  display: block;
+  padding: 0.75rem 1rem;
+  border-radius: 0.9rem;
+  border: 1px solid var(--glass-line);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ghost:hover { border-color: var(--gold); }
+
+.pill {
+  flex: 1 1 0;
+  padding: 0.65rem 0.4rem;
+  border-radius: 0.8rem;
+  font-size: 0.9rem;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  white-space: nowrap;
+}
+
+.pill:hover { border-color: var(--gold); }
+
+/* ---------- Aufstellen ---------- */
+
+.hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+  text-align: center;
+  min-height: 2.3em;
+  text-wrap: balance;
+}
+
+.dock {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  min-height: 3.2rem;
+  touch-action: none;
+}
+
+.dock-ship {
+  display: grid;
+  justify-items: center;
+  gap: 0.05rem;
+  padding: 0.15rem 0.35rem 0.25rem;
+  border-radius: 0.7rem;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--ink-dim);
+  font-size: 0.66rem;
+  cursor: grab;
+  touch-action: none;
+}
+
+.dock-ship canvas { display: block; pointer-events: none; }
+.dock-ship span { pointer-events: none; }
+
+.dock-ship[aria-pressed='true'] {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+  color: var(--ink);
+}
+
+.dock-ship.is-placed {
+  color: #9fe7b4;
+  cursor: pointer;
+}
+
+.dock-ship.is-placed canvas { opacity: 0.35; filter: grayscale(0.5); }
+
+.place-actions {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.drag-avatar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0.9;
+  filter: drop-shadow(0 0.6rem 0.8rem rgba(0, 0, 0, 0.5));
+}
+
+/* ---------- Querformat: Meer links, Bedienung rechts ---------- */
+
+@media (min-aspect-ratio: 5/4) {
+  .stage {
+    grid-template-areas: 'top top' 'major side';
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, min(36%, 26rem));
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .side {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: safe center;
+    align-items: stretch;
+    padding: 0.4rem 0.9rem 0.9rem 0.3rem;
+    overflow-y: auto;
+  }
+
+  .slot--minor {
+    width: min(100%, 42dvh);
+    justify-self: center;
+  }
+
+  .stage[data-phase='battle'] .panel-battle,
+  .stage[data-phase='review'] .panel-battle { display: grid; gap: 0.5rem; }
+
+  .slot--major { padding: 0.2rem 0.6rem 0.8rem; }
+}
+
+/* Sehr flaches Querformat (Handy quer): kleines Meer etwas kleiner. */
+@media (min-aspect-ratio: 5/4) and (max-height: 500px) {
+  .slot--minor { width: min(100%, 34dvh); margin-top: 0.9rem; }
+  .side { gap: 0.4rem; }
+  .fleet-row { padding: 0.3rem 0.5rem; }
+  .cta--fire { min-height: 2.8rem; padding: 0.6rem; }
+  .topbar { padding-block: 0.3rem 0.2rem; }
+  .icon-btn { width: 2.3rem; height: 2.3rem; }
+  .hint { min-height: 0; font-size: 0.78rem; }
+  .dock-ship span { display: none; }
+  .pill { padding: 0.45rem 0.3rem; }
+  .panel-place { gap: 0.4rem !important; }
+}
+
+@media (max-aspect-ratio: 5/4) and (max-height: 720px) {
+  .hint { min-height: 0; font-size: 0.78rem; }
+  .dock-ship { font-size: 0.6rem; padding: 0.1rem 0.25rem 0.15rem; }
+  .pill { padding: 0.5rem 0.3rem; }
+  .cta { padding: 0.7rem 1rem; }
+}
+
+/* ---------- Bildschirme ---------- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+  background: rgba(3, 8, 16, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  overflow-y: auto;
+}
+
+.panel {
+  width: min(100%, 27rem);
+  display: grid;
+  gap: 0.9rem;
+  padding: 1.4rem 1.3rem;
+  border-radius: 1.2rem;
+  background: linear-gradient(180deg, rgba(20, 38, 60, 0.97), rgba(10, 20, 34, 0.97));
+  border: 1px solid var(--glass-line);
+  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.5);
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.panel-sub {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.panel-actions,
+.menu-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.field-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.field-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-dim);
+  min-height: 1.2em;
+}
+
+.choice-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.choice {
+  flex: 1;
+  padding: 0.6rem 0.4rem;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-line);
+}
+
+.choice[aria-checked='true'] {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+  font-weight: 700;
+}
+
+.name-row {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.name-field {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 0.75rem;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-line);
+}
+
+.name-field:focus-within { border-color: var(--gold); }
+
+.name-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.75rem 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  /* 16px verhindert das automatische Hineinzoomen auf dem iPhone. */
+  font: inherit;
+  font-size: 1rem;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  flex: none;
+}
+
+.dot--a { background: var(--gold); box-shadow: 0 0 0.5rem var(--gold); }
+.dot--b { background: var(--sea); box-shadow: 0 0 0.5rem var(--sea); }
+
+.field--switch { gap: 0.6rem; }
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.switch input {
+  appearance: none;
+  flex: none;
+  width: 2.6rem;
+  height: 1.5rem;
+  margin: 0;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.12);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.switch input::after {
+  content: '';
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  background: #fff;
+  transition: translate 0.15s;
+}
+
+.switch input:checked { background: #e9a93a; }
+.switch input:checked::after { translate: 1.1rem 0; }
+
+/* Titel */
+.overlay--title {
+  background: #0b1230;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  align-items: end;
+  padding-bottom: max(2rem, env(safe-area-inset-bottom));
+}
+
+.title-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.overlay--title::before {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 55%;
+  background: linear-gradient(to bottom, transparent, rgba(3, 7, 16, 0.88) 70%);
+  pointer-events: none;
+}
+
+.title-card {
+  position: relative;
+  width: min(100%, 25rem);
+  display: grid;
+  gap: 0.9rem;
+  justify-items: center;
+  text-align: center;
+}
+
+.game-logo {
+  margin: 0;
+  display: grid;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 700;
+  font-size: clamp(2.4rem, 11vw, 4rem);
+  line-height: 0.95;
+  letter-spacing: 0.02em;
+  color: #ffe6b0;
+  text-shadow: 0 0.2rem 1.5rem rgba(255, 140, 60, 0.45), 0 2px 0 #5a2a14;
+}
+
+.game-logo span {
+  font-size: 0.62em;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #ffc58a;
+  margin-left: 0.32em;
+}
+
+.tagline {
+  margin: 0;
+  color: #f6d9c4;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+}
+
+.title-actions {
+  display: grid;
+  gap: 0.55rem;
+  width: 100%;
+}
+
+.title-actions .ghost {
+  background: rgba(6, 12, 24, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.overlay--title .back-link {
+  position: absolute;
+  top: max(1rem, env(safe-area-inset-top));
+  left: 1rem;
+  z-index: 1;
+  color: #f6d9c4;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+}
+
+/* Übergabe – undurchsichtig, sonst sieht man die fremde Flotte durch. */
+.overlay--handover {
+  background:
+    radial-gradient(80% 60% at 50% 35%, color-mix(in srgb, var(--player) 20%, transparent), transparent 70%),
+    #050c17;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.handover-card {
+  width: min(100%, 24rem);
+  display: grid;
+  gap: 0.9rem;
+  justify-items: center;
+  text-align: center;
+}
+
+.handover-card h2 {
+  margin: 0;
+  font-size: 1.6rem;
+  text-wrap: balance;
+}
+
+.handover-icon {
+  font-size: 3.6rem;
+  animation: handover 2.4s ease-in-out infinite;
+}
+
+@keyframes handover {
+  0%, 100% { transform: translateX(-0.6rem) rotate(-8deg); }
+  50% { transform: translateX(0.6rem) rotate(8deg); }
+}
+
+.handover-result {
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  border-radius: 2rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-line);
+  font-size: 0.92rem;
+}
+
+.handover-card .cta {
+  width: 100%;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--player) 80%, white), var(--player));
+}
+
+/* Regeln */
+.rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.7rem;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.rules li {
+  display: grid;
+  grid-template-columns: 1.8rem 1fr;
+  gap: 0.5rem;
+}
+
+.rule-mark { text-align: center; }
+
+/* Spielende */
+.overlay--over { background: rgba(3, 8, 16, 0.6); }
+
+.fireworks {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.panel--over {
+  position: relative;
+  text-align: center;
+}
+
+.over-kicker {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.panel--over h2 {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 2.1rem;
+  color: #ffe6b0;
+}
+
+.over-detail {
+  margin: 0;
+  color: var(--ink-dim);
+}
+
+.over-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.stat {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.65rem;
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-line);
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+}
+
+.stat b {
+  color: var(--ink);
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat--win { border-color: rgba(255, 211, 107, 0.6); background: var(--gold-soft); }
+
+/* Kurzmeldung */
+.toast {
+  position: fixed;
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0px) + 3.8rem);
+  z-index: 40;
+  translate: -50% 0;
+  max-width: calc(100% - 2rem);
+  padding: 0.6rem 1rem;
+  border-radius: 2rem;
+  background: rgba(10, 20, 34, 0.95);
+  border: 1px solid var(--glass-line);
+  box-shadow: 0 0.6rem 1.6rem rgba(0, 0, 0, 0.45);
+  font-size: 0.92rem;
+  text-align: center;
+  pointer-events: none;
+  animation: toast-in 0.2s ease-out;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; translate: -50% -0.6rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage[data-phase='battle'] .status-title::before,
+  .handover-icon { animation: none; }
+}

@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#06101c" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="description" content="Schiffe versenken im Browser – zu zweit an einem Handy oder Tablet oder gegen den Computer." />
+  <title>Schiffe versenken</title>
+  <link rel="stylesheet" href="/shared/base.css" />
+  <link rel="stylesheet" href="./style.css" />
+  <script type="module" src="./main.js"></script>
+</head>
+<body class="schiffe">
+  <div id="stage" class="stage" data-phase="title">
+
+    <header class="topbar">
+      <button id="btn-menu" class="icon-btn" type="button" aria-label="Menü">☰</button>
+      <div class="status">
+        <span id="status-title" class="status-title">Schiffe versenken</span>
+        <span id="status-sub" class="status-sub"></span>
+      </div>
+      <button id="btn-sound" class="icon-btn" type="button" aria-label="Klang an/aus">🔊</button>
+    </header>
+
+    <!-- Das große Meer: beim Aufstellen die eigene Flotte, im Gefecht das
+         Feindmeer – oder kurz die eigene Flotte, wenn der Gegner schießt. -->
+    <div id="slot-major" class="slot slot--major"></div>
+
+    <aside class="side">
+      <div id="slot-minor" class="slot slot--minor"></div>
+
+      <div id="panel-battle" class="panel-battle">
+        <div class="fleet-rows">
+          <div id="fleet-enemy" class="fleet-row"></div>
+          <div id="fleet-own" class="fleet-row"></div>
+        </div>
+        <button id="btn-fire" class="cta cta--fire" type="button" disabled>Ziel antippen</button>
+      </div>
+
+      <div id="panel-place" class="panel-place">
+        <p class="hint" id="place-hint">Schiff aufs Meer ziehen. Antippen dreht es.</p>
+        <div id="dock" class="dock" aria-label="Schiffe zum Aufstellen"></div>
+        <div class="place-actions">
+          <button id="btn-rotate" class="pill" type="button">⟳ Drehen</button>
+          <button id="btn-random" class="pill" type="button">🎲 Zufällig</button>
+          <button id="btn-clear" class="pill" type="button">✕ Leeren</button>
+        </div>
+        <button id="btn-ready" class="cta" type="button" disabled>Flotte bereit</button>
+      </div>
+
+      <div id="panel-review" class="panel-review">
+        <button id="btn-review-again" class="cta" type="button">Revanche</button>
+        <button id="btn-review-menu" class="ghost" type="button">Hauptmenü</button>
+      </div>
+    </aside>
+
+    <!-- Die beiden Meere. Sie wandern je nach Lage zwischen den Plätzen. -->
+    <div hidden>
+      <div id="frame-own" class="board-frame board-frame--own">
+        <canvas id="board-own" aria-label="Deine Flotte"></canvas>
+        <span id="caption-own" class="board-caption">Deine Flotte</span>
+      </div>
+      <div id="frame-enemy" class="board-frame board-frame--enemy">
+        <canvas id="board-enemy" aria-label="Feindliches Meer"></canvas>
+        <span id="caption-enemy" class="board-caption">Feindmeer</span>
+      </div>
+    </div>
+
+    <!-- ══ Bildschirme ═══════════════════════════════════════════════════ -->
+
+    <section id="screen-title" class="overlay overlay--title">
+      <canvas id="title-canvas" class="title-canvas" aria-hidden="true"></canvas>
+      <div class="title-card">
+        <h1 class="game-logo">Schiffe<span>versenken</span></h1>
+        <p class="tagline">Zu zweit an einem Gerät – oder gegen den Computer.</p>
+        <div class="title-actions">
+          <button id="btn-start-duo" class="cta" type="button">👥 Zu zweit spielen</button>
+          <button id="btn-start-ki" class="cta cta--ghost" type="button">🤖 Gegen Computer</button>
+          <button id="btn-resume" class="ghost" type="button" hidden>▶ Partie fortsetzen</button>
+          <button id="btn-rules" class="ghost" type="button">So geht's</button>
+        </div>
+      </div>
+      <a class="back-link" href="../../index.html">← Übersicht</a>
+    </section>
+
+    <section id="screen-setup" class="overlay" hidden>
+      <form id="setup-form" class="panel" autocomplete="off">
+        <h2 id="setup-title">Neue Partie</h2>
+        <p id="setup-sub" class="panel-sub"></p>
+
+        <div id="setup-names" class="field">
+          <span class="field-label">Wer spielt?</span>
+          <div class="name-row">
+            <label class="name-field"><span class="dot dot--a"></span><input id="name-a" maxlength="14" placeholder="Spieler 1" enterkeyhint="next" /></label>
+            <label class="name-field"><span class="dot dot--b"></span><input id="name-b" maxlength="14" placeholder="Spieler 2" enterkeyhint="done" /></label>
+          </div>
+        </div>
+
+        <div id="setup-level" class="field">
+          <span class="field-label">Spielstärke</span>
+          <div id="level-row" class="choice-row" role="radiogroup" aria-label="Spielstärke"></div>
+          <p id="level-note" class="field-note"></p>
+        </div>
+
+        <div class="field">
+          <span class="field-label">Flotte</span>
+          <div id="fleet-row" class="choice-row" role="radiogroup" aria-label="Flotte"></div>
+          <p id="fleet-note" class="field-note"></p>
+        </div>
+
+        <div class="field field--switch">
+          <label class="switch">
+            <input id="opt-spacing" type="checkbox" />
+            <span>Schiffe dürfen sich nicht berühren</span>
+          </label>
+          <label class="switch">
+            <input id="opt-bonus" type="checkbox" />
+            <span>Bei Treffer nochmal schießen</span>
+          </label>
+        </div>
+
+        <div class="panel-actions">
+          <button id="btn-setup-start" class="cta" type="submit">Flotten aufstellen</button>
+          <button id="btn-setup-back" class="ghost" type="button">Zurück</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Übergabe: deckt alles ab, damit niemand die fremde Flotte sieht. -->
+    <section id="screen-handover" class="overlay overlay--handover" hidden>
+      <div class="handover-card">
+        <p id="handover-result" class="handover-result"></p>
+        <div class="handover-icon" aria-hidden="true">📱</div>
+        <h2 id="handover-title">Gerät weitergeben</h2>
+        <p id="handover-sub" class="panel-sub"></p>
+        <button id="btn-handover" class="cta cta--big" type="button">Ich bin bereit</button>
+      </div>
+    </section>
+
+    <section id="screen-menu" class="overlay" hidden>
+      <div class="panel">
+        <h2>Menü</h2>
+        <p id="menu-sub" class="panel-sub"></p>
+        <div class="menu-list">
+          <button id="btn-menu-resume" class="cta" type="button">Weiterspielen</button>
+          <button id="btn-menu-new" class="ghost" type="button">Neue Partie</button>
+          <button id="btn-menu-rules" class="ghost" type="button">So geht's</button>
+          <a class="ghost" href="../../index.html">Alle Spiele</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-rules" class="overlay" hidden>
+      <div class="panel">
+        <h2>So geht's</h2>
+        <ul class="rules">
+          <li><b class="rule-mark">⚓</b><span><b>Flotte aufstellen.</b> Schiffe aufs Meer ziehen, antippen zum Drehen – oder „Zufällig“. Schiffe liegen waagerecht oder senkrecht, nie schräg.</span></li>
+          <li><b class="rule-mark">🎯</b><span><b>Schießen.</b> Ein Feld im Feindmeer antippen, dann „Feuer!“. Mit der Maus reicht ein Klick.</span></li>
+          <li><b class="rule-mark">💧</b><span><b>Wasser</b> bleibt als weißer Punkt stehen, <b>Treffer</b> brennen. Ist ein Schiff ganz getroffen, ist es <b>versenkt</b>.</span></li>
+          <li><b class="rule-mark">🔁</b><span><b>Treffer = nochmal</b> (abschaltbar): Wer trifft, darf gleich weiterschießen.</span></li>
+          <li><b class="rule-mark">↔</b><span><b>Abstand</b> (abschaltbar): Schiffe dürfen sich nicht berühren, auch nicht über Eck. Rund um versenkte Schiffe wird das Wasser dann automatisch markiert.</span></li>
+          <li><b class="rule-mark">📱</b><span><b>Zu zweit:</b> Nach jedem Zug gibst du das Gerät weiter. Ein Zwischenbild verdeckt alles, bis der andere bereit ist – und zeigt ihm dann, wo du hingeschossen hast.</span></li>
+          <li><b class="rule-mark">🏆</b><span>Wer zuerst alle Schiffe des anderen versenkt, gewinnt.</span></li>
+        </ul>
+        <div class="panel-actions">
+          <button id="btn-rules-close" class="cta" type="button">Verstanden</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-over" class="overlay overlay--over" hidden>
+      <canvas id="fireworks" class="fireworks" aria-hidden="true"></canvas>
+      <div class="panel panel--over">
+        <p id="over-kicker" class="over-kicker">Seeschlacht beendet</p>
+        <h2 id="over-title">Sieg!</h2>
+        <p id="over-detail" class="over-detail"></p>
+        <div id="over-stats" class="over-stats"></div>
+        <div class="panel-actions">
+          <button id="btn-over-again" class="cta" type="button">Revanche</button>
+          <button id="btn-over-review" class="ghost" type="button">Meere ansehen</button>
+          <button id="btn-over-menu" class="ghost" type="button">Hauptmenü</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  </div>
+
+  <noscript><p style="padding:2rem">Für Schiffe versenken wird JavaScript gebraucht.</p></noscript>
+</body>
+</html>

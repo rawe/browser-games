@@ -38,6 +38,14 @@ export const games = [
     coverAlt: 'Eine weiße Dame steht auf einem perspektivisch fluchtenden Brett vor dem umgekippten schwarzen König',
   },
   {
+    slug: 'schiffe-versenken',
+    title: 'Schiffe versenken',
+    description: 'Seeschlacht zu zweit an einem Handy oder Tablet – mit Übergabebildschirm – oder gegen den Computer in drei Stärken.',
+    emoji: '⚓',
+    cover: new URL('./games/schiffe-versenken/assets/title-banner.webp', import.meta.url).href,
+    coverAlt: 'Ein Schlachtschiff feuert in der Abenddämmerung auf eine ferne Flotte am Horizont, wo eine Wassersäule aufsteigt',
+  },
+  {
     slug: 'super-cars',
     title: 'Super Cars',
     description: 'Arcade-Rennen mit Raketen, Tuning-Shop und Meisterschaft – 3D von schräg hinten.',
