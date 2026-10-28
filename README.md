@@ -43,6 +43,14 @@ Partie Suche gegen Suche durch; siehe [`games/schach/sim/`](games/schach/sim/):
 npm run check:schach               # Zuggenerierung, Notation, Regeln, Suche
 ```
 
+Schiffe versenken prüft Regeln und Aufstellung und lässt jede Stufe des
+Computergegners hunderte Partien spielen – siehe
+[`games/schiffe-versenken/`](games/schiffe-versenken/README.md):
+
+```bash
+npm run check:schiffe              # Regeln, Partie, Stärke der Computerstufen
+```
+
 ## Struktur
 
 ```
